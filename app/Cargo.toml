@@ -1,0 +1,33 @@
+[package]
+name = "keyboard-hud"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-2.0-or-later"
+description = "Portable on-screen HUD for a Vial/QMK Corne keyboard"
+build = "build.rs"
+
+[features]
+default = []
+# Icona nella tray: disattivata di default (su Linux richiede GTK).
+tray = []
+
+[dependencies]
+eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts", "x11", "wayland"] }
+egui = { version = "0.37", default-features = false }
+hidapi = { version = "2.6", default-features = false, features = ["linux-native-basic-udev"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+lzma-rs = "0.3"
+directories = "6"
+log = "0.4"
+
+[build-dependencies]
+deser-hjson = "2.2"
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
