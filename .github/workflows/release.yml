@@ -1,0 +1,144 @@
+# Build of the three portable executables.
+# - on every push / pull request: checks and builds (artifacts kept 14 days)
+# - on a "v*" tag: also publishes a GitHub release with the executables
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Rust toolchain is pinned in app/rust-toolchain.toml
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  check:
+    name: fmt, clippy, test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+      - name: Tag matches Cargo.toml version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          test "v$version" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != v$version"; exit 1; }
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+
+  linux:
+    name: Linux x86_64
+    needs: check
+    # oldest supported glibc: runs on Ubuntu 22.04+ and recent Fedora
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+      - run: cargo build --release --locked
+      - name: Package
+        run: |
+          mkdir -p ../dist
+          cp target/release/keyboard-hud ../dist/keyboard-hud-linux-x86_64
+          chmod +x ../dist/keyboard-hud-linux-x86_64
+          echo "glibc richiesta:"; objdump -T target/release/keyboard-hud | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/keyboard-hud-linux-x86_64
+          retention-days: 14
+
+  windows:
+    name: Windows x86_64
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p ../dist
+          cp target/release/keyboard-hud.exe ../dist/keyboard-hud-windows-x86_64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/keyboard-hud-windows-x86_64.exe
+          retention-days: 14
+
+  macos:
+    name: macOS universal
+    needs: check
+    runs-on: macos-14
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - run: cargo test --locked
+      - run: cargo build --release --locked --target aarch64-apple-darwin
+      - run: cargo build --release --locked --target x86_64-apple-darwin
+      - name: Universal .app, ad-hoc signed, zipped
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          app="../dist/Keyboard HUD.app"
+          mkdir -p "$app/Contents/MacOS"
+          lipo -create -output "$app/Contents/MacOS/keyboard-hud" \
+            target/aarch64-apple-darwin/release/keyboard-hud \
+            target/x86_64-apple-darwin/release/keyboard-hud
+          lipo -info "$app/Contents/MacOS/keyboard-hud"
+          sed "s/__VERSION__/$version/g" packaging/macos/Info.plist > "$app/Contents/Info.plist"
+          codesign --force --deep --sign - "$app"
+          codesign --verify --verbose "$app"
+          cd ../dist && ditto -c -k --keepParent "Keyboard HUD.app" keyboard-hud-macos-universal.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/keyboard-hud-macos-universal.zip
+          retention-days: 14
+
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums and example config
+        run: |
+          cp keyboard-hud.example.toml dist/
+          cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
