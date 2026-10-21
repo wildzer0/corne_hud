@@ -437,6 +437,11 @@
       "name": "RGB Funzioni",
       "title": "Torna all'effetto RGB Funzioni",
       "shortName": "Funz"
+    },
+    {
+      "name": "HUD",
+      "title": "Keyboard HUD: mostra/nascondi (doppio tocco: click-through)",
+      "shortName": "HUD"
     }
   ]
 }
