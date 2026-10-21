@@ -36,6 +36,29 @@ pub fn base_size(mode: ViewMode) -> Vec2 {
     }
 }
 
+/// The context menu lives in its own small window: inside the HUD it would
+/// be clipped when the HUD is small (low scale, compact view).
+const MENU_VIEWPORT: &str = "hud-menu";
+/// Menu size before the first measurement.
+const MENU_ESTIMATE: Vec2 = Vec2::new(300.0, 340.0);
+
+#[derive(Debug, Clone, Copy)]
+struct MenuWindow {
+    /// Click position on screen; the menu opens towards the inside of the HUD.
+    /// `None` when the window system does not tell where the HUD is (Wayland):
+    /// the compositor places the menu.
+    anchor: Option<egui::Pos2>,
+    left: bool,
+    up: bool,
+    size: Option<Vec2>,
+    focused_once: bool,
+}
+
+/// Commands for the HUD window, also when issued while drawing another window.
+fn root_cmd(ctx: &egui::Context, cmd: ViewportCommand) {
+    ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, cmd);
+}
+
 /// Statistics are counted from polled states: below this rate quick taps get lost.
 const MIN_STATS_HZ: u32 = 30;
 const HEAT_REFRESH: Duration = Duration::from_secs(1);
@@ -132,6 +155,7 @@ pub struct DevOptions {
     pub search: Option<String>,
     pub heatmap: Option<String>,
     pub stats_window: bool,
+    pub menu: bool,
 }
 
 /// Development aid: capture the window to a PPM file, then quit.
@@ -311,6 +335,9 @@ pub struct HudApp {
     report: ReportWindow,
     heat: HeatMode,
     heat_cache: Option<(Instant, Totals)>,
+    menu: Option<MenuWindow>,
+    /// `--menu`: open the menu as soon as the window position is known.
+    dev_menu: bool,
 }
 
 impl HudApp {
@@ -360,6 +387,8 @@ impl HudApp {
             report: ReportWindow::default(),
             heat: HeatMode::Off,
             heat_cache: None,
+            menu: None,
+            dev_menu: s.dev.menu,
         };
         app.report_label_errors(&label_errors);
         if let Some(q) = s.dev.search {
@@ -371,8 +400,8 @@ impl HudApp {
             _ => HeatMode::Off,
         };
         app.report.open = s.dev.stats_window;
-        if s.dev.stats_window && app.screenshot.is_some() {
-            // capture the statistics inside the HUD window
+        if (s.dev.stats_window || s.dev.menu) && app.screenshot.is_some() {
+            // capture the other windows inside the HUD window
             ctx.set_embed_viewports(true);
         }
         if let Some(e) = s.config_error {
@@ -477,7 +506,7 @@ impl HudApp {
             return;
         }
         self.click_through = on;
-        ctx.send_viewport_cmd(ViewportCommand::MousePassthrough(on));
+        root_cmd(ctx, ViewportCommand::MousePassthrough(on));
         self.notify(tr(self.lang, if on { Msg::ClickThroughOn } else { Msg::ClickThroughOff }).to_string());
     }
 
@@ -486,7 +515,7 @@ impl HudApp {
             return;
         }
         self.visible = visible;
-        ctx.send_viewport_cmd(ViewportCommand::Visible(visible));
+        root_cmd(ctx, ViewportCommand::Visible(visible));
         self.apply_poll_rate();
         log::info!("{}", if visible { "HUD visibile" } else { tr(self.lang, Msg::HudHidden) });
     }
@@ -546,7 +575,7 @@ impl HudApp {
     }
 
     fn resize(&mut self, ctx: &egui::Context) {
-        ctx.send_viewport_cmd(ViewportCommand::InnerSize(base_size(self.view) * self.scale));
+        root_cmd(ctx, ViewportCommand::InnerSize(base_size(self.view) * self.scale));
         self.mark_dirty();
     }
 
@@ -647,14 +676,88 @@ impl HudApp {
         }
     }
 
+    fn close_menu(&mut self) {
+        self.menu = None;
+    }
+
+    /// Opens the menu at the pointer, `hud` being the HUD area in the window.
+    fn open_menu(&mut self, ctx: &egui::Context, hud: Rect, pointer: egui::Pos2) {
+        let anchor = ctx.input(|i| i.viewport().inner_rect).map(|inner| inner.min + pointer.to_vec2());
+        log::debug!("menu aperto in {anchor:?}");
+        self.menu = Some(MenuWindow {
+            anchor,
+            left: pointer.x > hud.center().x,
+            up: pointer.y > hud.center().y,
+            size: None,
+            focused_once: false,
+        });
+    }
+
+    fn show_menu(&mut self, ctx: &egui::Context) {
+        let Some(m) = self.menu else { return };
+        let size = m.size.unwrap_or(MENU_ESTIMATE);
+        let offset = Vec2::new(if m.left { size.x } else { 0.0 }, if m.up { size.y } else { 0.0 });
+        let builder = egui::ViewportBuilder::default()
+            .with_title("Keyboard HUD · Menu")
+            .with_decorations(false)
+            .with_always_on_top()
+            .with_resizable(false)
+            .with_taskbar(false)
+            .with_inner_size(size);
+        let builder = match m.anchor {
+            Some(a) => builder.with_position(a - offset),
+            None => builder,
+        };
+        let mut close = false;
+        let mut measured = None;
+        let mut focused_once = m.focused_once;
+        ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(MENU_VIEWPORT), builder, |ui, _class| {
+            let vctx = ui.ctx().clone();
+            let (esc, focused, close_requested) =
+                vctx.input(|i| (i.key_pressed(Key::Escape), i.viewport().focused, i.viewport().close_requested()));
+            if !focused_once {
+                vctx.send_viewport_cmd(ViewportCommand::Focus);
+            }
+            match focused {
+                Some(true) => focused_once = true,
+                // a click elsewhere closes the menu, like a native one
+                Some(false) if focused_once => close = true,
+                _ => {}
+            }
+            close |= esc || close_requested;
+            // the frame hugs the contents: its size is the window size to use
+            let r = egui::Frame::central_panel(ui.style()).show(ui, |ui| self.context_menu(ui)).response.rect;
+            measured = Some(r.size().ceil());
+        });
+        match &mut self.menu {
+            Some(m) if !close => {
+                m.focused_once = focused_once;
+                if measured.is_some_and(|s| m.size.is_none_or(|old| (old - s).length() > 0.5)) {
+                    m.size = measured;
+                }
+            }
+            _ => self.menu = None,
+        }
+    }
+
     fn context_menu(&mut self, ui: &mut egui::Ui) {
         let lang = self.lang;
         let ctx = ui.ctx().clone();
         ui.set_min_width(220.0);
+        // some window systems never give focus to the menu window: always offer a way out
+        ui.horizontal(|ui| {
+            ui.strong("Keyboard HUD");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.small_button("✕").on_hover_text(tr(lang, Msg::MenuClose)).clicked() {
+                    self.close_menu();
+                }
+            });
+        });
+        ui.separator();
         ui.horizontal(|ui| {
             ui.label(tr(lang, Msg::MenuOpacity));
             let mut pct = (self.opacity * 100.0).round();
-            if ui.add(egui::Slider::new(&mut pct, 20.0..=100.0).suffix("%")).changed() {
+            if ui.add(egui::Slider::new(&mut pct, 20.0..=100.0).suffix("%").fixed_decimals(0)).changed() {
                 self.opacity = pct / 100.0;
                 self.mark_dirty();
             }
@@ -662,7 +765,7 @@ impl HudApp {
         ui.horizontal(|ui| {
             ui.label(tr(lang, Msg::MenuScale));
             let mut pct = (self.scale * 100.0).round();
-            let r = ui.add(egui::Slider::new(&mut pct, 50.0..=200.0).suffix("%"));
+            let r = ui.add(egui::Slider::new(&mut pct, 50.0..=200.0).suffix("%").fixed_decimals(0));
             if r.changed() {
                 self.scale = pct / 100.0;
             }
@@ -709,11 +812,12 @@ impl HudApp {
         });
         if ui.button(tr(lang, Msg::MenuStats)).clicked() {
             self.report.open = true;
-            ui.close();
+            self.close_menu();
         }
         if ui.button(tr(lang, Msg::MenuSearch)).clicked() {
             self.search.open();
-            ui.close();
+            root_cmd(&ctx, ViewportCommand::Focus);
+            self.close_menu();
         }
         ui.separator();
         let available = self.click_through_available();
@@ -725,7 +829,7 @@ impl HudApp {
             .on_disabled_hover_text(hint);
         if r.changed() {
             self.set_click_through(&ctx, ct);
-            ui.close();
+            self.close_menu();
         }
         if let Some(w) = self.worker() {
             let mut paused = w.is_paused();
@@ -735,7 +839,7 @@ impl HudApp {
         }
         ui.separator();
         if ui.button(tr(lang, Msg::MenuQuit)).clicked() {
-            ctx.send_viewport_cmd(ViewportCommand::Close);
+            root_cmd(&ctx, ViewportCommand::Close);
         }
     }
 }
@@ -765,7 +869,7 @@ impl eframe::App for HudApp {
         });
         if open_search && !self.click_through {
             self.search.open();
-            ctx.send_viewport_cmd(ViewportCommand::Focus);
+            root_cmd(ctx, ViewportCommand::Focus);
         }
         match self.watcher.poll() {
             Reload::Unchanged => {}
@@ -831,6 +935,7 @@ impl eframe::App for HudApp {
                 let wanted = self.headsup.wants(s, hu, now);
                 let force = self.pinned
                     || self.search.open
+                    || self.menu.is_some()
                     || ctx.any_popup_open()
                     || (self.headsup.level() > 0.5 && response.hovered());
                 self.headsup.update(wanted, force, hu, now)
@@ -985,9 +1090,19 @@ impl eframe::App for HudApp {
                 self.handle_browse_input(&ctx, n);
             }
         }
-        if !passthrough {
-            response.context_menu(|ui| self.context_menu(ui));
+        if !passthrough && response.secondary_clicked() {
+            if let Some(p) = response.interact_pointer_pos() {
+                self.open_menu(&ctx, full, p);
+            }
+        } else if response.clicked() || passthrough {
+            self.close_menu();
         }
+        // not in the very first frames: the window system is not ready for a second window yet
+        if self.dev_menu && self.started.elapsed() > Duration::from_secs(1) {
+            self.dev_menu = false;
+            self.open_menu(&ctx, full, full.center() + Vec2::new(-10.0, -10.0));
+        }
+        self.show_menu(&ctx);
         let names = self.layer_names.clone();
         let name_of = |l: u8| names.get(l as usize).cloned().unwrap_or_else(|| format!("L{l}"));
         self.search.show(&ctx, self.lang, &palette, &name_of);

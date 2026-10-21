@@ -159,7 +159,12 @@ fn run(opts: Options) -> ExitCode {
                 screenshot: opts.screenshot.map(|p| {
                     Screenshot::new(p, std::time::Duration::from_millis(opts.screenshot_after.unwrap_or(2000)))
                 }),
-                dev: ui::DevOptions { search: opts.search, heatmap: opts.heatmap, stats_window: opts.stats_window },
+                dev: ui::DevOptions {
+                    search: opts.search,
+                    heatmap: opts.heatmap,
+                    stats_window: opts.stats_window,
+                    menu: opts.menu,
+                },
                 config,
                 watcher,
                 config_error,

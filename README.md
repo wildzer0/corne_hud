@@ -97,6 +97,8 @@ Il firmware funziona identico anche senza HUD collegato. Risponde solo alle rich
 | Cercare un tasto | Ctrl+F o `/` con l'HUD in primo piano, oppure menu → Cerca. Frecce per scegliere, Invio/Esc per chiudere |
 | Sfogliare i layer (solo offline) | rotellina o tasti 0–9 |
 
+Il menu si apre in una piccola finestra separata accanto al punto del clic, così resta leggibile anche con l'HUD rimpicciolito o in vista compatta. Si chiude con ✕, con Esc, con un clic sull'HUD o con un clic altrove. Su Wayland è il compositor a decidere dove compare.
+
 Il click-through si attiva solo se la tastiera collegata ha il tasto HUD_TOG, così c'è sempre un modo per disattivarlo. Se la tastiera si scollega, si spegne da solo.
 
 **Cosa mostra l'HUD**

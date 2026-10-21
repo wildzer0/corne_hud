@@ -100,7 +100,8 @@ impl SearchPanel {
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_width(360.0);
+                    // fits small HUDs too (low scale, compact view)
+                    ui.set_width((ctx.content_rect().width() - 40.0).clamp(120.0, 360.0));
                     let edit = ui.add(
                         egui::TextEdit::singleline(&mut self.query)
                             .hint_text(tr(lang, Msg::SearchHint))

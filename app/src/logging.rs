@@ -46,7 +46,9 @@ static LOGGER: HudLogger = HudLogger { file: Mutex::new(None) };
 
 impl log::Log for HudLogger {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= log::max_level() && metadata.target().starts_with("keyboard_hud")
+        // the app at the configured level; libraries (eframe, winit, ...) only warnings and errors
+        let own = metadata.target().starts_with("keyboard_hud");
+        metadata.level() <= log::max_level() && (own || metadata.level() <= Level::Warn)
     }
 
     fn log(&self, record: &Record) {

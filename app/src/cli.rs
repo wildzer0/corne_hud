@@ -20,6 +20,7 @@ Uso: keyboard-hud [opzioni]
   --search TESTO        sviluppo: apre la ricerca con questo testo
   --heatmap layer|all   sviluppo: mostra la heatmap all'avvio
   --stats-window        sviluppo: apre la finestra delle statistiche
+  --menu                sviluppo: apre il menu contestuale all'avvio
   --verbose             log dettagliato
   --version             versione
   -h, --help            questo aiuto";
@@ -40,6 +41,7 @@ pub struct Options {
     pub search: Option<String>,
     pub heatmap: Option<String>,
     pub stats_window: bool,
+    pub menu: bool,
     pub print_udev_rule: bool,
     pub verbose: bool,
     pub version: bool,
@@ -85,6 +87,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                 o.heatmap = Some(v);
             }
             "--stats-window" => o.stats_window = true,
+            "--menu" => o.menu = true,
             "--print-udev-rule" => o.print_udev_rule = true,
             "--verbose" | "-v" => o.verbose = true,
             "--version" => o.version = true,
