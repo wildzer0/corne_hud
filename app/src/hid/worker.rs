@@ -370,8 +370,10 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
                 let keymap_changed = last.is_some_and(|l| {
                     l.keymap_version != state.keymap_version || l.flag(flags::COLEMAK) != state.flag(flags::COLEMAK)
                 });
+                // only changes reach the UI: an idle keyboard costs no repaints
+                let changed = last != Some(state);
                 last = Some(state);
-                if !ctx.send(Event::State(state)) {
+                if changed && !ctx.send(Event::State(state)) {
                     return SessionEnd::Lost(Status::Searching);
                 }
                 if keymap_changed {

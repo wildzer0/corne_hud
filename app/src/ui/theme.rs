@@ -100,6 +100,16 @@ impl Palette {
     }
 }
 
+/// Black or white text, whichever reads better on `bg`.
+pub fn text_on(bg: Color32) -> Color32 {
+    let l = 0.299 * bg.r() as f32 + 0.587 * bg.g() as f32 + 0.114 * bg.b() as f32;
+    if l > 150.0 {
+        Color32::from_rgb(20, 20, 24)
+    } else {
+        Color32::WHITE
+    }
+}
+
 /// Mixes `a` towards `b` by `t` (0..1).
 pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
     let t = t.clamp(0.0, 1.0);

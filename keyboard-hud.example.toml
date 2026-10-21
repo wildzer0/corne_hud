@@ -47,6 +47,116 @@ color = "#E63C3C"   # rosso
 name = "ACC"
 color = "#EBC828"   # giallo
 
+[headsup]
+# L'HUD resta nascosto e compare da solo quando: è attivo un layer diverso da
+# BASE (anche solo tenendo Fn1/Fn2), è in attesa un one-shot, oppure un
+# modificatore resta premuto a lungo. Con DEBUG bloccato resta visibile.
+enabled = true
+modifier_delay_ms = 400   # Ctrl/Shift/Alt/Gui tenuto almeno così a lungo
+hide_delay_ms = 800       # scompare dopo questo tempo dal ritorno a BASE
+hidden_opacity = 0.0      # 0 = invisibile, 0.15 = appena visibile
+
+[stats]
+# Solo contatori aggregati per tasto, layer e giorno: mai testo, sequenze o tempi.
+enabled = true
+file = ""                 # vuoto = keyboard-hud-stats.json accanto alla configurazione
+unused_days = 30          # report: tasti mai usati negli ultimi N giorni
+
+# Etichette personalizzate. Ogni voce vale per un keycode (eventualmente solo
+# su un layer) oppure per una posizione precisa (layer + row + col, come
+# nella matrice del firmware). La posizione vince sul keycode.
+# Keycode: nomi QMK (KC_F10), forme brevi (S(KC_F5), C(KC_DOT), C(S(KC_F5))),
+# tasti personalizzati (QK_KB_15 o USER15).
+
+# Layer DEBUG (4): comandi di debug di VS Code, mano sinistra.
+# riga alta
+[[labels]]
+layer = 4
+keycode = "C(S(KC_F5))"
+label = "Restart"
+description = "Riavvia il debug (Ctrl+Shift+F5)"
+
+[[labels]]
+layer = 4
+keycode = "QK_KB_15"      # SM_RUN
+label = "Run"
+description = "Esegui senza debug (Ctrl+F5)"
+
+[[labels]]
+layer = 4
+keycode = "KC_F9"
+label = "Breakpt"
+description = "Attiva/disattiva breakpoint (F9)"
+
+[[labels]]
+layer = 4
+keycode = "KC_F12"
+label = "Go to def"
+description = "Vai alla definizione (F12)"
+
+# home row
+[[labels]]
+layer = 4
+keycode = "S(KC_F5)"
+label = "Stop"
+description = "Ferma il debug (Shift+F5)"
+
+[[labels]]
+layer = 4
+keycode = "KC_F5"
+label = "Continue"
+description = "Avvia/continua (F5)"
+
+[[labels]]
+layer = 4
+keycode = "KC_F10"
+label = "Step over"
+description = "Esegui la riga (F10)"
+
+[[labels]]
+layer = 4
+keycode = "KC_F11"
+label = "Step into"
+description = "Entra nella funzione (F11)"
+
+[[labels]]
+layer = 4
+keycode = "S(KC_F11)"
+label = "Step out"
+description = "Esci dalla funzione (Shift+F11)"
+
+# riga bassa
+[[labels]]
+layer = 4
+keycode = "S(KC_F12)"
+label = "Refs"
+description = "Trova i riferimenti (Shift+F12)"
+
+[[labels]]
+layer = 4
+keycode = "A(KC_F12)"
+label = "Peek def"
+description = "Anteprima della definizione (Alt+F12)"
+
+[[labels]]
+layer = 4
+keycode = "KC_F2"
+label = "Rename"
+description = "Rinomina il simbolo (F2)"
+
+[[labels]]
+layer = 4
+keycode = "C(KC_DOT)"
+label = "Quick fix"
+description = "Correzione rapida (Ctrl+.)"
+
+# Esempio per posizione: il tasto in alto a sinistra del layer BASE.
+# [[labels]]
+# layer = 0
+# row = 0
+# col = 0
+# label = "Debug"
+
 [polling]
 visible_hz = 60     # stato letto 60 volte al secondo con l'HUD visibile
 hidden_hz = 10      # e 10 volte al secondo quando è nascosto

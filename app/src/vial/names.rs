@@ -119,6 +119,44 @@ pub fn vial_code(name: &str) -> Option<u16> {
     qmk_code(name)
 }
 
+/// Parses a keycode written by a person (config file): everything
+/// [`vial_code`] accepts, plus QMK's short modifier wrappers, nested
+/// (`S(KC_F5)`, `C(KC_DOT)`, `C(S(KC_F5))`, `RALT(KC_E)`), `QK_KB_n` and
+/// decimal/hex numbers.
+pub fn parse_keycode(text: &str) -> Option<u16> {
+    let t = text.trim();
+    if let Some(v) = vial_code(t) {
+        return Some(v);
+    }
+    if let Some(n) = t.strip_prefix("QK_KB_").and_then(|n| n.parse::<u16>().ok()) {
+        return (n < 64).then_some(0x7E00 + n);
+    }
+    if !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit()) {
+        return t.parse().ok();
+    }
+    let open = t.find('(')?;
+    if !t.ends_with(')') {
+        return None;
+    }
+    let mods: u16 = match &t[..open] {
+        "C" | "LCTL" => 0x01,
+        "S" | "LSFT" => 0x02,
+        "A" | "LALT" | "LOPT" => 0x04,
+        "G" | "LGUI" | "LCMD" | "LWIN" => 0x08,
+        "RCTL" => 0x11,
+        "RSFT" => 0x12,
+        "RALT" | "ROPT" | "ALGR" => 0x14,
+        "RGUI" | "RCMD" | "RWIN" => 0x18,
+        _ => return None,
+    };
+    let inner = parse_keycode(&t[open + 1..t.len() - 1])?;
+    if inner > 0x1FFF {
+        return None;
+    }
+    // nested wrappers combine their modifiers; the right-hand bit is shared
+    Some((((inner >> 8) | mods) << 8) | (inner & 0xFF))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,6 +207,30 @@ mod tests {
         ];
         for (name, code) in cases {
             assert_eq!(vial_code(name), Some(code), "{name}");
+        }
+    }
+
+    #[test]
+    fn config_keycodes() {
+        let cases = [
+            ("KC_F10", 0x0043),
+            ("S(KC_F5)", 0x023E),
+            ("C(KC_DOT)", 0x0137),
+            ("C(S(KC_F5))", 0x033E),
+            ("A(KC_F12)", 0x0445),
+            ("RALT(KC_E)", 0x1408),
+            ("QK_KB_15", 0x7E0F),
+            ("USER15", 0x7E0F),
+            ("LCTL_T(KC_TAB)", 0x212B),
+            ("TG(4)", 0x5264),
+            ("0x7e12", 0x7E12),
+            ("67", 67),
+        ];
+        for (name, code) in cases {
+            assert_eq!(parse_keycode(name), Some(code), "{name}");
+        }
+        for bad in ["", "X(KC_A)", "C(MO(1))", "C(", "QK_KB_99", "KC_NOPE"] {
+            assert_eq!(parse_keycode(bad), None, "{bad}");
         }
     }
 

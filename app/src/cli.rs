@@ -15,7 +15,11 @@ Uso: keyboard-hud [opzioni]
   --print-udev-rule     stampa la regola udev per Linux ed esce
   --layer N             layer mostrato all'avvio in modalità offline
   --mock-at MS          sviluppo: fa partire lo scenario simulato da MS millisecondi
-  --screenshot FILE     sviluppo: salva la finestra in FILE (PPM) dopo 2 s ed esce
+  --screenshot FILE     sviluppo: salva la finestra in FILE (PPM) ed esce
+  --screenshot-after MS sviluppo: attesa prima dello screenshot (default 2000)
+  --search TESTO        sviluppo: apre la ricerca con questo testo
+  --heatmap layer|all   sviluppo: mostra la heatmap all'avvio
+  --stats-window        sviluppo: apre la finestra delle statistiche
   --verbose             log dettagliato
   --version             versione
   -h, --help            questo aiuto";
@@ -32,6 +36,10 @@ pub struct Options {
     pub layer: u8,
     pub screenshot: Option<PathBuf>,
     pub mock_at: u64,
+    pub screenshot_after: Option<u64>,
+    pub search: Option<String>,
+    pub heatmap: Option<String>,
+    pub stats_window: bool,
     pub print_udev_rule: bool,
     pub verbose: bool,
     pub version: bool,
@@ -61,6 +69,22 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                 o.mock_at = value("--mock-at")?.parse().map_err(|_| "--mock-at: numero non valido".to_string())?
             }
             "--screenshot" => o.screenshot = Some(value("--screenshot")?.into()),
+            "--screenshot-after" => {
+                o.screenshot_after = Some(
+                    value("--screenshot-after")?
+                        .parse()
+                        .map_err(|_| "--screenshot-after: numero non valido".to_string())?,
+                )
+            }
+            "--search" => o.search = Some(value("--search")?),
+            "--heatmap" => {
+                let v = value("--heatmap")?;
+                if v != "layer" && v != "all" {
+                    return Err("--heatmap: usa 'layer' o 'all'".into());
+                }
+                o.heatmap = Some(v);
+            }
+            "--stats-window" => o.stats_window = true,
             "--print-udev-rule" => o.print_udev_rule = true,
             "--verbose" | "-v" => o.verbose = true,
             "--version" => o.version = true,

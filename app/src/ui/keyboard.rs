@@ -1,7 +1,8 @@
 //! Keyboard rendering: KLE geometry (with rotations) and legends.
 
-use super::theme::{mix, Palette};
+use super::theme::{mix, text_on, Palette};
 use crate::kle::{KeyRole, KleKey};
+use crate::labels::Labels;
 use crate::model::Keymap;
 use crate::vial::keycode::KC_TRNS;
 use crate::vial::legend::{legend, LegendContext, LegendKind, Text};
@@ -21,7 +22,25 @@ pub struct KeyboardView<'a> {
     /// Highlight of each matrix position, 0 (off) to 1 (pressed), for the press animation.
     pub highlight: &'a dyn Fn(u8, u8) -> f32,
     pub legends: &'a LegendContext<'a>,
+    pub labels: &'a Labels,
     pub layer_color: &'a dyn Fn(u8) -> Option<Color32>,
+    /// Search marks: 0 (none) to 1 (selected result).
+    pub mark: &'a dyn Fn(u8, u8) -> f32,
+    /// Heatmap: `(intensity 0..1, presses)` per position, when shown.
+    pub heat: Option<&'a dyn Fn(u8, u8) -> (f32, u64)>,
+}
+
+/// Cold → hot: dark blue, cyan, yellow, red.
+fn heat_color(t: f32) -> Color32 {
+    let stops = [
+        Color32::from_rgb(30, 50, 110),
+        Color32::from_rgb(0, 170, 200),
+        Color32::from_rgb(240, 210, 40),
+        Color32::from_rgb(230, 50, 40),
+    ];
+    let t = t.clamp(0.0, 1.0) * (stops.len() - 1) as f32;
+    let i = (t.floor() as usize).min(stops.len() - 2);
+    mix(stops[i], stops[i + 1], t - i as f32)
 }
 
 struct Transform {
@@ -123,8 +142,9 @@ pub fn draw(
         };
 
         let own = view.keymap.get(view.layer, row, col);
-        let (code, _from) = view.keymap.resolve(view.layer, view.active_mask, row, col);
-        let leg = legend(code, view.legends);
+        let (code, from) = view.keymap.resolve(view.layer, view.active_mask, row, col);
+        let mut leg = legend(code, view.legends);
+        view.labels.apply(&mut leg, view.layer, row, col, code, from);
         let transparent = own == KC_TRNS;
         let glow = (view.highlight)(row, col).clamp(0.0, 1.0);
 
@@ -136,10 +156,21 @@ pub fn draw(
         if transparent {
             fill = mix(fill, palette.key_empty, 0.5);
         }
+        let heat = view.heat.map(|f| f(row, col));
+        let mut base_text = if transparent { palette.text_dim } else { palette.text };
+        if let Some((t, n)) = heat {
+            fill = if n == 0 { palette.key_empty } else { heat_color(t) };
+            base_text = if n == 0 { palette.text_dim } else { text_on(fill) };
+        }
         fill = mix(fill, palette.pressed, 0.7 * glow);
-        let base_text = if transparent { palette.text_dim } else { palette.text };
         let text_color = mix(base_text, palette.pressed_text, glow);
-        painter.add(Shape::convex_polygon(poly.clone(), fill, Stroke::new(1.0, palette.key_border)));
+        let mark = (view.mark)(row, col).clamp(0.0, 1.0);
+        let stroke = if mark > 0.0 {
+            Stroke::new(1.5 + 2.5 * mark, mix(palette.key_border, palette.accent, 0.5 + 0.5 * mark))
+        } else {
+            Stroke::new(1.0, palette.key_border)
+        };
+        painter.add(Shape::convex_polygon(poly.clone(), fill, stroke));
 
         let base = tf.scale * 0.30;
         match &leg.hold {
@@ -168,7 +199,11 @@ pub fn draw(
 
         if hover.is_some_and(|p| contains(&poly, p)) {
             let source = if transparent { " (trasparente)" } else { "" };
-            tooltip = Some(format!("{}{source}\nriga {row}, colonna {col}", leg.tooltip));
+            let mut tip = format!("{}{source}\nriga {row}, colonna {col}", leg.tooltip);
+            if let Some((_, n)) = heat {
+                tip.push_str(&format!("\n{n} pressioni"));
+            }
+            tooltip = Some(tip);
         }
     }
     tooltip

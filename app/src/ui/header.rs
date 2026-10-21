@@ -1,7 +1,7 @@
 //! Header: active layers (held / locked / one-shot), modifiers, Caps Lock /
 //! Caps Word, QWERTY / Colemak-DH, host OS.
 
-use super::theme::{mix, Palette};
+use super::theme::{mix, text_on, Palette};
 use crate::hid::protocol::{flags, HudState, OsKind};
 use crate::i18n::{tr, Lang, Msg};
 use crate::model::{mod_level, LayerHold, ModLevel, Modifier, MODIFIERS};
@@ -79,7 +79,7 @@ impl Chips<'_> {
         let radius = CornerRadius::same((rect.height() / 2.0) as u8);
         let (fill, stroke, text_color) = match style {
             ChipStyle::Off => (Color32::TRANSPARENT, Stroke::new(1.0, palette.chip_off), palette.chip_off),
-            ChipStyle::Filled(c) => (c, Stroke::NONE, contrast(c)),
+            ChipStyle::Filled(c) => (c, Stroke::NONE, text_on(c)),
             ChipStyle::Soft(c) => (c.gamma_multiply(0.35), Stroke::new(1.0, c.gamma_multiply(0.7)), palette.text),
             ChipStyle::Pulse(c) => {
                 let a = 0.55 + 0.45 * ((self.time * 6.0).sin() as f32 + 1.0) / 2.0;
@@ -98,16 +98,6 @@ impl Chips<'_> {
 
     fn space(&mut self) {
         self.x += self.gap;
-    }
-}
-
-/// Black or white, whichever reads better on `bg`.
-fn contrast(bg: Color32) -> Color32 {
-    let l = 0.299 * bg.r() as f32 + 0.587 * bg.g() as f32 + 0.114 * bg.b() as f32;
-    if l > 150.0 {
-        Color32::from_rgb(20, 20, 24)
-    } else {
-        Color32::WHITE
     }
 }
 

@@ -86,12 +86,63 @@ impl Default for LogConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct HeadsUp {
+    pub enabled: bool,
+    /// A modifier must be held this long before the HUD appears.
+    pub modifier_delay_ms: u64,
+    /// The HUD fades out this long after the keyboard is back to the base state.
+    pub hide_delay_ms: u64,
+    /// Opacity while faded out (0 = invisible).
+    pub hidden_opacity: f32,
+}
+
+impl Default for HeadsUp {
+    fn default() -> Self {
+        HeadsUp { enabled: true, modifier_delay_ms: 400, hide_delay_ms: 800, hidden_opacity: 0.0 }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct StatsConfig {
+    pub enabled: bool,
+    /// Counter file; empty = `keyboard-hud-stats.json` next to the config.
+    pub file: String,
+    /// Report: keys never used in the last N days.
+    pub unused_days: u32,
+}
+
+impl Default for StatsConfig {
+    fn default() -> Self {
+        StatsConfig { enabled: true, file: String::new(), unused_days: 30 }
+    }
+}
+
+/// Custom key label, by position (`layer` + `row` + `col`) or by `keycode`
+/// (optionally limited to one `layer`).
+#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LabelConfig {
+    pub layer: Option<u8>,
+    pub row: Option<u8>,
+    pub col: Option<u8>,
+    pub keycode: Option<String>,
+    pub label: String,
+    /// Longer description shown in the tooltip.
+    pub description: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub device: DeviceConfig,
     pub appearance: Appearance,
+    pub headsup: HeadsUp,
     pub layers: Vec<LayerConfig>,
+    pub labels: Vec<LabelConfig>,
+    pub stats: StatsConfig,
     pub polling: Polling,
     pub log: LogConfig,
 }
@@ -127,6 +178,11 @@ impl Config {
         p.visible_hz = p.visible_hz.clamp(1, 250);
         p.hidden_hz = p.hidden_hz.clamp(1, 250);
         p.timeout_ms = p.timeout_ms.clamp(5, 1000);
+        let h = &mut self.headsup;
+        h.hidden_opacity = if h.hidden_opacity.is_finite() { h.hidden_opacity.clamp(0.0, 1.0) } else { 0.0 };
+        h.modifier_delay_ms = h.modifier_delay_ms.min(10_000);
+        h.hide_delay_ms = h.hide_delay_ms.min(60_000);
+        self.stats.unused_days = self.stats.unused_days.clamp(1, 3650);
     }
 
     pub fn vid(&self) -> Option<u16> {
@@ -205,6 +261,7 @@ pub struct WindowState {
     pub opacity: Option<f32>,
     pub mode: Option<ViewMode>,
     pub theme: Option<ThemeChoice>,
+    pub headsup: Option<bool>,
 }
 
 impl WindowState {
@@ -237,6 +294,13 @@ mod tests {
         assert_eq!(c.layers[1].name, "SYM");
         assert_eq!(parse_color(&c.layers[1].color), Some((0x00, 0xB9, 0xD7)));
         assert_eq!(c.polling.visible_hz, 60);
+        assert!(c.headsup.enabled);
+        assert_eq!(c.headsup.modifier_delay_ms, 400);
+        assert!(c.labels.iter().any(|l| l.label == "Step over" && l.keycode.as_deref() == Some("KC_F10")));
+        assert!(c
+            .labels
+            .iter()
+            .all(|l| crate::vial::names::parse_keycode(l.keycode.as_deref().unwrap_or("KC_NO")).is_some()));
     }
 
     #[test]

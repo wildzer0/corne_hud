@@ -3,18 +3,27 @@
 
 pub mod header;
 pub mod keyboard;
+pub mod report;
+pub mod search_panel;
 pub mod theme;
 
-use crate::config::{Config, ConfigWatcher, Reload, ThemeChoice, ViewMode, WindowState};
+use crate::config::{Config, ConfigWatcher, Reload, StatsConfig, ThemeChoice, ViewMode, WindowState};
+use crate::headsup::HeadsUp;
 use crate::hid::protocol::{caps, HudInfo, HudState};
 use crate::hid::worker::{Event, PauseReason, Status, Worker};
 use crate::i18n::{tr, Lang, Msg};
-use crate::kle::KleKey;
+use crate::kle::{KeyRole, KleKey};
+use crate::labels::Labels;
 use crate::logging;
 use crate::model::{classify_layers, highest_layer, Keymap};
+use crate::paths;
+use crate::stats::{Stats, Totals};
 use crate::vial::definition::Definition;
 use crate::vial::legend::LegendContext;
 use egui::{Align2, Color32, FontId, Key, Rect, Sense, Vec2, ViewportCommand};
+use report::{ReportInput, ReportWindow};
+use search_panel::SearchPanel;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use theme::{layer_table, Palette};
@@ -25,6 +34,41 @@ pub fn base_size(mode: ViewMode) -> Vec2 {
         ViewMode::Full => Vec2::new(900.0, 400.0),
         ViewMode::Compact => Vec2::new(620.0, 230.0),
     }
+}
+
+/// Statistics are counted from polled states: below this rate quick taps get lost.
+const MIN_STATS_HZ: u32 = 30;
+const HEAT_REFRESH: Duration = Duration::from_secs(1);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HeatMode {
+    Off,
+    /// Presses on the layer shown.
+    Layer,
+    /// Presses per physical key, all layers together.
+    All,
+}
+
+fn stats_path(cfg: &StatsConfig) -> PathBuf {
+    if cfg.file.trim().is_empty() {
+        paths::base_dir().join("keyboard-hud-stats.json")
+    } else {
+        PathBuf::from(cfg.file.trim())
+    }
+}
+
+/// Matrix positions present in the geometry.
+fn positions(keys: &[KleKey]) -> Vec<(u8, u8)> {
+    let mut p: Vec<(u8, u8)> = keys
+        .iter()
+        .filter_map(|k| match k.role() {
+            Some(KeyRole::Matrix { row, col }) => Some((row, col)),
+            _ => None,
+        })
+        .collect();
+    p.sort();
+    p.dedup();
+    p
 }
 
 /// Press animation: instant on, fade out over this time after release.
@@ -79,6 +123,15 @@ pub struct Startup {
     pub window_path: PathBuf,
     /// `--verbose` wins over the configured log level.
     pub verbose: bool,
+    pub dev: DevOptions,
+}
+
+/// Development aids to reach a UI state without interaction (screenshots).
+#[derive(Default)]
+pub struct DevOptions {
+    pub search: Option<String>,
+    pub heatmap: Option<String>,
+    pub stats_window: bool,
 }
 
 /// Development aid: capture the window to a PPM file, then quit.
@@ -127,6 +180,20 @@ impl PressFade {
 
     fn clear(&mut self) {
         *self = PressFade::default();
+    }
+
+    /// Keys pressed in `matrix` that were up in the previous state.
+    fn new_presses(&self, matrix: &[u8; 8]) -> Vec<(u8, u8)> {
+        let mut out = Vec::new();
+        for (r, (old, new)) in self.matrix.iter().zip(matrix).enumerate() {
+            let pressed = new & !old;
+            for c in 0..8u8 {
+                if pressed & (1 << c) != 0 {
+                    out.push((r as u8, c));
+                }
+            }
+        }
+        out
     }
 
     fn level(&self, row: u8, col: u8, now: Instant) -> f32 {
@@ -230,12 +297,29 @@ pub struct HudApp {
     notice: Option<(String, Instant)>,
     screenshot: Option<Screenshot>,
     started: Instant,
+
+    labels: Labels,
+    headsup: HeadsUp,
+    headsup_on: bool,
+    /// Heads-up mode: HUD_TOG pinned the HUD on screen.
+    pinned: bool,
+    /// Mouse passthrough currently requested from the window system.
+    passthrough: bool,
+    search: SearchPanel,
+    search_stale: bool,
+    stats: Option<Stats>,
+    report: ReportWindow,
+    heat: HeatMode,
+    heat_cache: Option<(Instant, Totals)>,
 }
 
 impl HudApp {
     pub fn new(ctx: &egui::Context, s: Startup) -> Self {
         let a = &s.config.appearance;
         let (layer_names, layer_colors) = layer_table(&s.config.layers);
+        let (labels, label_errors) = Labels::from_config(&s.config.labels);
+        let stats = s.config.stats.enabled.then(|| Stats::load(stats_path(&s.config.stats)));
+        let headsup_on = s.window.headsup.unwrap_or(s.config.headsup.enabled);
         let mut app = HudApp {
             lang: Lang::It,
             mode: s.mode,
@@ -265,13 +349,47 @@ impl HudApp {
             notice: None,
             screenshot: s.screenshot,
             started: Instant::now(),
+            labels,
+            headsup: HeadsUp::default(),
+            headsup_on,
+            pinned: false,
+            passthrough: false,
+            search: SearchPanel::default(),
+            search_stale: true,
+            stats,
+            report: ReportWindow::default(),
+            heat: HeatMode::Off,
+            heat_cache: None,
         };
+        app.report_label_errors(&label_errors);
+        if let Some(q) = s.dev.search {
+            app.search.open_with(q);
+        }
+        app.heat = match s.dev.heatmap.as_deref() {
+            Some("layer") => HeatMode::Layer,
+            Some("all") => HeatMode::All,
+            _ => HeatMode::Off,
+        };
+        app.report.open = s.dev.stats_window;
+        if s.dev.stats_window && app.screenshot.is_some() {
+            // capture the statistics inside the HUD window
+            ctx.set_embed_viewports(true);
+        }
         if let Some(e) = s.config_error {
             app.notify(format!("{}: {e}", tr(app.lang, Msg::ConfigError)));
         }
         ctx.options_mut(|o| o.zoom_with_keyboard = false);
         app.apply_poll_rate();
         app
+    }
+
+    fn report_label_errors(&mut self, errors: &[String]) {
+        for e in errors {
+            log::warn!("{e}");
+        }
+        if let Some(first) = errors.first() {
+            self.notify(format!("{} ({}): {first}", tr(self.lang, Msg::LabelErrors), errors.len()));
+        }
     }
 
     fn notify(&mut self, text: String) {
@@ -312,13 +430,23 @@ impl HudApp {
                 Event::Layout { definition, layout_options, keymap, info } => {
                     self.live = Some(Layout::new(definition, layout_options, keymap));
                     self.info = info;
+                    self.search_stale = true;
                 }
                 Event::Keymap(km) => {
                     if let Some(l) = &mut self.live {
                         l.keymap = km;
                     }
+                    self.search_stale = true;
                 }
                 Event::State(s) => {
+                    if let Some(stats) = &mut self.stats {
+                        // counters only: which key, on which layer, which day
+                        let layer = highest_layer(s.active_mask());
+                        let today = crate::clock::today();
+                        for (r, c) in self.fade.new_presses(&s.matrix) {
+                            stats.record((layer, r, c), today);
+                        }
+                    }
                     self.fade.update(&s.matrix, now);
                     if let TapAction::Double = self.hud_toggle.on_count(s.hud_toggle_count, now) {
                         self.set_click_through(ctx, !self.click_through);
@@ -366,7 +494,8 @@ impl HudApp {
     fn apply_poll_rate(&self) {
         if let Some(w) = self.worker() {
             let p = &self.config.polling;
-            w.set_poll_hz(if self.visible { p.visible_hz } else { p.hidden_hz });
+            let hidden = if self.stats.is_some() { p.hidden_hz.max(MIN_STATS_HZ) } else { p.hidden_hz };
+            w.set_poll_hz(if self.visible { p.visible_hz } else { hidden });
             w.set_timeout_ms(p.timeout_ms);
         }
     }
@@ -378,6 +507,19 @@ impl HudApp {
         let (names, colors) = layer_table(&config.layers);
         self.layer_names = names;
         self.layer_colors = colors;
+        let (labels, errors) = Labels::from_config(&config.labels);
+        self.labels = labels;
+        self.search_stale = true;
+        if config.stats != self.config.stats {
+            if let Some(s) = &mut self.stats {
+                s.save();
+            }
+            self.stats = config.stats.enabled.then(|| Stats::load(stats_path(&config.stats)));
+            self.heat_cache = None;
+        }
+        if config.headsup.enabled != self.config.headsup.enabled {
+            self.headsup_on = config.headsup.enabled;
+        }
         // appearance values edited in the file win over the remembered ones
         let (old, new) = (&self.config.appearance, &config.appearance);
         if new.opacity != old.opacity {
@@ -400,6 +542,7 @@ impl HudApp {
             self.resize(ctx);
         }
         self.notify(tr(self.lang, Msg::ConfigReloaded).to_string());
+        self.report_label_errors(&errors);
     }
 
     fn resize(&mut self, ctx: &egui::Context) {
@@ -416,6 +559,7 @@ impl HudApp {
         self.window.scale = Some(self.scale);
         self.window.mode = Some(self.view);
         self.window.theme = Some(self.theme);
+        self.window.headsup = Some(self.headsup_on);
         self.window.save(&self.window_path);
         self.window_dirty = None;
     }
@@ -445,14 +589,6 @@ impl HudApp {
             self.dark = Some(dark);
         }
         dark
-    }
-
-    fn layer_name(&self, layer: u8) -> String {
-        self.layer_names.get(layer as usize).cloned().unwrap_or_else(|| format!("L{layer}"))
-    }
-
-    fn layer_color(&self, layer: u8) -> Option<Color32> {
-        self.layer_colors.get(layer as usize).copied().flatten()
     }
 
     fn status_line(&self) -> String {
@@ -555,6 +691,31 @@ impl HudApp {
             }
         });
         ui.separator();
+        if ui
+            .checkbox(&mut self.headsup_on, tr(lang, Msg::MenuHeadsUp))
+            .on_hover_text(tr(lang, Msg::HeadsUpHint))
+            .changed()
+        {
+            self.pinned = false;
+            self.mark_dirty();
+        }
+        ui.horizontal(|ui| {
+            ui.label(tr(lang, Msg::MenuHeatmap));
+            ui.add_enabled_ui(self.stats.is_some(), |ui| {
+                ui.selectable_value(&mut self.heat, HeatMode::Off, tr(lang, Msg::HeatOff));
+                ui.selectable_value(&mut self.heat, HeatMode::Layer, tr(lang, Msg::HeatLayer));
+                ui.selectable_value(&mut self.heat, HeatMode::All, tr(lang, Msg::HeatAll));
+            });
+        });
+        if ui.button(tr(lang, Msg::MenuStats)).clicked() {
+            self.report.open = true;
+            ui.close();
+        }
+        if ui.button(tr(lang, Msg::MenuSearch)).clicked() {
+            self.search.open();
+            ui.close();
+        }
+        ui.separator();
         let available = self.click_through_available();
         let mut ct = self.click_through;
         let hint = tr(lang, if available { Msg::ClickThroughHint } else { Msg::ClickThroughUnavailable });
@@ -588,7 +749,23 @@ impl eframe::App for HudApp {
         self.drain_events(ctx);
         let now = Instant::now();
         if let TapAction::Single = self.hud_toggle.poll(now) {
-            self.set_visible(ctx, !self.visible);
+            if self.headsup_on && self.visible {
+                // heads-up: a tap pins the HUD on screen, another one gives it back to heads-up
+                self.pinned = !self.pinned;
+                self.notify(tr(self.lang, if self.pinned { Msg::Pinned } else { Msg::Unpinned }).to_string());
+            } else {
+                self.set_visible(ctx, !self.visible);
+            }
+        }
+        if let Some(s) = &mut self.stats {
+            s.save_if_due();
+        }
+        let open_search = ctx.input(|i| {
+            (i.modifiers.command && i.key_pressed(Key::F)) || (i.key_pressed(Key::Slash) && !i.modifiers.any())
+        });
+        if open_search && !self.click_through {
+            self.search.open();
+            ctx.send_viewport_cmd(ViewportCommand::Focus);
         }
         match self.watcher.poll() {
             Reload::Unchanged => {}
@@ -624,6 +801,9 @@ impl eframe::App for HudApp {
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.save_window();
+        if let Some(s) = &mut self.stats {
+            s.save();
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -641,14 +821,41 @@ impl eframe::App for HudApp {
         if !self.click_through {
             self.handle_zoom(&ctx);
         }
-        let painter = ui.painter_at(full);
-        painter.rect_filled(full, 12.0, palette.background);
-
         // live data wins; otherwise the files loaded from disk
         let live_state = self.live.as_ref().and(self.state);
+
+        // heads-up: fade in/out; without live state the HUD stays visible
+        let hu = &self.config.headsup;
+        let level = match (&live_state, self.headsup_on) {
+            (Some(s), true) => {
+                let wanted = self.headsup.wants(s, hu, now);
+                let force = self.pinned
+                    || self.search.open
+                    || ctx.any_popup_open()
+                    || (self.headsup.level() > 0.5 && response.hovered());
+                self.headsup.update(wanted, force, hu, now)
+            }
+            _ => 1.0,
+        };
+        let faded = level <= 0.01;
+        let passthrough = self.click_through || faded;
+        if passthrough != self.passthrough {
+            self.passthrough = passthrough;
+            ctx.send_viewport_cmd(ViewportCommand::MousePassthrough(passthrough));
+        }
+        ui.multiply_opacity(hu.hidden_opacity + (1.0 - hu.hidden_opacity) * level);
+
+        let painter = ui.painter_at(full);
+        painter.rect_filled(full, 12.0, palette.background);
         let layout = self.live.as_ref().or(self.offline.as_ref());
 
+        let search_hit = self.search.selected().map(|h| h.layer);
         let (layer, active_mask, browsing) = match (&live_state, layout) {
+            // search preview: the layer of the selected result
+            _ if search_hit.is_some() => {
+                let l = search_hit.unwrap_or(0);
+                (l, (1 << l) | 1, false)
+            }
             (Some(s), _) => {
                 let mask = s.active_mask();
                 (highest_layer(mask), mask, false)
@@ -669,8 +876,10 @@ impl eframe::App for HudApp {
         let footer_h = if compact { 14.0 } else { 18.0 };
         let header_rect =
             Rect::from_min_size(full.min + Vec2::new(pad, 8.0), Vec2::new(full.width() - 2.0 * pad, header_h));
-        let names = |l: u8| self.layer_name(l);
-        let colors = |l: u8| self.layer_color(l);
+        // closures over single fields, so that other fields stay mutable below
+        let (layer_names, layer_colors) = (&self.layer_names, &self.layer_colors);
+        let names = |l: u8| layer_names.get(l as usize).cloned().unwrap_or_else(|| format!("L{l}"));
+        let colors = |l: u8| layer_colors.get(l as usize).copied().flatten();
         let animating_header = header::draw(
             &painter,
             header_rect,
@@ -692,9 +901,38 @@ impl eframe::App for HudApp {
             full.max - Vec2::new(pad - 2.0, footer_h + 4.0),
         );
         let mut browse_layers = None;
+        if self.heat != HeatMode::Off && self.heat_cache.as_ref().is_none_or(|(t, _)| t.elapsed() >= HEAT_REFRESH) {
+            self.heat_cache = self.stats.as_ref().map(|s| {
+                let from = crate::clock::today() - self.config.stats.unused_days as i64 + 1;
+                (Instant::now(), s.totals(Some(from)))
+            });
+        }
         match layout {
             Some(l) => {
                 let legends = LegendContext { layer_names: &self.layer_names, custom: &l.definition.custom };
+                let pos = positions(&l.keys);
+                self.search.refresh(&l.keymap, &pos, &legends, &self.labels, self.search_stale);
+                self.search_stale = false;
+                let search = &self.search;
+                let mark = |r: u8, c: u8| search.mark(layer, r, c);
+                // heatmap: presses on the layer shown, or on every layer
+                let heat_counts: Option<HashMap<(u8, u8), u64>> = match (self.heat, &self.heat_cache) {
+                    (HeatMode::Off, _) | (_, None) => None,
+                    (mode, Some((_, totals))) => {
+                        let mut m = HashMap::new();
+                        for (&(l2, r, c), &n) in totals {
+                            if mode == HeatMode::All || l2 == layer {
+                                *m.entry((r, c)).or_insert(0) += n;
+                            }
+                        }
+                        Some(m)
+                    }
+                };
+                let heat_max = heat_counts.as_ref().and_then(|m| m.values().copied().max()).unwrap_or(0).max(1);
+                let heat_fn = |r: u8, c: u8| {
+                    let n = heat_counts.as_ref().and_then(|m| m.get(&(r, c)).copied()).unwrap_or(0);
+                    ((n as f32 / heat_max as f32).sqrt(), n)
+                };
                 let fade = &self.fade;
                 let highlight = |r: u8, c: u8| if live_state.is_some() { fade.level(r, c, now) } else { 0.0 };
                 let view = keyboard::KeyboardView {
@@ -704,7 +942,10 @@ impl eframe::App for HudApp {
                     active_mask,
                     highlight: &highlight,
                     legends: &legends,
+                    labels: &self.labels,
                     layer_color: &colors,
+                    mark: &mark,
+                    heat: heat_counts.is_some().then_some(&heat_fn as &dyn Fn(u8, u8) -> (f32, u64)),
                 };
                 let hover = if self.click_through { None } else { response.hover_pos() };
                 if let Some(tip) = keyboard::draw(&painter, body, &view, &palette, hover) {
@@ -740,12 +981,34 @@ impl eframe::App for HudApp {
         );
 
         if let Some(n) = browse_layers {
-            self.handle_browse_input(&ctx, n);
+            if !self.search.open {
+                self.handle_browse_input(&ctx, n);
+            }
         }
-        if !self.click_through {
+        if !passthrough {
             response.context_menu(|ui| self.context_menu(ui));
         }
+        let names = self.layer_names.clone();
+        let name_of = |l: u8| names.get(l as usize).cloned().unwrap_or_else(|| format!("L{l}"));
+        self.search.show(&ctx, self.lang, &palette, &name_of);
 
+        // statistics window
+        let layout = self.live.as_ref().or(self.offline.as_ref());
+        let pos = layout.map(|l| positions(&l.keys)).unwrap_or_default();
+        let input = ReportInput {
+            lang: self.lang,
+            layout,
+            positions: &pos,
+            layer_names: &self.layer_names,
+            labels: &self.labels,
+            days: self.config.stats.unused_days,
+            csv_path: paths::base_dir().join("keyboard-hud-stats.csv"),
+        };
+        self.report.show(&ctx, self.stats.as_mut(), &input);
+
+        if self.headsup.animating() {
+            ctx.request_repaint();
+        }
         if self.fade.animating(now) || animating_header {
             ctx.request_repaint();
         } else if notice.is_some() {

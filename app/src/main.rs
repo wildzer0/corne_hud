@@ -3,13 +3,18 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod cli;
+mod clock;
 mod config;
+mod headsup;
 mod hid;
 mod i18n;
 mod kle;
+mod labels;
 mod logging;
 mod model;
 mod paths;
+mod search;
+mod stats;
 mod ui;
 mod vial;
 
@@ -151,7 +156,10 @@ fn run(opts: Options) -> ExitCode {
                 mode,
                 offline,
                 start_layer: opts.layer,
-                screenshot: opts.screenshot.map(|p| Screenshot::new(p, std::time::Duration::from_secs(2))),
+                screenshot: opts.screenshot.map(|p| {
+                    Screenshot::new(p, std::time::Duration::from_millis(opts.screenshot_after.unwrap_or(2000)))
+                }),
+                dev: ui::DevOptions { search: opts.search, heatmap: opts.heatmap, stats_window: opts.stats_window },
                 config,
                 watcher,
                 config_error,
