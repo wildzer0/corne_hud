@@ -4,7 +4,7 @@ Registro dei progressi per riprendere il lavoro tra una sessione e l'altra.
 Specifica completa: [docs/PROMPT_HUD.md](docs/PROMPT_HUD.md). Protocollo: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Aggiorna questo file alla fine di ogni sessione.
 
-_Ultimo aggiornamento: 2026-10-22, commit `3e88165` ("First release"), branch `main` allineato a `origin`._
+_Ultimo aggiornamento: 2026-10-22. Release **v0.1.0** taggata e pubblicata; branch `main` allineato a `origin`._
 
 ---
 
@@ -17,13 +17,13 @@ _Ultimo aggiornamento: 2026-10-22, commit `3e88165` ("First release"), branch `m
 | 3 | App base | ✅ fatta | Verificata con `--mock` e `--offline` |
 | 4 | Live (stato, overlay, Vial, robustezza) | ✅ fatta | Verificata solo con `--mock` |
 | 5 | Heads-up, etichette, ricerca, statistiche, HUD_TOG | ✅ fatta | Verificata solo con `--mock` |
-| 6 | Distribuzione (CI, README) | ✅ scritta | **Workflow mai visto girare** |
+| 6 | Distribuzione (CI, README) | ✅ fatta | CI verde sui tre sistemi (verificata dall'utente) |
 
-Tutto è committato. Nessun tag di release ancora creato.
+Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
 
 ## Da fare (in ordine)
 
-1. **Verificare la CI**: controllare su GitHub (tab *Actions*) che il workflow `build` sia passato sui tre sistemi dopo il push di "First release". Le build macOS e Windows non sono mai state eseguite: Windows è passato solo `cargo check --target x86_64-pc-windows-msvc`, macOS nulla.
+1. **Controllare la release v0.1.0** su GitHub: devono esserci i tre eseguibili, `SHA256SUMS.txt` e `keyboard-hud.example.toml`.
 2. **Provare il firmware sulla tastiera**, flashato su entrambe le metà:
    - `firmware/tools/hud_probe.py info`, `state --watch` (Fn1, Fn2, tri-layer, `TG(4)`, `OSL(5)`, mod, Caps Word), `keymap --raw` prima e dopo `CMK_TOG`;
    - `keymap_version` deve aumentare dopo una modifica fatta in Vial;
@@ -33,8 +33,8 @@ Tutto è committato. Nessun tag di release ancora creato.
    - connessione, riconnessione dopo scollegamento, pausa con Vial aperto e ripresa;
    - `HUD_TOG` tocco e doppio tocco, heads-up, click-through;
    - lucchetti dei layer: "tenuto" e "bloccato" sono dedotti dall'app (vedi decisioni), da verificare.
-4. **File `LICENSE`** (GPL-2.0-or-later) da aggiungere prima di pubblicare binari: in attesa di conferma dell'utente.
-5. **Prima release**: `git tag v0.1.0 && git push origin v0.1.0` (il tag deve corrispondere a `version` in `app/Cargo.toml`).
+4. **File `LICENSE`** (GPL-2.0-or-later): manca ancora, anche se v0.1.0 è già pubblicata. In attesa di conferma dell'utente.
+5. **Prossime release**: aumentare `version` in `app/Cargo.toml`, poi `git tag vX.Y.Z && git push origin vX.Y.Z`. Il tag deve corrispondere alla versione, altrimenti la CI si ferma.
 
 ## Decisioni prese (non rimetterle in discussione senza motivo)
 
@@ -98,6 +98,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-22**: l'utente conferma che la CI è verde sui tre sistemi. Push dei commit del menu e di `PROGRESS.md`, poi tag e pubblicazione di **v0.1.0**. Da ora i commit li fa Claude, su `main`; push e tag solo su richiesta.
 
 - **2026-10-22**: corretto il bug "menu tagliato con HUD piccolo". Il menu contestuale era un popup egui dentro la finestra dell'HUD: ora è una finestra separata (viewport immediata `hud-menu`), dimensionata sul contenuto e aperta accanto al clic, verso l'interno dell'HUD. Si chiude con ✕, Esc, perdita di focus o clic sull'HUD. Su Wayland la posizione dell'HUD non è nota, quindi il menu lo piazza il compositor. Anche il pannello di ricerca ora si restringe con la finestra. I comandi verso l'HUD passano da `root_cmd()`, perché dentro un'altra finestra `send_viewport_cmd` agirebbe su quella. Il log ora registra anche avvisi ed errori delle librerie. Verificato in WSLg/X11 con `xwininfo`: con l'HUD a 310×115 il menu esce come finestra a sé di 300×302. WSLg non dà il focus alle nuove finestre, quindi lì funzionano solo ✕ e il clic sull'HUD. Nota: una finestra secondaria aperta al primissimo fotogramma non viene creata, per questo `--menu` aspetta 1 s.
 
