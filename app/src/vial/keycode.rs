@@ -34,6 +34,7 @@ const QK_KB_MAX: u16 = 0x7E3F;
 /// Layers used by `TL_LOWR` / `TL_UPPR` (QMK defaults, same as the keymap).
 pub const TRI_LAYER_LOWER: u8 = 1;
 pub const TRI_LAYER_UPPER: u8 = 2;
+pub const TRI_LAYER_ADJUST: u8 = 3;
 
 /// 5-bit QMK modifier set as encoded in keycodes: bits 0-3 = Ctrl, Shift,
 /// Alt, Gui; bit 4 = right-hand side.

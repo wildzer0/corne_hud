@@ -14,6 +14,7 @@ Uso: keyboard-hud [opzioni]
   --x11                 Linux: forza XWayland (finestra sempre in primo piano)
   --print-udev-rule     stampa la regola udev per Linux ed esce
   --layer N             layer mostrato all'avvio in modalità offline
+  --mock-at MS          sviluppo: fa partire lo scenario simulato da MS millisecondi
   --screenshot FILE     sviluppo: salva la finestra in FILE (PPM) dopo 2 s ed esce
   --verbose             log dettagliato
   --version             versione
@@ -30,6 +31,7 @@ pub struct Options {
     pub x11: bool,
     pub layer: u8,
     pub screenshot: Option<PathBuf>,
+    pub mock_at: u64,
     pub print_udev_rule: bool,
     pub verbose: bool,
     pub version: bool,
@@ -55,6 +57,9 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--pid" => o.pid = Some(parse_id(&value("--pid")?)?),
             "--x11" => o.x11 = true,
             "--layer" => o.layer = value("--layer")?.parse().map_err(|_| "--layer: numero non valido".to_string())?,
+            "--mock-at" => {
+                o.mock_at = value("--mock-at")?.parse().map_err(|_| "--mock-at: numero non valido".to_string())?
+            }
             "--screenshot" => o.screenshot = Some(value("--screenshot")?.into()),
             "--print-udev-rule" => o.print_udev_rule = true,
             "--verbose" | "-v" => o.verbose = true,

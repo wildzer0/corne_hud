@@ -3,6 +3,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod cli;
+mod config;
 mod hid;
 mod i18n;
 mod kle;
@@ -13,11 +14,12 @@ mod ui;
 mod vial;
 
 use cli::Options;
+use config::{ConfigWatcher, WindowState};
 use hid::mock::{MOCK_VIAL_JSON, MOCK_VIL};
 use hid::worker::{Source, Worker};
 use std::path::Path;
 use std::process::ExitCode;
-use ui::{HudApp, Layout, Mode, Screenshot};
+use ui::{HudApp, Layout, Mode, Screenshot, Startup};
 use vial::definition::Definition;
 use vial::vil::Vil;
 
@@ -72,7 +74,6 @@ fn main() -> ExitCode {
         print!("{}", hid::transport::udev_instructions());
         return ExitCode::SUCCESS;
     }
-    logging::init(opts.verbose);
     run(opts)
 }
 
@@ -82,6 +83,17 @@ fn run(opts: Options) -> ExitCode {
         // Safe here: no other thread exists yet.
         std::env::remove_var("WAYLAND_DISPLAY");
     }
+
+    let base = paths::base_dir();
+    let (watcher, config, config_error) = ConfigWatcher::new(base.join(paths::CONFIG_FILE));
+    let level = if opts.verbose { log::LevelFilter::Debug } else { logging::parse_level(&config.log.level) };
+    logging::init(&base.join("keyboard-hud.log"), level);
+    log::info!("keyboard-hud {} · cartella {}", env!("CARGO_PKG_VERSION"), base.display());
+    if let Some(e) = &config_error {
+        log::error!("{}: {e}", watcher.path().display());
+    }
+    let window_path = base.join("keyboard-hud-state.toml");
+    let window = WindowState::load(&window_path);
 
     // Offline layout: explicit paths, files next to the app, or (with
     // --offline / --mock) the bundled sample.
@@ -102,17 +114,24 @@ fn run(opts: Options) -> ExitCode {
         }
     };
 
-    let native = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("Keyboard HUD")
-            .with_app_id("keyboard-hud")
-            .with_inner_size([900.0, 400.0])
-            .with_min_inner_size([300.0, 140.0])
-            .with_decorations(false)
-            .with_transparent(true)
-            .with_always_on_top(),
-        ..Default::default()
-    };
+    let a = &config.appearance;
+    let scale = window.scale.unwrap_or(a.scale);
+    let size = ui::base_size(window.mode.unwrap_or(a.mode)) * scale;
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title("Keyboard HUD")
+        .with_app_id("keyboard-hud")
+        .with_inner_size(size)
+        .with_min_inner_size([200.0, 100.0])
+        .with_decorations(false)
+        .with_transparent(true)
+        .with_always_on_top()
+        .with_taskbar(false);
+    if let (Some(x), Some(y)) = (window.x.or(a.x), window.y.or(a.y)) {
+        viewport = viewport.with_position([x, y]);
+    }
+    let native = eframe::NativeOptions { viewport, ..Default::default() };
+    let (vid, pid) = (opts.vid.or(config.vid()), opts.pid.or(config.pid()));
+    let polling = config.polling.clone();
 
     let result = eframe::run_native(
         "Keyboard HUD",
@@ -123,11 +142,24 @@ fn run(opts: Options) -> ExitCode {
                 Mode::Offline
             } else {
                 let ctx = cc.egui_ctx.clone();
-                let source = if opts.mock { Source::Mock } else { Source::Live { vid: opts.vid, pid: opts.pid } };
-                Mode::Live { worker: Worker::start(source, move || ctx.request_repaint()), mock: opts.mock }
+                let source = if opts.mock { Source::Mock(opts.mock_at) } else { Source::Live { vid, pid } };
+                let worker =
+                    Worker::start(source, polling.visible_hz, polling.timeout_ms, move || ctx.request_repaint());
+                Mode::Live { worker, mock: opts.mock }
             };
-            let shot = opts.screenshot.map(|p| Screenshot::new(p, std::time::Duration::from_secs(2)));
-            Ok(Box::new(HudApp::new(mode, offline, opts.layer, shot)))
+            let startup = Startup {
+                mode,
+                offline,
+                start_layer: opts.layer,
+                screenshot: opts.screenshot.map(|p| Screenshot::new(p, std::time::Duration::from_secs(2))),
+                config,
+                watcher,
+                config_error,
+                window,
+                window_path,
+                verbose: opts.verbose,
+            };
+            Ok(Box::new(HudApp::new(&cc.egui_ctx, startup)))
         }),
     );
     match result {

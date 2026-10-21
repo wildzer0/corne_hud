@@ -1,0 +1,56 @@
+# Keyboard HUD: file di configurazione d'esempio.
+#
+# Copialo accanto all'eseguibile con il nome "keyboard-hud.toml" (modalità
+# portable) oppure nella cartella di configurazione dell'utente. Le modifiche
+# vengono applicate entro un secondo, senza riavviare l'app.
+# Tutte le voci sono facoltative: se mancano si usano i valori qui sotto.
+
+[device]
+# Usa solo la tastiera con questi ID (esadecimali). Se li ometti, l'HUD usa il
+# primo dispositivo Raw HID (usage page 0xFF60) che risponde al protocollo HUD.
+# vid = "0x4653"
+# pid = "0x0004"
+
+[appearance]
+opacity = 0.85      # 0.2 – 1.0
+scale = 1.0         # 0.5 – 2.0 (anche Ctrl + rotellina sull'HUD)
+theme = "system"    # "system", "dark", "light"
+mode = "full"       # "full" (tastiera completa) o "compact" (striscia piccola)
+# Posizione iniziale in pixel logici. Di solito non serve: l'HUD ricorda
+# l'ultima posizione in keyboard-hud-state.toml.
+# x = 100
+# y = 800
+
+# Nomi e colori dei layer, nell'ordine del firmware (0, 1, 2, ...).
+# color: "#RRGGBB", oppure "" per un layer neutro.
+[[layers]]
+name = "BASE"
+color = ""
+
+[[layers]]
+name = "SYM"
+color = "#00B9D7"   # azzurro
+
+[[layers]]
+name = "NAV"
+color = "#3CC85A"   # verde
+
+[[layers]]
+name = "SYS"
+color = ""          # neutro, come i LED
+
+[[layers]]
+name = "DEBUG"
+color = "#E63C3C"   # rosso
+
+[[layers]]
+name = "ACC"
+color = "#EBC828"   # giallo
+
+[polling]
+visible_hz = 60     # stato letto 60 volte al secondo con l'HUD visibile
+hidden_hz = 10      # e 10 volte al secondo quando è nascosto
+timeout_ms = 50     # attesa massima di ogni risposta
+
+[log]
+level = "info"      # "error", "warn", "info", "debug" (oppure --verbose)

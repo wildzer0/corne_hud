@@ -76,7 +76,7 @@ pub fn frame_at(t_ms: u64) -> MockFrame {
         // one-shot ACC: tap OSL(5), wait, then the vowel
         8000..=9499 => {
             if t < 8100 {
-                f.press(1, 6);
+                f.press(5, 6); // OSL(5)
             }
             if t < 9000 {
                 f.layer_state = 1 << 5;
@@ -124,6 +124,13 @@ pub struct MockKeyboard {
 }
 
 impl MockKeyboard {
+    /// Starts the scripted loop `offset_ms` into it.
+    pub fn starting_at(offset_ms: u64) -> Self {
+        let mut m = Self::new();
+        m.start = Instant::now().checked_sub(Duration::from_millis(offset_ms)).unwrap_or_else(Instant::now);
+        m
+    }
+
     pub fn new() -> Self {
         let keymap = Vil::parse(MOCK_VIL, 8, 7).map(|v| v.keymap).unwrap_or_else(|_| Keymap::new(6, 8, 7));
         let mut definition_xz = Vec::new();

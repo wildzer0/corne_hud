@@ -1,0 +1,279 @@
+//! Configuration (`keyboard-hud.toml`, reloaded on change) and remembered
+//! window state (`keyboard-hud-state.toml`, written by the app so that the
+//! user's commented config file is never rewritten).
+
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant, SystemTime};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeChoice {
+    #[default]
+    System,
+    Dark,
+    Light,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ViewMode {
+    #[default]
+    Full,
+    Compact,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct DeviceConfig {
+    /// Vendor ID, e.g. "0x4653". Empty = any keyboard answering GET_INFO.
+    pub vid: Option<String>,
+    pub pid: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Appearance {
+    pub opacity: f32,
+    pub scale: f32,
+    pub theme: ThemeChoice,
+    pub mode: ViewMode,
+    /// Initial window position (logical pixels); the last position is remembered anyway.
+    pub x: Option<f32>,
+    pub y: Option<f32>,
+}
+
+impl Default for Appearance {
+    fn default() -> Self {
+        Appearance { opacity: 0.85, scale: 1.0, theme: ThemeChoice::System, mode: ViewMode::Full, x: None, y: None }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LayerConfig {
+    pub name: String,
+    /// "#RRGGBB", or empty for a neutral layer.
+    pub color: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Polling {
+    /// While the HUD is visible (or in heads-up mode).
+    pub visible_hz: u32,
+    /// While hidden.
+    pub hidden_hz: u32,
+    pub timeout_ms: u64,
+}
+
+impl Default for Polling {
+    fn default() -> Self {
+        Polling { visible_hz: 60, hidden_hz: 10, timeout_ms: 50 }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LogConfig {
+    /// error, warn, info, debug
+    pub level: String,
+}
+
+impl Default for LogConfig {
+    fn default() -> Self {
+        LogConfig { level: "info".into() }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Config {
+    pub device: DeviceConfig,
+    pub appearance: Appearance,
+    pub layers: Vec<LayerConfig>,
+    pub polling: Polling,
+    pub log: LogConfig,
+}
+
+pub fn parse_hex_id(s: &str) -> Option<u16> {
+    let s = s.trim();
+    let hex = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+    u16::from_str_radix(hex, 16).ok()
+}
+
+/// "#RRGGBB" → (r, g, b).
+pub fn parse_color(s: &str) -> Option<(u8, u8, u8)> {
+    let h = s.trim().strip_prefix('#')?;
+    if h.len() != 6 {
+        return None;
+    }
+    let v = u32::from_str_radix(h, 16).ok()?;
+    Some(((v >> 16) as u8, (v >> 8) as u8, v as u8))
+}
+
+impl Config {
+    pub fn parse(text: &str) -> Result<Self, String> {
+        let mut c: Config = toml::from_str(text).map_err(|e| e.to_string())?;
+        c.sanitize();
+        Ok(c)
+    }
+
+    fn sanitize(&mut self) {
+        let a = &mut self.appearance;
+        a.opacity = if a.opacity.is_finite() { a.opacity.clamp(0.2, 1.0) } else { 0.85 };
+        a.scale = if a.scale.is_finite() { a.scale.clamp(0.5, 2.0) } else { 1.0 };
+        let p = &mut self.polling;
+        p.visible_hz = p.visible_hz.clamp(1, 250);
+        p.hidden_hz = p.hidden_hz.clamp(1, 250);
+        p.timeout_ms = p.timeout_ms.clamp(5, 1000);
+    }
+
+    pub fn vid(&self) -> Option<u16> {
+        self.device.vid.as_deref().and_then(parse_hex_id)
+    }
+
+    pub fn pid(&self) -> Option<u16> {
+        self.device.pid.as_deref().and_then(parse_hex_id)
+    }
+}
+
+/// Watches the config file and reloads it when its modification time changes.
+pub struct ConfigWatcher {
+    path: PathBuf,
+    mtime: Option<SystemTime>,
+    last_check: Instant,
+}
+
+pub enum Reload {
+    Unchanged,
+    Changed(Box<Config>),
+    Error(String),
+}
+
+impl ConfigWatcher {
+    /// Loads the initial config (defaults when the file is missing or invalid).
+    pub fn new(path: PathBuf) -> (Self, Config, Option<String>) {
+        let mtime = mtime(&path);
+        let (config, error) = match std::fs::read_to_string(&path) {
+            Ok(text) => match Config::parse(&text) {
+                Ok(c) => (c, None),
+                Err(e) => (Config::default(), Some(e)),
+            },
+            Err(_) => (Config::default(), None),
+        };
+        (ConfigWatcher { path, mtime, last_check: Instant::now() }, config, error)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Checks at most once per second.
+    pub fn poll(&mut self) -> Reload {
+        if self.last_check.elapsed() < Duration::from_secs(1) {
+            return Reload::Unchanged;
+        }
+        self.last_check = Instant::now();
+        let m = mtime(&self.path);
+        if m == self.mtime {
+            return Reload::Unchanged;
+        }
+        self.mtime = m;
+        match std::fs::read_to_string(&self.path) {
+            Ok(text) => match Config::parse(&text) {
+                Ok(c) => Reload::Changed(Box::new(c)),
+                Err(e) => Reload::Error(e),
+            },
+            // file removed: back to defaults
+            Err(_) => Reload::Changed(Box::default()),
+        }
+    }
+}
+
+fn mtime(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path).and_then(|m| m.modified()).ok()
+}
+
+/// Window state remembered between runs.
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct WindowState {
+    pub x: Option<f32>,
+    pub y: Option<f32>,
+    pub scale: Option<f32>,
+    pub opacity: Option<f32>,
+    pub mode: Option<ViewMode>,
+    pub theme: Option<ThemeChoice>,
+}
+
+impl WindowState {
+    pub fn load(path: &Path) -> Self {
+        std::fs::read_to_string(path).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
+    }
+
+    pub fn save(&self, path: &Path) {
+        let text = match toml::to_string(self) {
+            Ok(t) => t,
+            Err(e) => return log::warn!("stato della finestra: {e}"),
+        };
+        let header = "# Scritto da Keyboard HUD: posizione e aspetto dell'ultima sessione.\n";
+        if let Err(e) = std::fs::write(path, format!("{header}{text}")) {
+            log::warn!("{}: {e}", path.display());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EXAMPLE: &str = include_str!("../../keyboard-hud.example.toml");
+
+    #[test]
+    fn example_config_parses() {
+        let c = Config::parse(EXAMPLE).unwrap();
+        assert_eq!(c.layers.len(), 6);
+        assert_eq!(c.layers[1].name, "SYM");
+        assert_eq!(parse_color(&c.layers[1].color), Some((0x00, 0xB9, 0xD7)));
+        assert_eq!(c.polling.visible_hz, 60);
+    }
+
+    #[test]
+    fn defaults_and_clamping() {
+        let c = Config::parse("").unwrap();
+        assert_eq!(c, Config::default());
+        let c = Config::parse("[appearance]\nopacity = 5.0\nscale = 0.1\n[polling]\nvisible_hz = 0").unwrap();
+        assert_eq!((c.appearance.opacity, c.appearance.scale, c.polling.visible_hz), (1.0, 0.5, 1));
+    }
+
+    #[test]
+    fn invalid_config_is_an_error() {
+        assert!(Config::parse("[appearance]\nopacity = \"tanta\"").is_err());
+        assert!(Config::parse("[nope]\nx = 1").is_err());
+        assert!(Config::parse("not toml at all [").is_err());
+    }
+
+    #[test]
+    fn ids_and_colors() {
+        assert_eq!(parse_hex_id("0x4653"), Some(0x4653));
+        assert_eq!(parse_hex_id("0004"), Some(4));
+        assert_eq!(parse_hex_id("xyz"), None);
+        assert_eq!(parse_color("#FF8000"), Some((255, 128, 0)));
+        assert_eq!(parse_color(""), None);
+        assert_eq!(parse_color("#12345"), None);
+    }
+
+    #[test]
+    fn window_state_round_trip() {
+        let s = WindowState {
+            x: Some(10.0),
+            y: Some(20.5),
+            scale: Some(1.25),
+            mode: Some(ViewMode::Compact),
+            ..Default::default()
+        };
+        let text = toml::to_string(&s).unwrap();
+        assert_eq!(toml::from_str::<WindowState>(&text).unwrap(), s);
+    }
+}

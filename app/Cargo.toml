@@ -21,6 +21,7 @@ toml = "1"
 lzma-rs = "0.3"
 directories = "6"
 log = "0.4"
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
 [build-dependencies]
 deser-hjson = "2.2"

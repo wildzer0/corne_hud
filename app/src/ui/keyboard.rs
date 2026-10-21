@@ -1,7 +1,6 @@
 //! Keyboard rendering: KLE geometry (with rotations) and legends.
 
 use super::theme::{mix, Palette};
-use crate::hid::protocol::HudState;
 use crate::kle::{KeyRole, KleKey};
 use crate::model::Keymap;
 use crate::vial::keycode::KC_TRNS;
@@ -19,7 +18,8 @@ pub struct KeyboardView<'a> {
     pub layer: u8,
     /// Active layers used to resolve `KC_TRNS`.
     pub active_mask: u32,
-    pub state: Option<&'a HudState>,
+    /// Highlight of each matrix position, 0 (off) to 1 (pressed), for the press animation.
+    pub highlight: &'a dyn Fn(u8, u8) -> f32,
     pub legends: &'a LegendContext<'a>,
     pub layer_color: &'a dyn Fn(u8) -> Option<Color32>,
 }
@@ -82,7 +82,9 @@ fn draw_text(painter: &Painter, text: &Text, center: Pos2, angle: f32, size: f32
     if s.is_empty() {
         return;
     }
-    let mut galley = painter.layout_no_wrap(s.clone(), font, color);
+    // lone symbols (⌫ ⏎ ␣ ...) read better a little larger than text
+    let size = if s.chars().count() == 1 && !s.chars().all(char::is_alphanumeric) { size * 1.3 } else { size };
+    let mut galley = painter.layout_no_wrap(s.clone(), FontId::proportional(size), color);
     if galley.size().x > max_width && galley.size().x > 0.0 {
         let fitted = (size * max_width / galley.size().x).max(size * 0.45);
         galley = painter.layout_no_wrap(s.clone(), FontId::proportional(fitted), color);
@@ -124,7 +126,7 @@ pub fn draw(
         let (code, _from) = view.keymap.resolve(view.layer, view.active_mask, row, col);
         let leg = legend(code, view.legends);
         let transparent = own == KC_TRNS;
-        let pressed = view.state.is_some_and(|s| s.is_pressed(row, col));
+        let glow = (view.highlight)(row, col).clamp(0.0, 1.0);
 
         let mut fill = match leg.kind {
             LegendKind::Empty => palette.key_empty,
@@ -134,14 +136,9 @@ pub fn draw(
         if transparent {
             fill = mix(fill, palette.key_empty, 0.5);
         }
-        if pressed {
-            fill = mix(fill, palette.pressed, 0.65);
-        }
-        let text_color = match (pressed, transparent) {
-            (true, _) => Color32::from_rgb(20, 20, 24),
-            (false, true) => palette.text_dim,
-            (false, false) => palette.text,
-        };
+        fill = mix(fill, palette.pressed, 0.7 * glow);
+        let base_text = if transparent { palette.text_dim } else { palette.text };
+        let text_color = mix(base_text, palette.pressed_text, glow);
         painter.add(Shape::convex_polygon(poly.clone(), fill, Stroke::new(1.0, palette.key_border)));
 
         let base = tf.scale * 0.30;

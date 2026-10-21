@@ -1,6 +1,7 @@
 //! Application model: effective keymap and transparent-key resolution.
 
-use crate::vial::keycode::KC_TRNS;
+use crate::hid::protocol::HudState;
+use crate::vial::keycode::{decode, Keycode, LayerOp, KC_TRNS, TRI_LAYER_ADJUST, TRI_LAYER_LOWER, TRI_LAYER_UPPER};
 
 /// Keycodes for every layer and matrix position (`layer × rows × cols`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,6 +74,119 @@ impl Keymap {
     }
 }
 
+/// Why a layer is active.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayerHold {
+    /// A layer key is being held (MO, TL_LOWR/UPPR, LT, tri-layer...).
+    Held,
+    /// Toggled (TG, TO) or locked with Layer Lock: stays on after release.
+    Locked,
+    /// One-shot (OSL): waiting for the next key.
+    OneShot,
+}
+
+/// Classifies the active layers of `state` (default layer excluded), highest first.
+///
+/// The firmware reports which layers are on, not why: a layer counts as held
+/// when one of the pressed keys is a momentary key for it; the tri-layer
+/// adjust layer is held when both its lower and upper layers are held;
+/// anything else that is on without a pending one-shot is locked.
+pub fn classify_layers(keymap: &Keymap, state: &HudState) -> Vec<(u8, LayerHold)> {
+    let mask = state.active_mask();
+    let top = highest_layer(mask);
+    let mut held = 0u32;
+    for row in 0..keymap.rows().min(8) {
+        for col in 0..keymap.cols().min(8) {
+            if !state.is_pressed(row, col) {
+                continue;
+            }
+            let (code, _) = keymap.resolve(top, mask, row, col);
+            let target = match decode(code) {
+                Keycode::Layer {
+                    op:
+                        LayerOp::Momentary
+                        | LayerOp::TriLayerLower
+                        | LayerOp::TriLayerUpper
+                        | LayerOp::TapToggle
+                        | LayerOp::OneShot,
+                    layer,
+                } => Some(layer),
+                Keycode::LayerTap { layer, .. } | Keycode::LayerMod { layer, .. } => Some(layer),
+                _ => None,
+            };
+            if let Some(l) = target.filter(|l| *l < 32) {
+                held |= 1 << l;
+            }
+        }
+    }
+    let lower = 1u32 << TRI_LAYER_LOWER;
+    let upper = 1u32 << TRI_LAYER_UPPER;
+    if held & lower != 0 && held & upper != 0 {
+        held |= 1 << TRI_LAYER_ADJUST;
+    }
+
+    (0..32u8)
+        .rev()
+        .filter(|l| state.layer_state & (1 << l) != 0)
+        .map(|l| {
+            let how = if held & (1 << l) != 0 {
+                LayerHold::Held
+            } else if state.oneshot_layer == Some(l) {
+                LayerHold::OneShot
+            } else {
+                LayerHold::Locked
+            };
+            (l, how)
+        })
+        .collect()
+}
+
+/// How a modifier is active, strongest first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ModLevel {
+    Off,
+    /// Weak mods: added by a key for its own duration (e.g. `C(KC_Z)`, Caps Word).
+    Weak,
+    /// One-shot mod waiting for the next key.
+    OneShot,
+    /// One-shot mod locked (tapped repeatedly).
+    OneShotLocked,
+    /// Physically held.
+    Held,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Modifier {
+    Ctrl,
+    Shift,
+    Alt,
+    Gui,
+}
+
+pub const MODIFIERS: [Modifier; 4] = [Modifier::Ctrl, Modifier::Shift, Modifier::Alt, Modifier::Gui];
+
+/// Level of `m` from the 8-bit QMK mod masks (bits 0-3 left, 4-7 right).
+pub fn mod_level(state: &HudState, m: Modifier) -> ModLevel {
+    let bit = match m {
+        Modifier::Ctrl => 0,
+        Modifier::Shift => 1,
+        Modifier::Alt => 2,
+        Modifier::Gui => 3,
+    };
+    let on = |mask: u8| mask & (1 << bit) != 0 || mask & (1 << (bit + 4)) != 0;
+    if on(state.mods) {
+        ModLevel::Held
+    } else if on(state.oneshot_locked_mods) {
+        ModLevel::OneShotLocked
+    } else if on(state.oneshot_mods) {
+        ModLevel::OneShot
+    } else if on(state.weak_mods) {
+        ModLevel::Weak
+    } else {
+        ModLevel::Off
+    }
+}
+
 /// Highest active layer, as `get_highest_layer(layer_state | default_layer_state)`.
 pub fn highest_layer(mask: u32) -> u8 {
     if mask == 0 {
@@ -115,6 +229,55 @@ mod tests {
         assert_eq!(k.resolve(2, 0b111, 0, 0), (KC_TRNS, 0));
         // out of range layer is clamped
         assert_eq!(k.resolve(9, 0, 0, 0).0, KC_TRNS);
+    }
+
+    fn corne() -> Keymap {
+        crate::vial::vil::Vil::parse(crate::hid::mock::MOCK_VIL, 8, 7).unwrap().keymap
+    }
+
+    fn state(layers: u32, pressed: &[(u8, u8)]) -> HudState {
+        let mut s = HudState { layer_state: layers, default_layer_state: 1, ..Default::default() };
+        for &(r, c) in pressed {
+            s.matrix[r as usize] |= 1 << c;
+        }
+        s
+    }
+
+    #[test]
+    fn classifies_held_locked_and_oneshot_layers() {
+        let k = corne();
+        // Fn1 (TL_LOWR at 3,4) held
+        assert_eq!(classify_layers(&k, &state(0b10, &[(3, 4)])), vec![(1, LayerHold::Held)]);
+        // Fn1 + Fn2: tri-layer SYS is held too
+        let tri = classify_layers(&k, &state(0b1110, &[(3, 4), (7, 4)]));
+        assert_eq!(tri, vec![(3, LayerHold::Held), (2, LayerHold::Held), (1, LayerHold::Held)]);
+        // DEBUG toggled with TG(4), nothing held
+        assert_eq!(classify_layers(&k, &state(1 << 4, &[])), vec![(4, LayerHold::Locked)]);
+        // DEBUG locked while holding Fn1: SYM held, DEBUG still locked
+        let both = classify_layers(&k, &state((1 << 4) | 0b10, &[(3, 4)]));
+        assert_eq!(both, vec![(4, LayerHold::Locked), (1, LayerHold::Held)]);
+        // one-shot ACC waiting
+        let mut s = state(1 << 5, &[]);
+        s.oneshot_layer = Some(5);
+        assert_eq!(classify_layers(&k, &s), vec![(5, LayerHold::OneShot)]);
+        // base only
+        assert!(classify_layers(&k, &state(0, &[(0, 1)])).is_empty());
+    }
+
+    #[test]
+    fn modifier_levels() {
+        let mut s = HudState::default();
+        assert_eq!(mod_level(&s, Modifier::Ctrl), ModLevel::Off);
+        s.weak_mods = 0x02;
+        assert_eq!(mod_level(&s, Modifier::Shift), ModLevel::Weak);
+        s.oneshot_mods = 0x20; // right shift one-shot
+        assert_eq!(mod_level(&s, Modifier::Shift), ModLevel::OneShot);
+        s.oneshot_locked_mods = 0x02;
+        assert_eq!(mod_level(&s, Modifier::Shift), ModLevel::OneShotLocked);
+        s.mods = 0x40 | 0x01; // RAlt + LCtl held
+        assert_eq!(mod_level(&s, Modifier::Alt), ModLevel::Held);
+        assert_eq!(mod_level(&s, Modifier::Ctrl), ModLevel::Held);
+        assert_eq!(mod_level(&s, Modifier::Gui), ModLevel::Off);
     }
 
     #[test]
