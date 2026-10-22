@@ -49,11 +49,56 @@ pub struct Device {
     transport: Box<dyn Transport>,
     seq: u8,
     timeout: Duration,
+    /// Reports that are not HUD answers: another program (e.g. Vial in a
+    /// browser, via WebHID) is talking to the keyboard. Every program that
+    /// opens the interface receives every answer.
+    foreign: u32,
 }
 
 impl Device {
     pub fn new(transport: Box<dyn Transport>, timeout: Duration) -> Self {
-        Device { transport, seq: 0, timeout }
+        Device { transport, seq: 0, timeout, foreign: 0 }
+    }
+
+    fn note(&mut self, r: &Report) {
+        if r[0] != p::HUD_CMD {
+            self.foreign += 1;
+        }
+    }
+
+    /// Discards queued reports (e.g. answers to timed-out requests), counting
+    /// the foreign ones.
+    fn drain(&mut self) -> Result<(), DeviceError> {
+        for _ in 0..64 {
+            match self.transport.recv(Duration::ZERO)? {
+                Some(r) => self.note(&r),
+                None => break,
+            }
+        }
+        Ok(())
+    }
+
+    /// Foreign reports seen since the last call. Meaningful while only HUD
+    /// requests are sent (the polling loop).
+    pub fn take_foreign(&mut self) -> u32 {
+        std::mem::take(&mut self.foreign)
+    }
+
+    /// Waits up to `timeout` without sending anything and returns how many
+    /// reports arrived: all of them belong to another program.
+    pub fn listen(&mut self, timeout: Duration) -> Result<u32, DeviceError> {
+        let deadline = Instant::now() + timeout;
+        let mut n = 0;
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            match self.transport.recv(left)? {
+                Some(_) => n += 1,
+                None => return Ok(n),
+            }
+            if left.is_zero() {
+                return Ok(n);
+            }
+        }
     }
 
     fn next_seq(&mut self) -> u8 {
@@ -65,14 +110,14 @@ impl Device {
     /// stale reports.
     fn hud(&mut self, cmd: HudCommand, args: &[u8]) -> Result<(Report, u8), DeviceError> {
         let seq = self.next_seq();
-        self.transport.flush()?;
+        self.drain()?;
         self.transport.send(&p::hud_request(cmd, seq, args))?;
         let deadline = Instant::now() + self.timeout;
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
             match self.transport.recv(left)? {
                 Some(r) if p::hud_matches(&r, cmd, seq) => return Ok((r, seq)),
-                Some(_) => continue,
+                Some(r) => self.note(&r),
                 None if Instant::now() >= deadline => return Err(DeviceError::Timeout),
                 None => continue,
             }
@@ -83,14 +128,14 @@ impl Device {
     /// command id in byte 0; Vial overwrites the whole buffer, so `expect` is
     /// `None` for Vial commands.
     fn via(&mut self, req: &Report, expect: Option<u8>) -> Result<Report, DeviceError> {
-        self.transport.flush()?;
+        self.drain()?;
         self.transport.send(req)?;
         let deadline = Instant::now() + self.timeout;
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
             match self.transport.recv(left)? {
                 Some(r) if expect.is_none_or(|id| r[0] == id) => return Ok(r),
-                Some(_) => continue,
+                Some(r) => self.note(&r),
                 None if Instant::now() >= deadline => return Err(DeviceError::Timeout),
                 None => continue,
             }

@@ -21,6 +21,9 @@ const RETRY_DELAY: Duration = Duration::from_secs(1);
 const PAUSE_CHECK: Duration = Duration::from_millis(250);
 const VIAL_CHECK_INTERVAL: Duration = Duration::from_secs(2);
 const MAX_ERRORS: u32 = 5;
+/// After foreign traffic, the keyboard must stay quiet this long before the
+/// HUD polls it again.
+const FOREIGN_QUIET: Duration = Duration::from_secs(20);
 
 #[derive(Debug, Clone)]
 pub enum Source {
@@ -36,6 +39,9 @@ pub enum Source {
 pub enum PauseReason {
     /// Vial (or VIA) is running and uses the same HID interface.
     Vial,
+    /// Answers the HUD did not ask for: another program (Vial in a browser)
+    /// is using the keyboard.
+    Foreign,
     Manual,
 }
 
@@ -373,6 +379,8 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
 
     let mut errors = 0;
     let mut last: Option<HudState> = None;
+    // answers to our own setup requests may still be counted
+    conn.device.take_foreign();
     while !ctx.stopped() {
         let started = Instant::now();
         if pause_reason(ctx, vial).is_some() {
@@ -387,7 +395,13 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
             ctx.sleep(Duration::from_secs(1));
             continue;
         }
-        match conn.device.state() {
+        let result = conn.device.state();
+        let foreign = conn.device.take_foreign();
+        if foreign > 0 {
+            log::info!("risposte di un altro programma ({foreign}): pausa finché la tastiera resta libera");
+            return foreign_pause(&mut conn, ctx, vial, reporter);
+        }
+        match result {
             Ok(state) => {
                 errors = 0;
                 let keymap_changed = last.is_some_and(|l| {
@@ -423,6 +437,36 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
         }
         let hz = ctx.control.poll_hz.load(Ordering::Relaxed).max(1);
         ctx.sleep(Duration::from_secs_f64(1.0 / hz as f64).saturating_sub(started.elapsed()));
+    }
+    SessionEnd::Lost(Status::Searching)
+}
+
+/// Stops polling while another program talks to the keyboard, but keeps
+/// listening. After `FOREIGN_QUIET` of silence the session ends, so that the
+/// next one reloads everything that program may have changed.
+fn foreign_pause(
+    conn: &mut Connection,
+    ctx: &Ctx,
+    vial: &mut Option<VialWatch>,
+    reporter: &mut Reporter,
+) -> SessionEnd {
+    if !reporter.report(ctx, Status::Paused(PauseReason::Foreign)) {
+        return SessionEnd::Lost(Status::Searching);
+    }
+    let mut last = Instant::now();
+    while !ctx.stopped() {
+        if pause_reason(ctx, vial).is_some() {
+            return SessionEnd::Paused;
+        }
+        match conn.device.listen(PAUSE_CHECK) {
+            Ok(0) => {}
+            Ok(_) => last = Instant::now(),
+            Err(_) => return SessionEnd::Lost(Status::Searching),
+        }
+        if last.elapsed() >= FOREIGN_QUIET {
+            log::info!("tastiera di nuovo libera: ripresa");
+            return SessionEnd::Paused;
+        }
     }
     SessionEnd::Lost(Status::Searching)
 }

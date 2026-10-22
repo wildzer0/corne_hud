@@ -352,6 +352,24 @@ mod tests {
     }
 
     #[test]
+    fn foreign_answers_are_counted() {
+        let mut m = MockKeyboard::frozen(0);
+        // two answers meant for another program, already queued
+        m.pending.push_back(p::via_request(&[0x12, 0, 0, 4]));
+        m.pending.push_back(p::via_request(&[0xFE, 0x0D, 0x03]));
+        let mut d = Device::new(Box::new(m), Duration::from_millis(50));
+        d.state().unwrap();
+        assert_eq!(d.take_foreign(), 2);
+        assert_eq!(d.take_foreign(), 0);
+        // our own answers are not foreign
+        d.state().unwrap();
+        d.info().unwrap();
+        assert_eq!(d.take_foreign(), 0);
+        // nothing sent, nothing received
+        assert_eq!(d.listen(Duration::from_millis(5)).unwrap(), 0);
+    }
+
+    #[test]
     fn unknown_commands_are_unhandled() {
         let mut m = MockKeyboard::frozen(0);
         m.send(&p::via_request(&[0x42])).unwrap();

@@ -166,7 +166,10 @@ Vial e l'HUD usano la stessa interfaccia Raw HID. Le risposte destinate all'uno 
 
 - se l'HUD trova il processo **Vial** (o VIA) in esecuzione, chiude il dispositivo e mostra *"In pausa: Vial è aperto"*. Il controllo avviene ogni 2 secondi;
 - quando Vial si chiude, l'HUD si ricollega da solo e **rilegge il keymap**, che potresti aver appena cambiato;
+- la **web app di Vial** (o di VIA) gira nel browser e non si vede tra i processi. In compenso l'HUD si accorge delle risposte che non ha chiesto: smette di interrogare la tastiera, mostra *"In pausa: un altro programma usa la tastiera"* e riprende dopo 20 secondi di silenzio, rileggendo tutto;
 - dal menu c'è anche una **pausa manuale**.
+
+Con la web app la protezione automatica scatta solo dopo il primo scambio tra browser e tastiera, e riparte se la web app resta ferma più di 20 secondi. **Per lavorare tranquillo con la web app metti l'HUD in pausa dal menu** e togli la pausa quando hai finito.
 
 L'HUD si accorge comunque dei cambi di keymap fatti da Vial. Il firmware rileva le modifiche in pochi millisecondi e l'HUD rilegge le legende. Fa lo stesso dopo `CMK_TOG` (QWERTY/Colemak-DH).
 

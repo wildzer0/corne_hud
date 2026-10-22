@@ -723,6 +723,7 @@ impl HudApp {
             (Mode::Offline, _) => t(Msg::Offline).to_string(),
             (_, Some(Status::Paused(PauseReason::Vial))) => t(Msg::PausedVial).to_string(),
             (_, Some(Status::Paused(PauseReason::Manual))) => t(Msg::PausedManual).to_string(),
+            (_, Some(Status::Paused(PauseReason::Foreign))) => t(Msg::PausedForeign).to_string(),
             (Mode::Live { mock: true, .. }, _) => t(Msg::Mock).to_string(),
             (_, None | Some(Status::Searching)) => t(Msg::Searching).to_string(),
             (_, Some(Status::Connected { product })) => format!("{} · {product}", t(Msg::Connected)),

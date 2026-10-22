@@ -32,16 +32,6 @@ pub trait Transport: Send {
     fn send(&mut self, report: &Report) -> Result<(), TransportError>;
     /// Next input report, or `None` after `timeout`.
     fn recv(&mut self, timeout: Duration) -> Result<Option<Report>, TransportError>;
-
-    /// Discards input reports still queued (e.g. answers to timed-out requests).
-    fn flush(&mut self) -> Result<(), TransportError> {
-        for _ in 0..64 {
-            if self.recv(Duration::ZERO)?.is_none() {
-                break;
-            }
-        }
-        Ok(())
-    }
 }
 
 /// A Raw HID interface found during enumeration.
