@@ -8,6 +8,7 @@ mod changes;
 mod cli;
 mod clock;
 mod config;
+mod foreground;
 mod headsup;
 mod hid;
 mod i18n;

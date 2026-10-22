@@ -185,7 +185,7 @@ Copia [`keyboard-hud.example.toml`](keyboard-hud.example.toml) accanto all'esegu
 | `[appearance]` | opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale, distanza di aggancio ai bordi (`snap_distance`, 16) e margine dai bordi (`screen_margin`, 8) |
 | `[headsup]` | attivo, ritardo dei modificatori (400 ms), ritardo di scomparsa (800 ms), opacità da nascosto |
 | `[[layers]]` | nome e colore di ogni layer, in ordine |
-| `[[labels]]` | etichette personalizzate, per keycode (anche limitato a un layer) o per posizione |
+| `[[labels]]` | etichette personalizzate, per keycode (anche limitato a un layer) o per posizione, anche solo per un'applicazione |
 | `[stats]` | statistiche attive, file, periodo del report "mai usati" |
 | `[backup]` | backup automatico attivo, cartella, quanti tenerne (default 30) |
 | `[polling]` | frequenze di lettura (60 Hz visibile, 10 Hz nascosto) e timeout |
@@ -211,6 +211,18 @@ row = 0
 col = 0
 label = "Debug"
 ```
+
+**Etichette per applicazione.** Con `app` un'etichetta vale solo mentre quel programma è in primo piano, e a parità di tasto vince su quella generica. Così F10 può dire "Step over" in VS Code e restare F10 altrove:
+
+```toml
+[[labels]]
+app = "code"               # anche una lista: ["idea64", "pycharm64"]
+layer = 4
+keycode = "KC_F10"
+label = "Step over"
+```
+
+Il nome è quello del processo, senza `.exe` e senza distinguere maiuscole: `code` vale per `Code.exe` su Windows e per `code` su Linux; su macOS è il nome dell'app. Il footer dell'HUD mostra quale insieme di etichette è attivo. Su Wayland l'applicazione in primo piano non si può sapere: valgono solo le etichette generiche.
 
 Posizione, scala, opacità, vista, tema e heads-up scelti dal menu vengono ricordati in `keyboard-hud-state.toml`. Il tuo `keyboard-hud.toml`, con i suoi commenti, non viene mai riscritto.
 

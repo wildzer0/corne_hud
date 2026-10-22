@@ -73,7 +73,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - da decidere: backup anche delle impostazioni QMK (`qmk_settings`, dipendono dalla versione del firmware).
 
 5. **Dopo v0.2.0** (scelti dall'utente il 2026-10-22, in quest'ordine):
-   1. **etichette per applicazione**: le `[[labels]]` con `app = "Code.exe"` valgono solo con quell'applicazione in primo piano;
+   1. ✅ **etichette per applicazione** (`foreground.rs`, `Labels::set_app`): `app = "code"` o una lista; confronto senza `.exe` e maiuscole; a parità di livello vince l'etichetta dell'app. Windows `GetForegroundWindow` + nome del processo, X11 `_NET_ACTIVE_WINDOW`/`_NET_WM_PID`/`/proc/<pid>/comm`, macOS `NSWorkspace` (verificato con `cargo check` in un crate di prova, perché l'app intera non compila per macOS da Linux), Wayland nessuno. Provato in WSLg/X11 con due istanze dell'HUD;
    2. **mini indicatore**: con l'HUD nascosto, un badge piccolo con lo stato "pericoloso" (layer bloccato, Caps Word, one-shot, modificatori bloccati);
    3. **icona nella tray**: pausa, mostra/nascondi, cartella dei backup, avvio con il sistema, esci;
    4. **statistiche più ricche**: bilanciamento tra le mani, carico per dito, uso di layer e combo, suggerimenti (sempre senza testo, sequenze o tempi).
@@ -153,6 +153,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-22**: release **v0.2.0** (CI di `e36a328` verde prima del tag, controllata via API GitHub con `curl`). Punto 5.1: etichette per applicazione.
 
 - **2026-10-22**: punto 4 completo, in tre commit. (1) Pausa sul traffico altrui (web app di Vial). (2) Backup automatico del `.vil`: letture `Device::dump` (keymap grezzo, encoder, macro decodificate dal buffer, voci dinamiche con gli slot vuoti, alt repeat, impostazioni QMK), `backup.rs` per file e potatura, trigger nel worker (connessione, cambio keymap, ogni 2 minuti a tastiera ferma). Formato verificato sui sorgenti di vial-gui (macro `["text"|"tap"|"down"|"up"|"delay", ...]`, keycode numerici accettati). (3) `CHANGELOG.md` leggibile. 104 test; prova completa con il mock (abilitando i backup solo per la prova): primo backup e poi tre modifiche descritte correttamente. **Da verificare con Vial vero il ricaricamento di un backup.**
 

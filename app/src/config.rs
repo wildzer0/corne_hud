@@ -161,6 +161,25 @@ pub struct LabelConfig {
     pub label: String,
     /// Longer description shown in the tooltip.
     pub description: Option<String>,
+    /// Only while this application (or one of these) is in the foreground.
+    pub app: Option<AppNames>,
+}
+
+/// `app = "code"` or `app = ["code", "idea64"]`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(untagged)]
+pub enum AppNames {
+    One(String),
+    Many(Vec<String>),
+}
+
+impl AppNames {
+    pub fn names(&self) -> Vec<String> {
+        match self {
+            AppNames::One(n) => vec![n.clone()],
+            AppNames::Many(v) => v.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]

@@ -170,6 +170,18 @@ description = "Correzione rapida (Ctrl+.)"
 # col = 0
 # label = "Debug"
 
+# Etichette per applicazione: valgono solo con quel programma in primo piano
+# e, a parità di tasto, vincono su quelle generiche. Il nome è quello del
+# processo, senza ".exe" e senza distinguere maiuscole: "code" vale per
+# Code.exe (Windows) e code (Linux); su macOS è il nome dell'app ("Code").
+# Anche una lista: app = ["idea64", "pycharm64"]. Su Wayland l'applicazione in
+# primo piano non si può sapere: valgono solo le etichette generiche.
+# [[labels]]
+# app = "code"
+# layer = 4
+# keycode = "KC_F10"
+# label = "Step over"
+
 [polling]
 visible_hz = 60     # stato letto 60 volte al secondo con l'HUD visibile
 hidden_hz = 10      # e 10 volte al secondo quando è nascosto

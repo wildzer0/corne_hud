@@ -384,6 +384,8 @@ pub struct HudApp {
     headsup_on: bool,
     /// Combos drawn over the keys.
     show_combos: bool,
+    /// Foreground application, for per-application labels.
+    foreground: crate::foreground::Foreground,
     autostart_args: Vec<String>,
     /// Autostart entry, read when the menu opens (error text if unreadable).
     autostart: Result<autostart::State, String>,
@@ -447,6 +449,7 @@ impl HudApp {
             headsup: HeadsUp::default(),
             headsup_on,
             show_combos,
+            foreground: crate::foreground::Foreground::new(),
             autostart_args: s.autostart_args,
             autostart: Ok(autostart::State::Off),
             pinned: false,
@@ -662,6 +665,8 @@ impl HudApp {
         self.layer_colors = colors;
         let (labels, errors) = Labels::from_config(&config.labels);
         self.labels = labels;
+        let app = self.foreground.poll().map(str::to_owned);
+        self.labels.set_app(app.as_deref());
         self.search_stale = true;
         if config.stats != self.config.stats {
             if let Some(s) = &mut self.stats {
@@ -1120,6 +1125,16 @@ impl eframe::App for HudApp {
             self.search.open();
             root_cmd(ctx, ViewportCommand::Focus);
         }
+        // per-application labels
+        if self.labels.has_app_labels() {
+            let app = self.foreground.poll().map(str::to_owned);
+            if self.labels.set_app(app.as_deref()) {
+                log::debug!("etichette per {:?}", self.labels.active_app());
+                self.search_stale = true;
+                ctx.request_repaint();
+            }
+            ctx.request_repaint_after(Duration::from_millis(500));
+        }
         match self.watcher.poll() {
             Reload::Unchanged => {}
             Reload::Changed(c) => self.apply_config(ctx, *c),
@@ -1339,6 +1354,9 @@ impl eframe::App for HudApp {
         let mut footer = notice.clone().unwrap_or_else(|| if show_status { self.status_line() } else { String::new() });
         if notice.is_none() && browsing && layout.is_some() {
             footer = format!("{footer} · {}", tr(self.lang, Msg::BrowseHint));
+        }
+        if let (None, Some(app)) = (&notice, self.labels.active_app()) {
+            footer = format!("{footer} · {} {app}", tr(self.lang, Msg::LabelsFor));
         }
         let color = if notice.is_some() { palette.accent } else { palette.text_dim };
         painter.text(
