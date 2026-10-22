@@ -1,6 +1,7 @@
 //! egui application: overlay window, header with live indicators, keyboard
 //! view, context menu.
 
+pub mod diagnostics;
 pub mod header;
 pub mod keyboard;
 pub mod report;
@@ -224,6 +225,7 @@ pub struct DevOptions {
     pub search: Option<String>,
     pub heatmap: Option<String>,
     pub stats_window: bool,
+    pub diagnostics: bool,
     pub menu: bool,
 }
 
@@ -429,6 +431,9 @@ pub struct HudApp {
     search_stale: bool,
     stats: Option<Stats>,
     report: ReportWindow,
+    diagnostics: diagnostics::DiagnosticsWindow,
+    /// Last backup written in this session, for the diagnostics.
+    last_backup: Option<(PathBuf, Instant)>,
     heat: HeatMode,
     heat_cache: Option<(Instant, Totals)>,
     menu: Option<MenuWindow>,
@@ -509,6 +514,8 @@ impl HudApp {
             search_stale: true,
             stats,
             report: ReportWindow::default(),
+            diagnostics: diagnostics::DiagnosticsWindow::default(),
+            last_backup: None,
             heat: HeatMode::Off,
             heat_cache: None,
             menu: None,
@@ -524,7 +531,8 @@ impl HudApp {
             _ => HeatMode::Off,
         };
         app.report.open = s.dev.stats_window;
-        if (s.dev.stats_window || s.dev.menu) && app.screenshot.is_some() {
+        app.diagnostics.open = s.dev.diagnostics;
+        if (s.dev.stats_window || s.dev.diagnostics || s.dev.menu) && app.screenshot.is_some() {
             // capture the other windows inside the HUD window
             ctx.set_embed_viewports(true);
         }
@@ -777,6 +785,7 @@ impl HudApp {
         previous: Option<serde_json::Value>,
         keyboard: &str,
     ) {
+        self.last_backup = Some((path.to_path_buf(), Instant::now()));
         let custom = self.live.as_ref().map(|l| l.definition.custom.as_slice()).unwrap_or(&[]);
         let lines = match &previous {
             Some(prev) => {
@@ -1018,6 +1027,88 @@ impl HudApp {
             }
             Err(e) => self.notify(format!("{}: {e}", style::dir().display())),
         }
+    }
+
+    /// Everything the diagnostics window shows.
+    fn diagnostics_sections(&self) -> Vec<diagnostics::Section> {
+        use diagnostics::{short_duration, Section};
+        let t = |m| tr(self.lang, m);
+        let ago = |at: Instant| format!("{} {}", short_duration(at.elapsed()), t(Msg::DiagAgo));
+        let mut keyboard = Section::new(t(Msg::DiagKeyboard));
+        keyboard.row(t(Msg::DiagStatus), self.status_line());
+        if let Some(l) = self.live.as_ref().or(self.offline.as_ref()) {
+            keyboard.row(t(Msg::DiagDefinition), l.definition.name.clone());
+            keyboard.row(
+                t(Msg::DiagMatrix),
+                format!("{} × {}, {} layer", l.definition.rows, l.definition.cols, l.keymap.layers()),
+            );
+        }
+        if let Some(i) = self.info {
+            keyboard.row(t(Msg::DiagFirmware), format!("v{} · capabilities {:#06x}", i.protocol, i.capabilities));
+        }
+        let mut sections = vec![keyboard];
+
+        if let Some(w) = self.worker() {
+            let link = w.link();
+            let mut s = Section::new(t(Msg::DiagLink));
+            let target = if self.visible { self.config.polling.visible_hz } else { self.config.polling.hidden_hz };
+            s.row(t(Msg::DiagPolls), format!("{} / {target}", link.polls_per_sec));
+            let ms = |d: Duration| format!("{:.1} ms", d.as_secs_f64() * 1000.0);
+            s.row(t(Msg::DiagLatency), format!("{} (max {})", ms(link.latency_avg), ms(link.latency_max)));
+            let errors = match &link.last_error {
+                Some((e, at)) => format!("{} ({} {}: {e})", link.errors, t(Msg::DiagLast), ago(*at)),
+                None => link.errors.to_string(),
+            };
+            s.row(t(Msg::DiagErrors), errors);
+            s.row(t(Msg::DiagConnections), link.sessions.to_string());
+            if let Some(since) = link.connected_since {
+                s.row(t(Msg::DiagConnectedFor), short_duration(since.elapsed()));
+            }
+            sections.push(s);
+        }
+
+        if let Some(st) = &self.state {
+            let mut s = Section::new(t(Msg::DiagLive));
+            s.row(t(Msg::DiagKeymapVersion), st.keymap_version.to_string());
+            let how = t(if st.os_mode == OsKind::Auto { Msg::OsAuto } else { Msg::OsForced });
+            s.row(t(Msg::DiagOs), format!("{} · {how} ({:?})", header::os_name(st.active_os), st.detected_os));
+            let split = match (self.split_seen, st.flag(flags::SLAVE_OK)) {
+                (_, true) => t(Msg::DiagSplitOk),
+                (true, false) => t(Msg::SplitLost),
+                (false, false) => t(Msg::DiagSplitUnknown),
+            };
+            s.row(t(Msg::DiagSplit), split);
+            sections.push(s);
+        }
+
+        let mut files = Section::new(t(Msg::DiagFiles));
+        files.row(t(Msg::DiagConfig), self.watcher.path().display().to_string());
+        files.row(t(Msg::DiagLog), paths::base_dir().join("keyboard-hud.log").display().to_string());
+        files.row(t(Msg::DiagStyles), style::dir().display().to_string());
+        let stats = if self.config.stats.enabled {
+            stats_path(&self.config.stats).display().to_string()
+        } else {
+            t(Msg::DiagOff).to_string()
+        };
+        files.row(t(Msg::DiagStats), stats);
+        let backups = if self.config.backup.enabled {
+            self.backup_dir().display().to_string()
+        } else {
+            t(Msg::DiagOff).to_string()
+        };
+        files.row(t(Msg::DiagBackups), backups);
+        let last = match &self.last_backup {
+            Some((p, at)) => format!("{} ({})", p.file_name().unwrap_or_default().to_string_lossy(), ago(*at)),
+            None => t(Msg::DiagNone).to_string(),
+        };
+        files.row(t(Msg::DiagLastBackup), last);
+        sections.push(files);
+
+        let mut app = Section::new(t(Msg::DiagApp));
+        app.row(t(Msg::DiagVersion), env!("CARGO_PKG_VERSION"));
+        app.row(t(Msg::DiagSystem), format!("{} {}", std::env::consts::OS, std::env::consts::ARCH));
+        sections.push(app);
+        sections
     }
 
     fn apply_theme(&mut self, ctx: &egui::Context) -> bool {
@@ -1404,6 +1495,10 @@ impl HudApp {
             self.report.open = true;
             self.close_menu();
         }
+        if ui.button(tr(lang, Msg::MenuDiagnostics)).clicked() {
+            self.diagnostics.open = true;
+            self.close_menu();
+        }
         if ui.button(tr(lang, Msg::MenuSearch)).clicked() {
             self.search.open();
             root_cmd(&ctx, ViewportCommand::Focus);
@@ -1785,6 +1880,18 @@ impl eframe::App for HudApp {
             csv_path: paths::base_dir().join("keyboard-hud-stats.csv"),
         };
         self.report.show(&ctx, self.stats.as_mut(), &input);
+        if self.diagnostics.open {
+            let sections = self.diagnostics_sections();
+            match self.diagnostics.show(&ctx, self.lang, &sections) {
+                diagnostics::Action::Copied => self.notify(tr(self.lang, Msg::DiagCopied).to_string()),
+                diagnostics::Action::OpenFolder => {
+                    if let Err(e) = backup::open_folder(paths::base_dir()) {
+                        self.notify(format!("{}: {e}", paths::base_dir().display()));
+                    }
+                }
+                diagnostics::Action::None => {}
+            }
+        }
 
         if self.headsup.animating() {
             ctx.request_repaint();

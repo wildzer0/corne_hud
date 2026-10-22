@@ -176,6 +176,7 @@ fn run(opts: Options) -> ExitCode {
                     search: opts.search,
                     heatmap: opts.heatmap,
                     stats_window: opts.stats_window,
+                    diagnostics: opts.diagnostics,
                     menu: opts.menu,
                 },
                 config,

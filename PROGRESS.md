@@ -155,6 +155,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 
 ## Registro delle sessioni
 
+- **2026-10-22**: finestra Diagnostica (`ui/diagnostics.rs`, menu e `--diagnostics`): le cifre del collegamento vengono dal worker (`LinkStats` in `Control`, aggiornate ogni secondo da `Meter`), perché lo stato arriva alla UI solo quando cambia. Verificata con uno screenshot del mock.
+
 - **2026-10-22**: l'utente ha provato l'app con la tastiera vera e la usa ogni giorno: "funziona alla grande". File `LICENSE` aggiunto (GPL-2.0, testo FSF; il progetto è GPL-2.0-or-later come in `Cargo.toml`).
 
 - **2026-10-22**: stili, cioè i temi visivi chiesti dall'utente come "templating" (nuovo `style.rs`, `data/styles/*.toml` inclusi con `include_str!`, cartella `styles/` accanto alla config). Chiamati "stili" e non "temi" perché `[appearance] theme` è già sistema/scuro/chiaro. `Palette::new` applica i colori dello stile e porta la forma (`Look`): opacità dei tasti (il tasto premuto torna pieno), raggio (`keyboard::rounded_polygon`, curve quadratiche che restano convesse, anche sui tasti ruotati), bordo, scala delle legende, angoli della finestra. Menu: stile, opacità tasti, arrotondamento, "Salva come stile", "Cartella stili". Precedenza menu > config > stile; l'opacità della finestra dello stile si applica a ogni cambio di stile. 117 test; screenshot dei quattro stili in scuro e chiaro, vista compatta, menu; ricaricamento al volo provato modificando il file (valido e non valido). "Salva come stile" non provato col clic (solo `to_toml` + rilettura nei test).

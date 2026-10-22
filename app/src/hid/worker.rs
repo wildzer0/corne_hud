@@ -90,6 +90,51 @@ pub enum Event {
     },
 }
 
+/// Figures about the link with the keyboard, for the diagnostics window.
+#[derive(Debug, Clone, Default)]
+pub struct LinkStats {
+    /// GET_STATE answers in the last full second.
+    pub polls_per_sec: u32,
+    /// GET_STATE round trip over the last full second: mean and worst.
+    pub latency_avg: Duration,
+    pub latency_max: Duration,
+    /// Failed requests since the start, and the last one.
+    pub errors: u64,
+    pub last_error: Option<(String, Instant)>,
+    /// Connections made (more than one = it reconnected).
+    pub sessions: u32,
+    pub connected_since: Option<Instant>,
+}
+
+/// GET_STATE answers over one second.
+struct Meter {
+    start: Instant,
+    count: u32,
+    total: Duration,
+    max: Duration,
+}
+
+impl Meter {
+    fn new() -> Self {
+        Meter { start: Instant::now(), count: 0, total: Duration::ZERO, max: Duration::ZERO }
+    }
+
+    /// Adds an answer; after a second, publishes the figures and starts over.
+    fn record(&mut self, latency: Duration, ctx: &Ctx) {
+        self.count += 1;
+        self.total += latency;
+        self.max = self.max.max(latency);
+        if self.start.elapsed() >= Duration::from_secs(1) {
+            ctx.link(|l| {
+                l.polls_per_sec = self.count;
+                l.latency_avg = self.total / self.count.max(1);
+                l.latency_max = self.max;
+            });
+            *self = Meter::new();
+        }
+    }
+}
+
 /// Settings shared with the HID thread.
 struct Control {
     stop: AtomicBool,
@@ -98,6 +143,7 @@ struct Control {
     timeout_ms: AtomicU64,
     /// Automatic backups; `None` = off.
     backup: Mutex<Option<backup::Settings>>,
+    link: Mutex<LinkStats>,
 }
 
 pub struct Worker {
@@ -115,6 +161,7 @@ impl Worker {
             poll_hz: AtomicU32::new(poll_hz),
             timeout_ms: AtomicU64::new(timeout_ms),
             backup: Mutex::new(None),
+            link: Mutex::new(LinkStats::default()),
         });
         let ctx = Ctx { tx, wake: Box::new(wake), control: control.clone() };
         thread::Builder::new().name("hid".into()).spawn(move || run(source, ctx)).expect("spawn HID thread");
@@ -143,6 +190,10 @@ impl Worker {
     pub fn is_paused(&self) -> bool {
         self.control.paused.load(Ordering::Relaxed)
     }
+
+    pub fn link(&self) -> LinkStats {
+        self.control.link.lock().map(|l| l.clone()).unwrap_or_default()
+    }
 }
 
 impl Drop for Worker {
@@ -167,6 +218,19 @@ impl Ctx {
 
     fn stopped(&self) -> bool {
         self.control.stop.load(Ordering::Relaxed)
+    }
+
+    fn link(&self, f: impl FnOnce(&mut LinkStats)) {
+        if let Ok(mut l) = self.control.link.lock() {
+            f(&mut l);
+        }
+    }
+
+    fn link_error(&self, e: &DeviceError) {
+        self.link(|l| {
+            l.errors += 1;
+            l.last_error = Some((e.to_string(), Instant::now()));
+        });
     }
 
     fn timeout(&self) -> Duration {
@@ -268,10 +332,21 @@ fn run(source: Source, ctx: Ctx) {
             continue;
         }
         let status = match connect(&source, &mut api, ctx.timeout()) {
-            Ok(conn) => match session(conn, &ctx, &mut vial, &mut reporter) {
-                SessionEnd::Paused => continue,
-                SessionEnd::Lost(status) => status,
-            },
+            Ok(conn) => {
+                ctx.link(|l| {
+                    l.sessions += 1;
+                    l.connected_since = Some(Instant::now());
+                });
+                let end = session(conn, &ctx, &mut vial, &mut reporter);
+                ctx.link(|l| {
+                    l.connected_since = None;
+                    l.polls_per_sec = 0;
+                });
+                match end {
+                    SessionEnd::Paused => continue,
+                    SessionEnd::Lost(status) => status,
+                }
+            }
             Err(status) => status,
         };
         if ctx.stopped() || !reporter.report(&ctx, status) {
@@ -411,6 +486,7 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
     let mut last_activity = Instant::now();
 
     let mut errors = 0;
+    let mut meter = Meter::new();
     let mut last: Option<HudState> = None;
     // answers to our own setup requests may still be counted
     conn.device.take_foreign();
@@ -435,7 +511,9 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
             ctx.sleep(Duration::from_secs(1));
             continue;
         }
+        let asked = Instant::now();
         let result = conn.device.state();
+        let latency = asked.elapsed();
         let foreign = conn.device.take_foreign();
         if foreign > 0 {
             log::info!("risposte di un altro programma ({foreign}): pausa finché la tastiera resta libera");
@@ -444,6 +522,7 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
         match result {
             Ok(state) => {
                 errors = 0;
+                meter.record(latency, ctx);
                 let keymap_changed = last.is_some_and(|l| {
                     l.keymap_version != state.keymap_version || l.flag(flags::COLEMAK) != state.flag(flags::COLEMAK)
                 });
@@ -472,6 +551,7 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
             Err(DeviceError::Protocol(ProtocolError::Busy)) => {}
             Err(e) => {
                 errors += 1;
+                ctx.link_error(&e);
                 log::debug!("GET_STATE: {e}");
                 if errors >= MAX_ERRORS {
                     log::warn!("la tastiera non risponde: riconnessione");
