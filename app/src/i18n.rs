@@ -113,6 +113,13 @@ pub enum Msg {
     BadgeError,
     NumLock,
     SplitLost,
+    MenuStyle,
+    MenuKeyOpacity,
+    MenuKeyRadius,
+    MenuSaveStyle,
+    SaveStyleHint,
+    MenuStylesFolder,
+    StyleSaved,
 }
 
 pub fn tr(lang: Lang, msg: Msg) -> &'static str {
@@ -229,6 +236,13 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
             Msg::BadgeError => "Errore della tastiera",
             Msg::NumLock => "Bloc Num",
             Msg::SplitLost => "Altra metà scollegata",
+            Msg::MenuStyle => "Stile",
+            Msg::MenuKeyOpacity => "Opacità tasti",
+            Msg::MenuKeyRadius => "Arrotondamento",
+            Msg::MenuSaveStyle => "Salva come stile",
+            Msg::SaveStyleHint => "Scrive un nuovo file in styles/ con tutti i valori attuali, colori compresi: un modello da modificare",
+            Msg::MenuStylesFolder => "Cartella stili",
+            Msg::StyleSaved => "Stile salvato",
         },
     }
 }

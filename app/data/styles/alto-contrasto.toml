@@ -1,0 +1,28 @@
+# Alto contrasto: bianco e nero, bordi spessi, legende più grandi.
+key_opacity = 1.0
+key_radius = 0.08
+border_width = 2.0
+legend_scale = 1.15
+window_radius = 10.0
+
+[dark]
+background = "#000000"
+key = "#101010"
+key_empty = "#000000"
+key_border = "#FFFFFF"
+pressed = "#FFD400"
+pressed_text = "#000000"
+text = "#FFFFFF"
+text_dim = "#BBBBBB"
+accent = "#FFD400"
+
+[light]
+background = "#FFFFFF"
+key = "#FFFFFF"
+key_empty = "#E6E6E6"
+key_border = "#000000"
+pressed = "#0040C0"
+pressed_text = "#FFFFFF"
+text = "#000000"
+text_dim = "#444444"
+accent = "#0040C0"

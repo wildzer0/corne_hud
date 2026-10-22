@@ -1,0 +1,7 @@
+# Vetro: finestra e tasti semitrasparenti; un tasto premuto torna pieno.
+key_opacity = 0.5
+key_radius = 0.22
+border_width = 1.0
+legend_scale = 1.0
+window_radius = 16.0
+window_opacity = 0.55

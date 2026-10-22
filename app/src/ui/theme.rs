@@ -1,6 +1,7 @@
 //! Colors and default layer appearance.
 
 use crate::config::{parse_color, LayerConfig};
+use crate::style::{Look, StyleColors};
 use egui::Color32;
 
 /// Default layer names and colors, matching the firmware palette
@@ -51,6 +52,8 @@ pub struct Palette {
     pub colemak: Color32,
     /// Something is wrong (half of the keyboard disconnected).
     pub warning: Color32,
+    /// Shape of keys and window, from the style.
+    pub look: Look,
     /// Light theme: layer colors used as text are darkened to stay readable.
     darken_text: f32,
 }
@@ -73,6 +76,7 @@ impl Palette {
             caps_word: Color32::from_rgb(70, 110, 255),
             colemak: Color32::from_rgb(170, 90, 255),
             warning: Color32::from_rgb(235, 70, 60),
+            look: Look::default(),
             darken_text: 0.0,
         }
     }
@@ -94,8 +98,52 @@ impl Palette {
             caps_word: Color32::from_rgb(40, 80, 230),
             colemak: Color32::from_rgb(140, 60, 230),
             warning: Color32::from_rgb(200, 40, 35),
+            look: Look::default(),
             darken_text: 0.4,
         }
+    }
+
+    /// The dark or light palette with a style's colors and shape applied.
+    pub fn new(dark: bool, opacity: f32, colors: &StyleColors, look: Look) -> Self {
+        let mut p = if dark { Palette::dark(opacity) } else { Palette::light(opacity) };
+        for (name, value) in colors {
+            if let (Some(slot), Some((r, g, b))) = (p.color_mut(name), parse_color(value)) {
+                *slot = Color32::from_rgba_unmultiplied(r, g, b, slot.a());
+            }
+        }
+        p.look = look;
+        p
+    }
+
+    /// A palette color by its name in style files (`style::COLOR_NAMES`).
+    pub fn color_mut(&mut self, name: &str) -> Option<&mut Color32> {
+        Some(match name {
+            "background" => &mut self.background,
+            "key" => &mut self.key,
+            "key_empty" => &mut self.key_empty,
+            "key_border" => &mut self.key_border,
+            "pressed" => &mut self.pressed,
+            "pressed_text" => &mut self.pressed_text,
+            "text" => &mut self.text,
+            "text_dim" => &mut self.text_dim,
+            "neutral_layer" => &mut self.neutral_layer,
+            "accent" => &mut self.accent,
+            "chip_off" => &mut self.chip_off,
+            "caps_word" => &mut self.caps_word,
+            "colemak" => &mut self.colemak,
+            "warning" => &mut self.warning,
+            _ => return None,
+        })
+    }
+
+    /// Every color as "#RRGGBB", for a complete style file.
+    pub fn colors(&mut self) -> StyleColors {
+        crate::style::COLOR_NAMES
+            .iter()
+            .filter_map(|&n| {
+                self.color_mut(n).map(|c| (n.to_string(), format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b())))
+            })
+            .collect()
     }
 
     /// `color` adjusted for use as text on the background.
@@ -139,5 +187,21 @@ mod tests {
         assert_eq!(names[4], "DEBUG");
         assert_eq!(colors[4], DEFAULT_LAYERS[4].1);
         assert_eq!(colors[0], None);
+    }
+
+    #[test]
+    fn style_colors_override_the_base() {
+        let colors: StyleColors = [("key".to_string(), "#102030".to_string())].into();
+        let look = Look { key_radius: 0.3, ..Look::default() };
+        let mut p = Palette::new(true, 0.5, &colors, look);
+        assert_eq!(p.key, Color32::from_rgb(0x10, 0x20, 0x30));
+        assert_eq!(p.text, Palette::dark(0.5).text);
+        assert_eq!(p.look.key_radius, 0.3);
+        // the background keeps the window opacity
+        let bg: StyleColors = [("background".to_string(), "#FFFFFF".to_string())].into();
+        assert_eq!(Palette::new(true, 0.5, &bg, look).background.a(), 127);
+        // every name maps to a color, and back
+        assert_eq!(p.colors().len(), crate::style::COLOR_NAMES.len());
+        assert_eq!(p.colors()["key"], "#102030");
     }
 }

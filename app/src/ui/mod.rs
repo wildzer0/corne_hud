@@ -22,6 +22,7 @@ use crate::model::{classify_layers, highest_layer, Keymap};
 use crate::paths;
 use crate::screen;
 use crate::stats::{Stats, Totals};
+use crate::style::{self, Look, Style, StyleWatcher};
 use crate::vial::definition::Definition;
 use crate::vial::dynamic::Dynamic;
 use crate::vial::keycode::Mods5;
@@ -378,6 +379,15 @@ pub struct HudApp {
 
     opacity: f32,
     scale: f32,
+    /// Style in use, its file watched for changes.
+    style_name: String,
+    style: Style,
+    style_watcher: StyleWatcher,
+    /// Style names, read when the menu opens.
+    style_names: Vec<String>,
+    /// Set from the menu and remembered; unset = config, then style.
+    key_opacity: Option<f32>,
+    key_radius: Option<f32>,
     view: ViewMode,
     theme: ThemeChoice,
     dark: Option<bool>,
@@ -434,6 +444,18 @@ impl HudApp {
         let stats = s.config.stats.enabled.then(|| Stats::load(stats_path(&s.config.stats)));
         let headsup_on = s.window.headsup.unwrap_or(s.config.headsup.enabled);
         let show_combos = s.window.combos.unwrap_or(false);
+        let style_name = s
+            .window
+            .style
+            .clone()
+            .or_else(|| Some(a.style.clone()).filter(|n| !n.is_empty()))
+            .unwrap_or_else(|| style::DEFAULT_STYLE.to_string());
+        let (style_name, style, style_error) = match style::load(&style_name) {
+            Ok(st) => (style_name, st, None),
+            Err(e) => {
+                (style::DEFAULT_STYLE.to_string(), style::load(style::DEFAULT_STYLE).unwrap_or_default(), Some(e))
+            }
+        };
         let mut app = HudApp {
             lang: Lang::It,
             mode: s.mode,
@@ -445,8 +467,14 @@ impl HudApp {
             browse_layer: s.start_layer,
             layer_names,
             layer_colors,
-            opacity: s.window.opacity.unwrap_or(a.opacity),
+            opacity: s.window.opacity.or(style.window_opacity).unwrap_or(a.opacity),
             scale: s.window.scale.unwrap_or(a.scale),
+            style_watcher: StyleWatcher::new(&style_name),
+            style_name,
+            style,
+            style_names: Vec::new(),
+            key_opacity: s.window.key_opacity,
+            key_radius: s.window.key_radius,
             view: s.window.mode.unwrap_or(a.mode),
             theme: s.window.theme.unwrap_or(a.theme),
             config: s.config,
@@ -502,6 +530,9 @@ impl HudApp {
         }
         if let Some(e) = s.config_error {
             app.notify(format!("{}: {e}", tr(app.lang, Msg::ConfigError)));
+        }
+        if let Some(e) = style_error {
+            app.notify(e);
         }
         app.apply_backup();
         app.refresh_autostart();
@@ -823,6 +854,19 @@ impl HudApp {
         if new.theme != old.theme {
             self.theme = new.theme;
         }
+        if new.key_opacity != old.key_opacity {
+            self.key_opacity = None;
+        }
+        if new.key_radius != old.key_radius {
+            self.key_radius = None;
+        }
+        let new_style = (new.style != old.style).then(|| {
+            if new.style.is_empty() {
+                style::DEFAULT_STYLE.to_string()
+            } else {
+                new.style.clone()
+            }
+        });
         let resize = new.scale != old.scale || new.mode != old.mode;
         if resize {
             self.scale = new.scale;
@@ -832,6 +876,9 @@ impl HudApp {
             logging::set_level(logging::parse_level(&config.log.level));
         }
         self.config = config;
+        if let Some(name) = new_style {
+            self.set_style(&name, false);
+        }
         self.apply_poll_rate();
         self.apply_backup();
         if self.screenshot.is_none() {
@@ -886,6 +933,9 @@ impl HudApp {
         self.window.theme = Some(self.theme);
         self.window.headsup = Some(self.headsup_on);
         self.window.combos = Some(self.show_combos);
+        self.window.style = Some(self.style_name.clone());
+        self.window.key_opacity = self.key_opacity;
+        self.window.key_radius = self.key_radius;
         self.window.save(&self.window_path);
         self.window_dirty = None;
     }
@@ -901,6 +951,72 @@ impl HudApp {
         }
         if self.window_dirty.is_some_and(|t| t.elapsed() >= SAVE_DELAY) {
             self.save_window();
+        }
+    }
+
+    /// Shape of keys and window: menu, then config, then style.
+    fn look(&self) -> Look {
+        let a = &self.config.appearance;
+        self.style.look_with(self.key_opacity.or(a.key_opacity), self.key_radius.or(a.key_radius))
+    }
+
+    /// Switches style, applying its window opacity if it has one. From the
+    /// menu the style is shown as it is: the key values set there are dropped.
+    fn set_style(&mut self, name: &str, from_menu: bool) {
+        match style::load(name) {
+            Ok(st) => {
+                if from_menu {
+                    self.key_opacity = None;
+                    self.key_radius = None;
+                }
+                if let Some(o) = st.window_opacity {
+                    self.opacity = o;
+                }
+                self.style = st;
+                self.style_name = name.to_string();
+                self.style_watcher = StyleWatcher::new(name);
+                self.mark_dirty();
+            }
+            Err(e) => self.notify(e),
+        }
+    }
+
+    /// The style file in use changed: applied at once, errors keep the old one.
+    fn poll_style(&mut self) {
+        match self.style_watcher.poll() {
+            Some(Ok(st)) => {
+                self.style = st;
+                self.notify(format!("{}: {}", tr(self.lang, Msg::ConfigReloaded), self.style_name));
+            }
+            Some(Err(e)) => self.notify(e),
+            None => {}
+        }
+    }
+
+    /// Writes the current look, every color included, as a new style and switches to it.
+    fn save_style(&mut self) {
+        let look = self.look();
+        let colors = |dark: bool| Palette::new(dark, self.opacity, self.style.colors(dark), look).colors();
+        let st = Style {
+            key_opacity: Some(look.key_opacity),
+            key_radius: Some(look.key_radius),
+            border_width: Some(look.border_width),
+            legend_scale: Some(look.legend_scale),
+            window_radius: Some(look.window_radius),
+            window_opacity: Some(self.opacity),
+            dark: colors(true),
+            light: colors(false),
+        };
+        match style::save_new("personale", &st) {
+            Ok(name) => {
+                self.set_style(&name, true);
+                self.notify(format!(
+                    "{}: {}",
+                    tr(self.lang, Msg::StyleSaved),
+                    style::dir().join(format!("{name}.toml")).display()
+                ));
+            }
+            Err(e) => self.notify(format!("{}: {e}", style::dir().display())),
         }
     }
 
@@ -1032,6 +1148,7 @@ impl HudApp {
 
     fn open_menu(&mut self, ctx: &egui::Context, hud: Rect, pointer: egui::Pos2) {
         self.refresh_autostart();
+        self.style_names = style::names();
         let anchor = ctx.input(|i| i.viewport().inner_rect).map(|inner| inner.min + pointer.to_vec2());
         log::debug!("menu aperto in {anchor:?}");
         self.menu = Some(MenuWindow {
@@ -1210,6 +1327,47 @@ impl HudApp {
                 self.mark_dirty();
             }
         });
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr(lang, Msg::MenuStyle));
+            let mut chosen = None;
+            for name in &self.style_names {
+                if ui.selectable_label(*name == self.style_name, name).clicked() && *name != self.style_name {
+                    chosen = Some(name.clone());
+                }
+            }
+            if let Some(name) = chosen {
+                self.set_style(&name, true);
+            }
+        });
+        let look = self.look();
+        ui.horizontal(|ui| {
+            ui.label(tr(lang, Msg::MenuKeyOpacity));
+            let mut pct = (look.key_opacity * 100.0).round();
+            if ui.add(egui::Slider::new(&mut pct, 20.0..=100.0).suffix("%").fixed_decimals(0)).changed() {
+                self.key_opacity = Some(pct / 100.0);
+                self.mark_dirty();
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(tr(lang, Msg::MenuKeyRadius));
+            let mut pct = (look.key_radius * 100.0).round();
+            if ui.add(egui::Slider::new(&mut pct, 0.0..=50.0).suffix("%").fixed_decimals(0)).changed() {
+                self.key_radius = Some(pct / 100.0);
+                self.mark_dirty();
+            }
+        });
+        ui.horizontal(|ui| {
+            if ui.button(tr(lang, Msg::MenuSaveStyle)).on_hover_text(tr(lang, Msg::SaveStyleHint)).clicked() {
+                self.save_style();
+            }
+            let dir = style::dir();
+            if ui.button(tr(lang, Msg::MenuStylesFolder)).on_hover_text(dir.display().to_string()).clicked() {
+                if let Err(e) = backup::open_folder(&dir) {
+                    self.notify(format!("{}: {e}", dir.display()));
+                }
+                self.close_menu();
+            }
+        });
         ui.separator();
         if ui
             .checkbox(&mut self.headsup_on, tr(lang, Msg::MenuHeadsUp))
@@ -1324,6 +1482,7 @@ impl eframe::App for HudApp {
             }
             ctx.request_repaint_after(Duration::from_millis(500));
         }
+        self.poll_style();
         match self.watcher.poll() {
             Reload::Unchanged => {}
             Reload::Changed(c) => self.apply_config(ctx, *c),
@@ -1373,7 +1532,7 @@ impl eframe::App for HudApp {
         let ctx = ui.ctx().clone();
         let now = Instant::now();
         let dark = self.apply_theme(&ctx);
-        let palette = if dark { Palette::dark(self.opacity) } else { Palette::light(self.opacity) };
+        let palette = Palette::new(dark, self.opacity, self.style.colors(dark), self.look());
         let compact = self.view == ViewMode::Compact;
 
         let full = ui.max_rect();
@@ -1417,7 +1576,7 @@ impl eframe::App for HudApp {
         ui.multiply_opacity(hu.hidden_opacity + (1.0 - hu.hidden_opacity) * level);
 
         let painter = ui.painter_at(full);
-        painter.rect_filled(full, 12.0, palette.background);
+        painter.rect_filled(full, palette.look.window_radius, palette.background);
         let layout = self.live.as_ref().or(self.offline.as_ref());
 
         let search_hit = self.search.selected().map(|h| h.layer);

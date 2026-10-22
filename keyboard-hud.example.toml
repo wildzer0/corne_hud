@@ -30,6 +30,13 @@ screen_margin = 8
 # (StatusNotifierItem): KDE e la maggior parte dei pannelli la mostrano, GNOME
 # richiede l'estensione "AppIndicator".
 tray = true
+# Stile: colori e forma di tasti e finestra. Inclusi: "predefinito",
+# "minimal", "vetro", "alto-contrasto"; altri come file .toml nella cartella
+# styles/ accanto a questa configurazione (vedi il README). Vuoto = predefinito.
+style = ""
+# Opacità e arrotondamento dei tasti; se mancano decide lo stile.
+# key_opacity = 1.0   # 0.2 – 1.0: le legende restano piene
+# key_radius = 0.12   # 0 (spigoli vivi) – 0.5 della dimensione del tasto
 
 # Nomi e colori dei layer, nell'ordine del firmware (0, 1, 2, ...).
 # color: "#RRGGBB", oppure "" per un layer neutro.

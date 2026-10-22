@@ -118,6 +118,39 @@ fn draw_text(painter: &Painter, text: &Text, center: Pos2, angle: f32, size: f32
     painter.add(TextShape::new(pos, galley, color).with_angle_and_anchor(angle, Align2::CENTER_CENTER));
 }
 
+/// Points per rounded corner.
+const CORNER_STEPS: usize = 6;
+
+/// `poly` (convex) with its corners rounded by `radius` pixels, at most half
+/// of each side. Each corner is a quadratic curve with the corner as control
+/// point: the result stays convex and inside `poly`, rotated keys included.
+fn rounded_polygon(poly: &[Pos2], radius: f32) -> Vec<Pos2> {
+    let n = poly.len();
+    if radius <= 0.0 || n < 3 {
+        return poly.to_vec();
+    }
+    let mut out: Vec<Pos2> = Vec::with_capacity(n * (CORNER_STEPS + 1));
+    for i in 0..n {
+        let (prev, cur, next) = (poly[(i + n - 1) % n], poly[i], poly[(i + 1) % n]);
+        let (a, b) = (prev - cur, next - cur);
+        let r = radius.min(a.length() / 2.0).min(b.length() / 2.0);
+        let (p0, p1) = (cur + a.normalized() * r, cur + b.normalized() * r);
+        for s in 0..=CORNER_STEPS {
+            let t = s as f32 / CORNER_STEPS as f32;
+            let p = (p0.to_vec2() * (1.0 - t) * (1.0 - t) + cur.to_vec2() * 2.0 * t * (1.0 - t) + p1.to_vec2() * t * t)
+                .to_pos2();
+            // corners meeting at the middle of a side share a point
+            if out.last().is_none_or(|q| q.distance(p) > 0.01) {
+                out.push(p);
+            }
+        }
+    }
+    if out.len() > 1 && out[0].distance(out[out.len() - 1]) <= 0.01 {
+        out.pop();
+    }
+    out
+}
+
 fn rotate(v: Vec2, angle: f32) -> Vec2 {
     let (s, c) = angle.sin_cos();
     Vec2::new(v.x * c - v.y * s, v.x * s + v.y * c)
@@ -132,6 +165,14 @@ pub fn draw(
     hover: Option<Pos2>,
 ) -> Option<String> {
     let tf = Transform::fit(view.keys, rect)?;
+    let look = palette.look;
+    let border = |color: Color32| {
+        if look.border_width > 0.0 {
+            Stroke::new(look.border_width, color.gamma_multiply(look.key_opacity))
+        } else {
+            Stroke::NONE
+        }
+    };
     let mut tooltip = None;
     // keycode shown on each key, for the combos
     let mut centers: Vec<(u16, Pos2)> = Vec::new();
@@ -145,7 +186,12 @@ pub fn draw(
 
         let Some(KeyRole::Matrix { row, col }) = role else {
             // encoders: a simple knob
-            painter.circle(center, w.min(h) / 2.0, palette.key_empty, Stroke::new(1.0, palette.key_border));
+            painter.circle(
+                center,
+                w.min(h) / 2.0,
+                palette.key_empty.gamma_multiply(look.key_opacity),
+                border(palette.key_border),
+            );
             continue;
         };
 
@@ -190,16 +236,19 @@ pub fn draw(
             base_text = if n == 0 { palette.text_dim } else { text_on(fill) };
         }
         fill = mix(fill, palette.pressed, 0.7 * glow);
+        // see-through keys: a pressed key turns opaque, to stand out
+        fill = fill.gamma_multiply(look.key_opacity + (1.0 - look.key_opacity) * glow);
         let text_color = mix(base_text, palette.pressed_text, glow);
         let mark = (view.mark)(row, col).clamp(0.0, 1.0);
         let stroke = if mark > 0.0 {
             Stroke::new(1.5 + 2.5 * mark, mix(palette.key_border, palette.accent, 0.5 + 0.5 * mark))
         } else {
-            Stroke::new(1.0, palette.key_border)
+            border(palette.key_border)
         };
-        painter.add(Shape::convex_polygon(poly.clone(), fill, stroke));
+        let shape = rounded_polygon(&poly, look.key_radius * w.min(h));
+        painter.add(Shape::convex_polygon(shape, fill, stroke));
 
-        let base = tf.scale * 0.30;
+        let base = tf.scale * 0.30 * look.legend_scale;
         match &leg.hold {
             Some(hold) => {
                 draw_text(
@@ -295,6 +344,39 @@ fn draw_combos(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn convex(poly: &[Pos2]) -> bool {
+        let n = poly.len();
+        let cross = |i: usize| {
+            let (a, b, c) = (poly[i], poly[(i + 1) % n], poly[(i + 2) % n]);
+            (b - a).x * (c - b).y - (b - a).y * (c - b).x
+        };
+        let first = cross(0).signum();
+        (0..n).all(|i| cross(i).abs() < 1e-3 || cross(i).signum() == first)
+    }
+
+    #[test]
+    fn rounded_corners() {
+        let sq = [Pos2::new(0.0, 0.0), Pos2::new(10.0, 0.0), Pos2::new(10.0, 10.0), Pos2::new(0.0, 10.0)];
+        assert_eq!(rounded_polygon(&sq, 0.0), sq.to_vec());
+        let r = rounded_polygon(&sq, 2.0);
+        assert_eq!(r.len(), 4 * (CORNER_STEPS + 1));
+        assert!(convex(&r));
+        assert!(r.iter().all(|&p| contains(&sq, p)));
+        // the corner itself is cut
+        assert!(r.iter().all(|p| p.distance(Pos2::ZERO) > 0.5));
+        // a radius larger than half a side: corners meet in the middle, no duplicates
+        let big = rounded_polygon(&sq, 50.0);
+        assert!(big.windows(2).all(|w| w[0].distance(w[1]) > 0.01));
+        assert!(big.iter().any(|p| p.distance(Pos2::new(5.0, 0.0)) < 0.01));
+        // rotated key
+        let rot: Vec<Pos2> = sq.iter().map(|p| (rotate(p.to_vec2(), 0.5) + Vec2::new(20.0, 5.0)).to_pos2()).collect();
+        let r = rounded_polygon(&rot, 3.0);
+        assert!(convex(&r));
+        // points on the sides: nudged towards the center against rounding errors
+        let c = (rot.iter().fold(Vec2::ZERO, |acc, p| acc + p.to_vec2()) / 4.0).to_pos2();
+        assert!(r.iter().all(|&p| contains(&rot, p + (c - p) * 1e-3)));
+    }
 
     #[test]
     fn point_in_convex_polygon() {

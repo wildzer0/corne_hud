@@ -28,13 +28,14 @@ Un HUD sempre in primo piano che mostra la mia **Corne v4.1** (firmware Vial) e 
 7. [Wayland](#wayland)
 8. [Convivenza con Vial](#convivenza-con-vial)
 9. [Configurazione](#configurazione)
-10. [Backup automatico](#backup-automatico)
-11. [Statistiche e privacy](#statistiche-e-privacy)
-12. [Modalità offline e simulata](#modalità-offline-e-simulata)
-13. [Opzioni da riga di comando](#opzioni-da-riga-di-comando)
-14. [Compilare l'app](#compilare-lapp)
-15. [Risoluzione dei problemi](#risoluzione-dei-problemi)
-16. [Licenza e crediti](#licenza-e-crediti)
+10. [Stili](#stili)
+11. [Backup automatico](#backup-automatico)
+12. [Statistiche e privacy](#statistiche-e-privacy)
+13. [Modalità offline e simulata](#modalità-offline-e-simulata)
+14. [Opzioni da riga di comando](#opzioni-da-riga-di-comando)
+15. [Compilare l'app](#compilare-lapp)
+16. [Risoluzione dei problemi](#risoluzione-dei-problemi)
+17. [Licenza e crediti](#licenza-e-crediti)
 
 ---
 
@@ -188,7 +189,7 @@ Copia [`keyboard-hud.example.toml`](keyboard-hud.example.toml) accanto all'esegu
 | Sezione | Cosa regola |
 |---|---|
 | `[device]` | `vid` / `pid` per scegliere la tastiera (default: la prima che risponde al protocollo HUD) |
-| `[appearance]` | icona nella tray (`tray`), opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale, distanza di aggancio ai bordi (`snap_distance`, 16) e margine dai bordi (`screen_margin`, 8) |
+| `[appearance]` | icona nella tray (`tray`), opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale, distanza di aggancio ai bordi (`snap_distance`, 16) e margine dai bordi (`screen_margin`, 8), stile (`style`), opacità e arrotondamento dei tasti (`key_opacity`, `key_radius`) |
 | `[headsup]` | attivo, ritardo dei modificatori (400 ms), ritardo di scomparsa (800 ms), opacità da nascosto, cosa mostra un layer bloccato (`locked_layer`: `hud` o `indicator`) un one-shot in attesa (`oneshot`) e un modificatore tenuto (`modifiers`), sempre `hud` o `indicator` |
 | `[indicator]` | mini indicatore attivo, angolo dello schermo (`position`, default `top-right`) |
 | `[[layers]]` | nome e colore di ogni layer, in ordine |
@@ -231,7 +232,39 @@ label = "Step over"
 
 Il nome è quello del processo, senza `.exe` e senza distinguere maiuscole: `code` vale per `Code.exe` su Windows e per `code` su Linux; su macOS è il nome dell'app. Il footer dell'HUD mostra quale insieme di etichette è attivo. Su Wayland l'applicazione in primo piano non si può sapere: valgono solo le etichette generiche.
 
-Posizione, scala, opacità, vista, tema e heads-up scelti dal menu vengono ricordati in `keyboard-hud-state.toml`. Il tuo `keyboard-hud.toml`, con i suoi commenti, non viene mai riscritto.
+Posizione, scala, opacità, vista, tema, stile, opacità e arrotondamento dei tasti e heads-up scelti dal menu vengono ricordati in `keyboard-hud-state.toml`. Il tuo `keyboard-hud.toml`, con i suoi commenti, non viene mai riscritto.
+
+## Stili
+
+Uno stile decide colori e forma dell'HUD: arrotondamento e opacità dei tasti, bordi, dimensione delle legende, angoli e opacità della finestra. Non sceglie fra chiaro e scuro: ha colori per entrambi e segue il tema. Si sceglie dal menu (**Stile**) o con `style` in `[appearance]`.
+
+Inclusi: **predefinito** (l'aspetto di sempre, tasti appena arrotondati), **minimal** (niente bordi, tasti morbidi), **vetro** (finestra e tasti semitrasparenti; un tasto premuto torna pieno), **alto-contrasto** (bianco e nero, bordi spessi, legende più grandi).
+
+I tuoi stili sono file `.toml` nella cartella `styles/` accanto alla configurazione (menu → **Cartella stili**); il nome del file è il nome dello stile, e un file con il nome di uno stile incluso lo sostituisce. Ogni voce è facoltativa:
+
+```toml
+# styles/notte.toml
+key_opacity = 0.8       # 0.2 – 1: le legende restano piene
+key_radius = 0.25       # 0 – 0.5 della dimensione del tasto
+border_width = 0        # bordo dei tasti in pixel, 0 = nessuno
+legend_scale = 1.1      # 0.7 – 1.5
+window_radius = 16      # angoli della finestra
+window_opacity = 0.7    # applicata quando scegli lo stile
+
+[dark]                  # colori "#RRGGBB"; quelli mancanti restano i predefiniti
+background = "#0B0E14"
+key = "#1A1F2B"
+accent = "#7AA2F7"
+
+[light]
+key = "#FFFFFF"
+```
+
+Colori disponibili: `background`, `key`, `key_empty`, `key_border`, `pressed`, `pressed_text`, `text`, `text_dim`, `neutral_layer`, `accent`, `chip_off`, `caps_word`, `colemak`, `warning`. I colori dei layer restano in `[[layers]]`, perché corrispondono ai LED del firmware.
+
+**Salva come stile** (menu) scrive `styles/personale.toml` (o `personale-2.toml`, mai sopra un file esistente) con tutti i valori attuali, colori compresi: il modo più semplice per partire. Le modifiche al file dello stile in uso si vedono entro un secondo; se il file non è valido compare l'errore e resta lo stile di prima.
+
+Precedenza per opacità e arrotondamento dei tasti: il valore scelto dal menu, poi quello di `[appearance]`, poi quello dello stile. Scegliere uno stile dal menu riparte dai suoi valori.
 
 ## Backup automatico
 

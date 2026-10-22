@@ -1,0 +1,14 @@
+# Minimal: niente bordi, tasti morbidi, colori un po' più tenui.
+key_opacity = 0.9
+key_radius = 0.3
+border_width = 0.0
+legend_scale = 1.0
+window_radius = 18.0
+
+[dark]
+key = "#2C2E35"
+key_empty = "#1E1F24"
+
+[light]
+key = "#F4F5F7"
+key_empty = "#E2E4E9"

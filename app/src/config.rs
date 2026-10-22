@@ -47,6 +47,12 @@ pub struct Appearance {
     pub screen_margin: f32,
     /// Icon in the system tray.
     pub tray: bool,
+    /// Style (file name in `styles/`, without `.toml`); empty = the default one.
+    pub style: String,
+    /// Opacity of the keys, 0.2–1; unset = from the style.
+    pub key_opacity: Option<f32>,
+    /// Corner radius of the keys, 0–0.5 of their size; unset = from the style.
+    pub key_radius: Option<f32>,
 }
 
 impl Default for Appearance {
@@ -61,6 +67,9 @@ impl Default for Appearance {
             snap_distance: 16.0,
             screen_margin: 8.0,
             tray: true,
+            style: String::new(),
+            key_opacity: None,
+            key_radius: None,
         }
     }
 }
@@ -300,6 +309,9 @@ impl Config {
         a.scale = if a.scale.is_finite() { a.scale.clamp(0.5, 2.0) } else { 1.0 };
         a.snap_distance = if a.snap_distance.is_finite() { a.snap_distance.clamp(0.0, 200.0) } else { 16.0 };
         a.screen_margin = if a.screen_margin.is_finite() { a.screen_margin.clamp(0.0, 200.0) } else { 8.0 };
+        a.key_opacity = a.key_opacity.map(crate::style::clamp_key_opacity);
+        a.key_radius = a.key_radius.map(crate::style::clamp_key_radius);
+        a.style = a.style.trim().to_string();
         let p = &mut self.polling;
         p.visible_hz = p.visible_hz.clamp(1, 250);
         p.hidden_hz = p.hidden_hz.clamp(1, 250);
@@ -390,6 +402,9 @@ pub struct WindowState {
     pub theme: Option<ThemeChoice>,
     pub headsup: Option<bool>,
     pub combos: Option<bool>,
+    pub style: Option<String>,
+    pub key_opacity: Option<f32>,
+    pub key_radius: Option<f32>,
 }
 
 impl WindowState {
@@ -441,6 +456,9 @@ mod tests {
         assert_eq!(c, Config::default());
         let c = Config::parse("[appearance]\nopacity = 5.0\nscale = 0.1\n[polling]\nvisible_hz = 0").unwrap();
         assert_eq!((c.appearance.opacity, c.appearance.scale, c.polling.visible_hz), (1.0, 0.5, 1));
+        let c = Config::parse("[appearance]\nkey_opacity = 0.0\nkey_radius = 2.0\nstyle = \" vetro \"").unwrap();
+        assert_eq!((c.appearance.key_opacity, c.appearance.key_radius), (Some(0.2), Some(0.5)));
+        assert_eq!(c.appearance.style, "vetro");
     }
 
     #[test]
