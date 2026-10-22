@@ -96,7 +96,7 @@ Idee rimandate: modalità allenamento, esportazione PNG/SVG della keymap, finest
 - I file `.vil` usano i nomi di vial-gui (`KC_LSHIFT`, `FN_MO13`, `USER00`), non quelli QMK. Le tabelle sono generate da `build.rs` a partire da `app/data/keycodes/` (hjson di vial-qmk + `keycodes_v6.py` di vial-gui).
 - Font di ripiego DejaVu Sans incorporato, per i simboli dei tasti. Il lucchetto è disegnato a mano perché nessun font ha il glifo.
 - Il crate è dichiarato GPL-2.0-or-later, per i dati derivati da vial-qmk e vial-gui.
-- Layer "tenuto" o "bloccato" vengono dedotti dai tasti premuti (`model::classify_layers`): il firmware dice solo quali layer sono attivi.
+- Layer "tenuto" o "bloccato" vengono dedotti dai tasti premuti (`model::classify_layers`), tranne quelli bloccati con Layer Lock (`QK_LLCK`): per quelli il firmware lo dice nel byte 9 (`locked_layers`, layer 0-7) e il dato vince sulla deduzione, anche col tasto del layer ancora premuto. `TG`/`TO` restano dedotti.
 - Lo stato della finestra sta in `keyboard-hud-state.toml`, separato da `keyboard-hud.toml`, che non viene mai riscritto.
 - Click-through: si attiva solo se il firmware ha `HUD_TOG`; si spegne da solo se la tastiera si scollega; non viene ricordato tra un avvio e l'altro.
 - `HUD_TOG`, tocco singolo: con heads-up attivo fissa o libera l'HUD; senza heads-up lo mostra o nasconde. Il doppio tocco (300 ms) gestisce il click-through.
@@ -156,7 +156,7 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 
 ## Registro delle sessioni
 
-- **2026-10-22**: release **v0.4.0** pubblicata (tag su `6bbc726`, CI verde prima del tag) con tutti gli asset. Notato guardando il firmware: il byte 9 dello stato (`locked_layers`, da `is_layer_locked` per `QK_LLCK`) è letto in `protocol.rs` ma l'app non lo usa ancora; `TG` non vi compare.
+- **2026-10-22**: release **v0.4.0** pubblicata (tag su `6bbc726`, CI verde prima del tag) con tutti gli asset. Subito dopo: l'app usa il byte 9 dello stato (`locked_layers`, da `is_layer_locked` per `QK_LLCK`), letto da sempre ma mai usato.
 
 - **2026-10-22**: contenuto delle macro sui tasti (`legend::macro_legend`, `Dynamic::macros` letto via VIA a ogni connessione e dalla sezione `macro` del `.vil`) e avviso "Altra metà scollegata" dal flag `SLAVE_OK`, mai usato prima (`HudApp::split_seen`: solo dopo averla vista collegata, perché i firmware non split non mandano il flag), più il chip "Bloc Num" nella vista completa. 112 test; verificato con uno screenshot del mock modificato (macro su due tasti, flag tolto dopo 500 ms). Da provare con la tastiera vera staccando il TRRS.
 

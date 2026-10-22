@@ -87,10 +87,13 @@ pub enum LayerHold {
 
 /// Classifies the active layers of `state` (default layer excluded), highest first.
 ///
-/// The firmware reports which layers are on, not why: a layer counts as held
-/// when one of the pressed keys is a momentary key for it; the tri-layer
-/// adjust layer is held when both its lower and upper layers are held;
-/// anything else that is on without a pending one-shot is locked.
+/// The firmware reports which layers are on and which are locked with Layer
+/// Lock (`locked_layers`, layers 0-7), not why the others are on: a layer
+/// counts as held when one of the pressed keys is a momentary key for it
+/// (unless Layer Lock keeps it on: it stays after the release); the
+/// tri-layer adjust layer is held when both its lower and upper layers are
+/// held; anything else that is on without a pending one-shot is locked
+/// (TG, TO).
 pub fn classify_layers(keymap: &Keymap, state: &HudState) -> Vec<(u8, LayerHold)> {
     let mask = state.active_mask();
     let top = highest_layer(mask);
@@ -129,7 +132,10 @@ pub fn classify_layers(keymap: &Keymap, state: &HudState) -> Vec<(u8, LayerHold)
         .rev()
         .filter(|l| state.layer_state & (1 << l) != 0)
         .map(|l| {
-            let how = if held & (1 << l) != 0 {
+            let layer_locked = l < 8 && state.locked_layers & (1 << l) != 0;
+            let how = if layer_locked {
+                LayerHold::Locked
+            } else if held & (1 << l) != 0 {
                 LayerHold::Held
             } else if state.oneshot_layer == Some(l) {
                 LayerHold::OneShot
@@ -260,6 +266,10 @@ mod tests {
         let mut s = state(1 << 5, &[]);
         s.oneshot_layer = Some(5);
         assert_eq!(classify_layers(&k, &s), vec![(5, LayerHold::OneShot)]);
+        // Layer Lock while Fn1 is still held: the firmware says locked
+        let mut s = state(0b10, &[(3, 4)]);
+        s.locked_layers = 0b10;
+        assert_eq!(classify_layers(&k, &s), vec![(1, LayerHold::Locked)]);
         // base only
         assert!(classify_layers(&k, &state(0, &[(0, 1)])).is_empty());
     }
