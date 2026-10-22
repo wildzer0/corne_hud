@@ -36,6 +36,8 @@ pub enum Msg {
     ClickThroughOn,
     ClickThroughOff,
     MenuPause,
+    MenuBackups,
+    BackupSaved,
     MenuAutostart,
     AutostartHint,
     AutostartStale,
@@ -124,6 +126,8 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
             Msg::ClickThroughOn => "Click-through attivo (doppio tocco di HUD_TOG per disattivarlo)",
             Msg::ClickThroughOff => "Click-through disattivato",
             Msg::MenuPause => "Pausa",
+            Msg::MenuBackups => "Backup della tastiera…",
+            Msg::BackupSaved => "Backup della configurazione salvato",
             Msg::MenuAutostart => "Avvia con il sistema",
             Msg::AutostartHint => "Avvia l'HUD all'accesso, solo per questo utente",
             Msg::AutostartStale => {

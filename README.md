@@ -28,12 +28,13 @@ Un HUD sempre in primo piano che mostra la mia **Corne v4.1** (firmware Vial) e 
 7. [Wayland](#wayland)
 8. [Convivenza con Vial](#convivenza-con-vial)
 9. [Configurazione](#configurazione)
-10. [Statistiche e privacy](#statistiche-e-privacy)
-11. [Modalità offline e simulata](#modalità-offline-e-simulata)
-12. [Opzioni da riga di comando](#opzioni-da-riga-di-comando)
-13. [Compilare l'app](#compilare-lapp)
-14. [Risoluzione dei problemi](#risoluzione-dei-problemi)
-15. [Licenza e crediti](#licenza-e-crediti)
+10. [Backup automatico](#backup-automatico)
+11. [Statistiche e privacy](#statistiche-e-privacy)
+12. [Modalità offline e simulata](#modalità-offline-e-simulata)
+13. [Opzioni da riga di comando](#opzioni-da-riga-di-comando)
+14. [Compilare l'app](#compilare-lapp)
+15. [Risoluzione dei problemi](#risoluzione-dei-problemi)
+16. [Licenza e crediti](#licenza-e-crediti)
 
 ---
 
@@ -65,6 +66,7 @@ Ogni release contiene anche `SHA256SUMS.txt` e `keyboard-hud.example.toml`.
 | `keyboard-hud.toml` | la tua configurazione (facoltativa) |
 | `keyboard-hud-state.toml` | posizione, scala, opacità, vista, tema dell'ultima sessione |
 | `keyboard-hud-stats.json` | contatori delle statistiche |
+| `backups/` | backup automatici della configurazione della tastiera (`.vil`) |
 | `keyboard-hud.log` (+ `.log.1`) | log, massimo 1 MB per file |
 | `cache/` | definizione Vial letta dalla tastiera |
 
@@ -185,6 +187,7 @@ Copia [`keyboard-hud.example.toml`](keyboard-hud.example.toml) accanto all'esegu
 | `[[layers]]` | nome e colore di ogni layer, in ordine |
 | `[[labels]]` | etichette personalizzate, per keycode (anche limitato a un layer) o per posizione |
 | `[stats]` | statistiche attive, file, periodo del report "mai usati" |
+| `[backup]` | backup automatico attivo, cartella, quanti tenerne (default 30) |
 | `[polling]` | frequenze di lettura (60 Hz visibile, 10 Hz nascosto) e timeout |
 | `[log]` | livello del log |
 
@@ -210,6 +213,15 @@ label = "Debug"
 ```
 
 Posizione, scala, opacità, vista, tema e heads-up scelti dal menu vengono ricordati in `keyboard-hud-state.toml`. Il tuo `keyboard-hud.toml`, con i suoi commenti, non viene mai riscritto.
+
+## Backup automatico
+
+L'HUD salva da solo la configurazione della tastiera come file `.vil`, lo stesso formato dell'export di Vial: keymap, encoder, macro, tap dance, combo, key override, alt-repeat e impostazioni QMK. Non serve ricordarsi di esportare dopo ogni modifica.
+
+- **Quando**: alla connessione, quando chiudi Vial (o finisce il traffico della web app), quando il keymap cambia e, ogni 2 minuti a tastiera ferma, per combo e macro, che il firmware non segnala. Un nuovo file nasce **solo se qualcosa è cambiato** rispetto all'ultimo backup della stessa tastiera.
+- **Dove**: cartella `backups/` accanto alla configurazione; si apre da menu → *Backup della tastiera…*. I file si chiamano `corne-v4_2026-10-22T081530Z.vil` (ora UTC); se ne tengono 30 per tastiera.
+- **Ripristino**: in Vial, *File → Load saved layout*. I keycode sono scritti come numeri, una forma che Vial accetta: il file non è fatto per essere letto a mano.
+- Le letture usano gli stessi comandi di Vial e non richiedono lo sblocco. Si disattiva con `enabled = false` nella sezione `[backup]`.
 
 ## Statistiche e privacy
 

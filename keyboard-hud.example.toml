@@ -67,6 +67,14 @@ enabled = true
 file = ""                 # vuoto = keyboard-hud-stats.json accanto alla configurazione
 unused_days = 30          # report: tasti mai usati negli ultimi N giorni
 
+[backup]
+# Backup automatico della configurazione della tastiera (keymap, macro, combo,
+# tap dance, key override, impostazioni QMK) come file .vil, ricaricabile in
+# Vial con File → Load saved layout. Si salva solo quando qualcosa è cambiato.
+enabled = true
+dir = ""                  # vuoto = cartella "backups" accanto alla configurazione
+keep = 30                 # backup da tenere per tastiera; i più vecchi vengono cancellati
+
 # Etichette personalizzate. Ogni voce vale per un keycode (eventualmente solo
 # su un layer) oppure per una posizione precisa (layer + row + col, come
 # nella matrice del firmware). La posizione vince sul keycode.

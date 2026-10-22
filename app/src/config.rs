@@ -119,6 +119,22 @@ impl Default for HeadsUp {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
+pub struct BackupConfig {
+    pub enabled: bool,
+    /// Folder; empty = `backups` next to the config. Relative paths too.
+    pub dir: String,
+    /// Backups kept per keyboard.
+    pub keep: usize,
+}
+
+impl Default for BackupConfig {
+    fn default() -> Self {
+        BackupConfig { enabled: true, dir: String::new(), keep: 30 }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct StatsConfig {
     pub enabled: bool,
     /// Counter file; empty = `keyboard-hud-stats.json` next to the config.
@@ -156,6 +172,7 @@ pub struct Config {
     pub layers: Vec<LayerConfig>,
     pub labels: Vec<LabelConfig>,
     pub stats: StatsConfig,
+    pub backup: BackupConfig,
     pub polling: Polling,
     pub log: LogConfig,
 }
@@ -198,6 +215,7 @@ impl Config {
         h.modifier_delay_ms = h.modifier_delay_ms.min(10_000);
         h.hide_delay_ms = h.hide_delay_ms.min(60_000);
         self.stats.unused_days = self.stats.unused_days.clamp(1, 3650);
+        self.backup.keep = self.backup.keep.clamp(1, 1000);
     }
 
     pub fn vid(&self) -> Option<u16> {

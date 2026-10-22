@@ -125,6 +125,11 @@ pub struct MockKeyboard {
     frozen_ms: Option<u64>,
 }
 
+/// Macro buffer of the simulated keyboard: "hi" + Enter, then three empty macros.
+const MOCK_MACROS: &[u8] = &[b'h', b'i', 1, 1, 0x28, 0, 0, 0, 0, 0, 0, 0];
+/// QMK settings of the simulated keyboard (combo term, tapping term), 2 bytes each.
+const MOCK_SETTINGS: &[(u16, u16)] = &[(2, 50), (7, 200)];
+
 /// What the simulated keyboard has configured in Vial: the `.vil` entries
 /// plus a few combos on the base layer, to show them off.
 pub fn mock_dynamic() -> Dynamic {
@@ -191,6 +196,25 @@ impl MockKeyboard {
                         let end = (start + REPORT_SIZE).min(self.definition_xz.len());
                         r[..end - start].copy_from_slice(&self.definition_xz[start..end]);
                     }
+                    p::VIAL_GET_ENCODER => r[..4].copy_from_slice(&[0x00, 0x81, 0x00, 0x80]), // Vol-, Vol+
+                    p::VIAL_QMK_SETTINGS_QUERY => {
+                        let after = u16::from_le_bytes([req[2], req[3]]);
+                        r.fill(0xFF);
+                        for (i, id) in MOCK_SETTINGS.iter().map(|s| s.0).filter(|&id| id > after).enumerate() {
+                            r[i * 2..i * 2 + 2].copy_from_slice(&id.to_le_bytes());
+                        }
+                    }
+                    p::VIAL_QMK_SETTINGS_GET => {
+                        let id = u16::from_le_bytes([req[2], req[3]]);
+                        r = *req;
+                        match MOCK_SETTINGS.iter().find(|s| s.0 == id) {
+                            Some(&(_, v)) => {
+                                r[0] = 0;
+                                r[1..3].copy_from_slice(&v.to_le_bytes());
+                            }
+                            None => r[0] = 0xFF,
+                        }
+                    }
                     p::VIAL_DYNAMIC_ENTRY_OP => {
                         let d = &self.dynamic;
                         let entry = match req[2] {
@@ -217,6 +241,16 @@ impl MockKeyboard {
             }
             p::VIA_GET_KEYBOARD_VALUE if req[1] == p::VIA_LAYOUT_OPTIONS => r[2..6].copy_from_slice(&[0; 4]),
             p::VIA_GET_LAYER_COUNT => r[1] = self.keymap.layers(),
+            p::VIA_GET_PROTOCOL_VERSION => r[1..3].copy_from_slice(&9u16.to_be_bytes()),
+            p::VIA_MACRO_COUNT => r[1] = 4,
+            p::VIA_MACRO_BUFFER_SIZE => r[1..3].copy_from_slice(&(MOCK_MACROS.len() as u16).to_be_bytes()),
+            p::VIA_MACRO_BUFFER => {
+                let offset = u16::from_be_bytes([req[1], req[2]]) as usize;
+                let n = (req[3] as usize).min(28);
+                for i in 0..n {
+                    r[4 + i] = MOCK_MACROS.get(offset + i).copied().unwrap_or(0);
+                }
+            }
             0x12 => {
                 let offset = u16::from_be_bytes([req[1], req[2]]) as usize;
                 let size = req[3] as usize;
@@ -349,6 +383,26 @@ mod tests {
         let mut d = Device::new(Box::new(MockKeyboard::frozen(0)), Duration::from_millis(50));
         assert_eq!(d.dynamic().unwrap(), mock_dynamic());
         assert_eq!(mock_dynamic().combos.len(), 3);
+    }
+
+    #[test]
+    fn dump_over_the_protocol() {
+        use crate::vial::dump::MacroAction;
+        let def = crate::vial::definition::Definition::from_json_str(MOCK_VIAL_JSON).unwrap();
+        let mut d = Device::new(Box::new(MockKeyboard::frozen(0)), Duration::from_millis(50));
+        let dump = d.dump(&def).unwrap();
+        assert_eq!(dump.keymap, Vil::parse(MOCK_VIL, 8, 7).unwrap().keymap);
+        assert_eq!((dump.uid, dump.vial_protocol, dump.via_protocol), (MOCK_UID, 6, 9));
+        assert_eq!(dump.macros.len(), 4);
+        assert_eq!(dump.macros[0], vec![MacroAction::Text("hi".into()), MacroAction::Tap(vec![0x28])]);
+        assert_eq!(dump.settings.get(&7), Some(&200));
+        assert_eq!(dump.combos.len(), 3);
+        // the definition's encoders, on every layer
+        assert!(dump.encoders.iter().all(|l| l.iter().all(|e| *e == [0x81, 0x80])));
+        // a .vil the HUD itself reads back
+        let vil = Vil::parse(&dump.to_vil().to_string(), 8, 7).unwrap();
+        assert_eq!(vil.keymap, dump.keymap);
+        assert_eq!(vil.dynamic, mock_dynamic());
     }
 
     #[test]

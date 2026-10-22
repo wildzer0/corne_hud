@@ -6,6 +6,7 @@ use super::device::{Device, DeviceError};
 use super::mock::MockKeyboard;
 use super::protocol::{flags, HudInfo, HudState, ProtocolError};
 use super::transport::{self, HidTransport, TransportError};
+use crate::backup;
 use crate::model::Keymap;
 use crate::paths;
 use crate::vial::definition::Definition;
@@ -13,7 +14,7 @@ use crate::vial::dynamic::Dynamic;
 use hidapi::HidApi;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -24,6 +25,10 @@ const MAX_ERRORS: u32 = 5;
 /// After foreign traffic, the keyboard must stay quiet this long before the
 /// HUD polls it again.
 const FOREIGN_QUIET: Duration = Duration::from_secs(20);
+/// Combos, tap dances and macros do not change `keymap_version`: the backup
+/// is checked again this often, with the keyboard idle for `BACKUP_IDLE`.
+const BACKUP_INTERVAL: Duration = Duration::from_secs(120);
+const BACKUP_IDLE: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone)]
 pub enum Source {
@@ -75,6 +80,8 @@ pub enum Event {
     },
     Keymap(Keymap),
     State(HudState),
+    /// A backup was written.
+    Backup(std::path::PathBuf),
 }
 
 /// Settings shared with the HID thread.
@@ -83,6 +90,8 @@ struct Control {
     paused: AtomicBool,
     poll_hz: AtomicU32,
     timeout_ms: AtomicU64,
+    /// Automatic backups; `None` = off.
+    backup: Mutex<Option<backup::Settings>>,
 }
 
 pub struct Worker {
@@ -99,6 +108,7 @@ impl Worker {
             paused: AtomicBool::new(false),
             poll_hz: AtomicU32::new(poll_hz),
             timeout_ms: AtomicU64::new(timeout_ms),
+            backup: Mutex::new(None),
         });
         let ctx = Ctx { tx, wake: Box::new(wake), control: control.clone() };
         thread::Builder::new().name("hid".into()).spawn(move || run(source, ctx)).expect("spawn HID thread");
@@ -116,6 +126,12 @@ impl Worker {
     /// Manual pause: closes the device until resumed.
     pub fn set_paused(&self, paused: bool) {
         self.control.paused.store(paused, Ordering::Relaxed);
+    }
+
+    pub fn set_backup(&self, settings: Option<backup::Settings>) {
+        if let Ok(mut b) = self.control.backup.lock() {
+            *b = settings;
+        }
     }
 
     pub fn is_paused(&self) -> bool {
@@ -377,6 +393,12 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
         return SessionEnd::Lost(Status::Searching);
     }
 
+    // first connection, Vial closed, foreign traffic over: the configuration may have changed
+    run_backup(&mut conn, &definition, ctx);
+    let mut backup_checked = Instant::now();
+    let mut backup_due = false;
+    let mut last_activity = Instant::now();
+
     let mut errors = 0;
     let mut last: Option<HudState> = None;
     // answers to our own setup requests may still be counted
@@ -386,6 +408,13 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
         if pause_reason(ctx, vial).is_some() {
             log::info!("HID: dispositivo chiuso (pausa)");
             return SessionEnd::Paused;
+        }
+        let idle = last.is_none_or(|s| s.matrix == [0; 8]) && last_activity.elapsed() >= BACKUP_IDLE;
+        if (backup_due || backup_checked.elapsed() >= BACKUP_INTERVAL) && (idle || conn.info.is_none()) {
+            run_backup(&mut conn, &definition, ctx);
+            conn.device.take_foreign();
+            backup_checked = Instant::now();
+            backup_due = false;
         }
         if conn.info.is_none() {
             // Firmware without HUD: just check now and then that the keyboard is still there.
@@ -407,6 +436,10 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
                 let keymap_changed = last.is_some_and(|l| {
                     l.keymap_version != state.keymap_version || l.flag(flags::COLEMAK) != state.flag(flags::COLEMAK)
                 });
+                if state.matrix != [0; 8] {
+                    last_activity = Instant::now();
+                }
+                backup_due |= keymap_changed;
                 // only changes reach the UI: an idle keyboard costs no repaints
                 let changed = last != Some(state);
                 last = Some(state);
@@ -439,6 +472,28 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
         ctx.sleep(Duration::from_secs_f64(1.0 / hz as f64).saturating_sub(started.elapsed()));
     }
     SessionEnd::Lost(Status::Searching)
+}
+
+/// Reads the whole configuration and writes a `.vil` if it differs from the
+/// last backup. Failures are logged only: the HUD keeps working.
+fn run_backup(conn: &mut Connection, def: &Definition, ctx: &Ctx) {
+    let Some(settings) = ctx.control.backup.lock().ok().and_then(|b| b.clone()) else { return };
+    let started = Instant::now();
+    let dump = match conn.device.dump(def) {
+        Ok(d) => d,
+        Err(e) => {
+            log::warn!("backup: lettura della configurazione fallita: {e}");
+            return;
+        }
+    };
+    match backup::save_if_changed(&settings, &def.name, &dump.to_vil(), crate::clock::now_secs()) {
+        Ok(Some((path, _previous))) => {
+            log::info!("backup salvato: {} ({} ms)", path.display(), started.elapsed().as_millis());
+            ctx.send(Event::Backup(path));
+        }
+        Ok(None) => log::debug!("backup: nessuna modifica ({} ms)", started.elapsed().as_millis()),
+        Err(e) => log::warn!("backup in {}: {e}", settings.dir.display()),
+    }
 }
 
 /// Stops polling while another program talks to the keyboard, but keeps
@@ -490,6 +545,42 @@ mod tests {
         let mut w = VialWatch::new();
         let _ = w.running();
         assert!(!w.system.processes().is_empty(), "sysinfo returned no processes");
+    }
+
+    #[test]
+    fn session_writes_a_backup_once() {
+        let dir = std::env::temp_dir().join(format!("keyboard-hud-worker-backup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let w = Worker::start(Source::Mock(0), 100, 50, || {});
+        w.set_backup(Some(backup::Settings { dir: dir.clone(), keep: 5 }));
+        // the setting may arrive after the first session has started: pause and resume
+        w.set_paused(true);
+        thread::sleep(Duration::from_millis(400));
+        w.set_paused(false);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut path = None;
+        while Instant::now() < deadline && path.is_none() {
+            if let Ok(Event::Backup(p)) = w.events.recv_timeout(Duration::from_millis(100)) {
+                path = Some(p);
+            }
+        }
+        let path = path.expect("no backup event");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let vil = crate::vial::vil::Vil::parse(&text, 8, 7).unwrap();
+        assert_eq!(vil.dynamic.combos.len(), 3);
+        // a new session with nothing changed writes nothing
+        w.set_paused(true);
+        thread::sleep(Duration::from_millis(400));
+        w.set_paused(false);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            if let Ok(Event::Backup(p)) = w.events.recv_timeout(Duration::from_millis(100)) {
+                panic!("unexpected backup {}", p.display());
+            }
+        }
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        drop(w);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -3,9 +3,13 @@
 
 use super::protocol::{self as p, HudCommand, HudInfo, HudState, ProtocolError, Report};
 use super::transport::{Transport, TransportError};
+use crate::kle::KeyRole;
 use crate::model::Keymap;
+use crate::vial::definition::Definition;
 use crate::vial::definition::DefinitionError;
+use crate::vial::dump::{decode_macros, qmk_setting_width, AltRepeat, Dump};
 use crate::vial::dynamic::{Combo, Dynamic, KeyOverride, TapDance, ENTRY_SIZE};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::time::{Duration, Instant};
 
@@ -43,6 +47,15 @@ impl From<ProtocolError> for DeviceError {
     fn from(e: ProtocolError) -> Self {
         DeviceError::Protocol(e)
     }
+}
+
+/// Dynamic entries as stored, empty ones included.
+#[derive(Debug, Clone, Default)]
+pub struct DynamicRaw {
+    pub tap_dances: Vec<TapDance>,
+    pub combos: Vec<Combo>,
+    pub key_overrides: Vec<KeyOverride>,
+    pub alt_repeat: Vec<AltRepeat>,
 }
 
 pub struct Device {
@@ -199,11 +212,17 @@ impl Device {
         Ok(km)
     }
 
-    /// Tap dances, combos and key overrides configured in Vial. Reading them
-    /// does not need the Vial unlock.
+    /// Tap dances, combos and key overrides configured in Vial (unused ones
+    /// dropped). Reading them does not need the Vial unlock.
     pub fn dynamic(&mut self) -> Result<Dynamic, DeviceError> {
+        let r = self.dynamic_raw()?;
+        Ok(Dynamic::new(r.tap_dances, r.combos, r.key_overrides))
+    }
+
+    /// Every dynamic entry, empty ones included.
+    pub fn dynamic_raw(&mut self) -> Result<DynamicRaw, DeviceError> {
         let req = p::dynamic_counts_request();
-        let (tap_dances, combos, overrides) = p::decode_dynamic_counts(&req, &self.via(&req, None)?)?;
+        let [tap_dances, combos, overrides, alt_repeat] = p::decode_dynamic_counts(&req, &self.via(&req, None)?)?;
         let mut read = |kind: p::DynamicKind, n: u8| -> Result<Vec<[u8; ENTRY_SIZE]>, DeviceError> {
             (0..n)
                 .map(|i| {
@@ -212,10 +231,146 @@ impl Device {
                 })
                 .collect()
         };
-        let tap_dances = read(p::DynamicKind::TapDance, tap_dances)?.iter().map(TapDance::from_bytes).collect();
-        let combos = read(p::DynamicKind::Combo, combos)?.iter().map(Combo::from_bytes).collect();
-        let overrides = read(p::DynamicKind::KeyOverride, overrides)?.iter().map(KeyOverride::from_bytes).collect();
-        Ok(Dynamic::new(tap_dances, combos, overrides))
+        Ok(DynamicRaw {
+            tap_dances: read(p::DynamicKind::TapDance, tap_dances)?.iter().map(TapDance::from_bytes).collect(),
+            combos: read(p::DynamicKind::Combo, combos)?.iter().map(Combo::from_bytes).collect(),
+            key_overrides: read(p::DynamicKind::KeyOverride, overrides)?.iter().map(KeyOverride::from_bytes).collect(),
+            alt_repeat: read(p::DynamicKind::AltRepeat, alt_repeat)?.iter().map(|b| AltRepeat::from_bytes(b)).collect(),
+        })
+    }
+
+    /// VIA protocol version (big-endian in bytes 1-2).
+    pub fn via_protocol(&mut self) -> Result<u16, DeviceError> {
+        let r = self.via(&p::via_request(&[p::VIA_GET_PROTOCOL_VERSION]), Some(p::VIA_GET_PROTOCOL_VERSION))?;
+        Ok(u16::from_be_bytes([r[1], r[2]]))
+    }
+
+    /// Macros: count and buffer through VIA, decoded. A firmware without
+    /// dynamic macros has none.
+    pub fn macros(&mut self) -> Result<Vec<Vec<crate::vial::dump::MacroAction>>, DeviceError> {
+        let r = self.via(&p::via_request(&[p::VIA_MACRO_COUNT]), None)?;
+        if r[0] != p::VIA_MACRO_COUNT {
+            return Ok(Vec::new());
+        }
+        let count = r[1] as usize;
+        let r = self.via(&p::via_request(&[p::VIA_MACRO_BUFFER_SIZE]), Some(p::VIA_MACRO_BUFFER_SIZE))?;
+        let size = u16::from_be_bytes([r[1], r[2]]) as usize;
+        let mut buffer = Vec::with_capacity(size);
+        while buffer.len() < size {
+            let o = (buffer.len() as u16).to_be_bytes();
+            let n = (size - buffer.len()).min(28) as u8;
+            let r = self.via(&p::via_request(&[p::VIA_MACRO_BUFFER, o[0], o[1], n]), Some(p::VIA_MACRO_BUFFER))?;
+            if r[1] != o[0] || r[2] != o[1] || r[3] != n {
+                return Err(ProtocolError::Mismatch.into());
+            }
+            buffer.extend_from_slice(&r[4..4 + n as usize]);
+            // every macro already ended: the rest is free space
+            if buffer.iter().filter(|&&b| b == 0).count() >= count {
+                break;
+            }
+        }
+        Ok(decode_macros(&buffer, count))
+    }
+
+    /// Encoder keycodes `[ccw, cw]` for `count` encoders on `layers` layers.
+    pub fn encoders(&mut self, layers: u8, count: u8) -> Result<Vec<Vec<[u16; 2]>>, DeviceError> {
+        (0..layers)
+            .map(|layer| {
+                (0..count)
+                    .map(|idx| {
+                        let req = p::via_request(&[p::VIAL_PREFIX, p::VIAL_GET_ENCODER, layer, idx]);
+                        let r = self.via(&req, None)?;
+                        if r == req {
+                            return Err(ProtocolError::Unsupported.into());
+                        }
+                        Ok([u16::from_be_bytes([r[0], r[1]]), u16::from_be_bytes([r[2], r[3]])])
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// QMK settings (tapping term, ...) by id; empty without `QMK_SETTINGS`.
+    pub fn qmk_settings(&mut self) -> Result<BTreeMap<u16, u32>, DeviceError> {
+        let mut ids = Vec::new();
+        let mut after = 0u16;
+        loop {
+            let g = after.to_le_bytes();
+            let req = p::via_request(&[p::VIAL_PREFIX, p::VIAL_QMK_SETTINGS_QUERY, g[0], g[1]]);
+            let r = self.via(&req, None)?;
+            if r == req {
+                break;
+            }
+            let batch: Vec<u16> = r
+                .chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .take_while(|&id| id != 0xFFFF && id > after)
+                .collect();
+            match batch.last() {
+                Some(&last) => {
+                    ids.extend_from_slice(&batch);
+                    after = last;
+                }
+                None => break,
+            }
+        }
+        let mut settings = BTreeMap::new();
+        for id in ids {
+            let Some(width) = qmk_setting_width(id) else {
+                log::debug!("impostazione QMK {id}: dimensione sconosciuta, non salvata");
+                continue;
+            };
+            let q = id.to_le_bytes();
+            let r = self.via(&p::via_request(&[p::VIAL_PREFIX, p::VIAL_QMK_SETTINGS_GET, q[0], q[1]]), None)?;
+            if r[0] != 0 {
+                continue;
+            }
+            let mut v = [0u8; 4];
+            v[..width].copy_from_slice(&r[1..1 + width]);
+            settings.insert(id, u32::from_le_bytes(v));
+        }
+        Ok(settings)
+    }
+
+    /// Everything a `.vil` holds, read from the keyboard.
+    pub fn dump(&mut self, def: &Definition) -> Result<Dump, DeviceError> {
+        let (vial_protocol, uid) = self.vial_id()?;
+        let layers = self.layer_count()?;
+        let keymap = self.via_keymap(layers, def.rows, def.cols)?;
+        let mut present = Vec::new();
+        let mut encoders = 0u8;
+        for k in &def.keys {
+            match k.role() {
+                Some(KeyRole::Matrix { row, col }) if !present.contains(&(row, col)) => present.push((row, col)),
+                Some(KeyRole::Encoder { index, .. }) => encoders = encoders.max(index + 1),
+                _ => {}
+            }
+        }
+        let encoders = match self.encoders(layers, encoders) {
+            Ok(e) => e,
+            Err(DeviceError::Protocol(ProtocolError::Unsupported)) => Vec::new(),
+            Err(e) => return Err(e),
+        };
+        let dynamic = match self.dynamic_raw() {
+            Ok(d) => d,
+            Err(DeviceError::Protocol(ProtocolError::Unsupported)) => DynamicRaw::default(),
+            Err(e) => return Err(e),
+        };
+        Ok(Dump {
+            uid,
+            vial_protocol,
+            via_protocol: self.via_protocol()?,
+            layout_options: self.layout_options()?,
+            keymap,
+            present,
+            encoders,
+            macros: self.macros()?,
+            tap_dances: dynamic.tap_dances,
+            combos: dynamic.combos,
+            key_overrides: dynamic.key_overrides,
+            alt_repeat: dynamic.alt_repeat,
+            settings: self.qmk_settings()?,
+        })
     }
 
     pub fn layer_count(&mut self) -> Result<u8, DeviceError> {

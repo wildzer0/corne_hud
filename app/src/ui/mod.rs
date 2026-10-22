@@ -8,6 +8,7 @@ pub mod search_panel;
 pub mod theme;
 
 use crate::autostart;
+use crate::backup;
 use crate::config::{Config, ConfigWatcher, Reload, StatsConfig, ThemeChoice, ViewMode, WindowState};
 use crate::headsup::HeadsUp;
 use crate::hid::protocol::{caps, HudInfo, HudState};
@@ -477,6 +478,7 @@ impl HudApp {
         if let Some(e) = s.config_error {
             app.notify(format!("{}: {e}", tr(app.lang, Msg::ConfigError)));
         }
+        app.apply_backup();
         ctx.options_mut(|o| o.zoom_with_keyboard = false);
         app.apply_poll_rate();
         app
@@ -531,6 +533,10 @@ impl HudApp {
                     self.info = info;
                     self.search_stale = true;
                 }
+                Event::Backup(path) => {
+                    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    self.notify(format!("{}: {name}", tr(self.lang, Msg::BackupSaved)));
+                }
                 Event::Keymap(km) => {
                     if let Some(l) = &mut self.live {
                         l.keymap = km;
@@ -578,6 +584,23 @@ impl HudApp {
         self.click_through = on;
         root_cmd(ctx, ViewportCommand::MousePassthrough(on));
         self.notify(tr(self.lang, if on { Msg::ClickThroughOn } else { Msg::ClickThroughOff }).to_string());
+    }
+
+    fn backup_dir(&self) -> PathBuf {
+        let dir = self.config.backup.dir.trim();
+        if dir.is_empty() {
+            paths::base_dir().join("backups")
+        } else {
+            paths::base_dir().join(dir) // an absolute path replaces the base
+        }
+    }
+
+    /// Automatic backups, for a real keyboard only.
+    fn apply_backup(&self) {
+        if let Some(w) = self.worker() {
+            let on = self.config.backup.enabled && !self.is_mock();
+            w.set_backup(on.then(|| backup::Settings { dir: self.backup_dir(), keep: self.config.backup.keep }));
+        }
     }
 
     fn set_visible(&mut self, ctx: &egui::Context, visible: bool) {
@@ -637,6 +660,7 @@ impl HudApp {
         }
         self.config = config;
         self.apply_poll_rate();
+        self.apply_backup();
         if resize {
             self.resize(ctx);
         }
@@ -988,6 +1012,12 @@ impl HudApp {
                 ui.selectable_value(&mut self.heat, HeatMode::All, tr(lang, Msg::HeatAll));
             });
         });
+        if ui.button(tr(lang, Msg::MenuBackups)).on_hover_text(self.backup_dir().display().to_string()).clicked() {
+            if let Err(e) = backup::open_folder(&self.backup_dir()) {
+                self.notify(format!("{}: {e}", self.backup_dir().display()));
+            }
+            self.close_menu();
+        }
         if ui.button(tr(lang, Msg::MenuStats)).clicked() {
             self.report.open = true;
             self.close_menu();

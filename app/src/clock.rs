@@ -37,6 +37,12 @@ pub fn timestamp() -> String {
     format!("{} {:02}:{:02}:{:02}", date_string((secs / 86_400) as i64), rem / 3600, rem % 3600 / 60, rem % 60)
 }
 
+/// `YYYY-MM-DDTHHMMSSZ` (UTC) for file names: sorts chronologically, no colons.
+pub fn file_stamp(secs: u64) -> String {
+    let rem = secs % 86_400;
+    format!("{}T{:02}{:02}{:02}Z", date_string((secs / 86_400) as i64), rem / 3600, rem % 3600 / 60, rem % 60)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

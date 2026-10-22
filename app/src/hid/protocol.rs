@@ -21,6 +21,13 @@ pub const VIAL_GET_KEYBOARD_ID: u8 = 0x00;
 pub const VIAL_GET_SIZE: u8 = 0x01;
 pub const VIAL_GET_DEF: u8 = 0x02;
 pub const VIAL_DYNAMIC_ENTRY_OP: u8 = 0x0D;
+pub const VIAL_GET_ENCODER: u8 = 0x03;
+pub const VIAL_QMK_SETTINGS_QUERY: u8 = 0x09;
+pub const VIAL_QMK_SETTINGS_GET: u8 = 0x0A;
+pub const VIA_GET_PROTOCOL_VERSION: u8 = 0x01;
+pub const VIA_MACRO_COUNT: u8 = 0x0C;
+pub const VIA_MACRO_BUFFER_SIZE: u8 = 0x0D;
+pub const VIA_MACRO_BUFFER: u8 = 0x0E;
 
 /// Sub-commands of `vial_dynamic_entry_op` (reads only).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +35,7 @@ pub enum DynamicKind {
     TapDance = 0x01,
     Combo = 0x03,
     KeyOverride = 0x05,
+    AltRepeat = 0x07,
 }
 const DYNAMIC_GET_COUNTS: u8 = 0x00;
 
@@ -342,13 +350,13 @@ pub fn dynamic_counts_request() -> Report {
     via_request(&[VIAL_PREFIX, VIAL_DYNAMIC_ENTRY_OP, DYNAMIC_GET_COUNTS])
 }
 
-/// Entries of each kind: `(tap dances, combos, key overrides)`. A firmware
-/// without dynamic entries leaves the request unchanged.
-pub fn decode_dynamic_counts(req: &Report, resp: &Report) -> Result<(u8, u8, u8), ProtocolError> {
+/// Entries of each kind: `[tap dances, combos, key overrides, alt repeat
+/// keys]`. A firmware without dynamic entries leaves the request unchanged.
+pub fn decode_dynamic_counts(req: &Report, resp: &Report) -> Result<[u8; 4], ProtocolError> {
     if resp == req {
         return Err(ProtocolError::Unsupported);
     }
-    Ok((resp[0], resp[1], resp[2]))
+    Ok([resp[0], resp[1], resp[2], resp[3]])
 }
 
 pub fn dynamic_entry_request(kind: DynamicKind, index: u8) -> Report {
@@ -525,7 +533,7 @@ mod tests {
         assert_eq!(decode_dynamic_counts(&req, &req), Err(ProtocolError::Unsupported));
         let mut r = [0u8; REPORT_SIZE];
         r[..3].copy_from_slice(&[8, 16, 4]);
-        assert_eq!(decode_dynamic_counts(&req, &r), Ok((8, 16, 4)));
+        assert_eq!(decode_dynamic_counts(&req, &r), Ok([8, 16, 4, 0]));
 
         let req = dynamic_entry_request(DynamicKind::Combo, 3);
         assert_eq!(&req[..4], &[0xFE, 0x0D, 0x03, 0x03]);

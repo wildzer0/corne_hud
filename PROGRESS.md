@@ -61,7 +61,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
 
 4. **Backup automatico della configurazione** (proposta dell'utente, 2026-10-22), in quest'ordine:
    1. ✅ **pausa automatica sul traffico altrui** (`Device::take_foreign`/`listen`, `worker::foreign_pause`, silenzio richiesto 20 s): la web app di Vial (WebHID nel browser) non si vede tra i processi. Se l'HUD riceve risposte che non ha chiesto, va in pausa e riprende dopo alcuni secondi di silenzio. La pausa manuale resta consigliata per lavorare con la web app;
-   2. **backup del `.vil`** alla prima connessione, alla chiusura di Vial, alla fine del traffico altrui, al cambio di `keymap_version` e con un controllo periodico (circa 1 minuto, a tastiera ferma) per combo, tap dance e key override, che non aggiornano `keymap_version`;
+   2. ✅ **backup del `.vil`** (`vial/dump.rs`, `backup.rs`, `Device::dump`, `worker::run_backup`; keycode scritti come numeri, accettati da vial-gui) alla prima connessione, alla chiusura di Vial, alla fine del traffico altrui, al cambio di `keymap_version` e con un controllo periodico (circa 1 minuto, a tastiera ferma) per combo, tap dance e key override, che non aggiornano `keymap_version`;
    3. **storico con diff leggibile**: `CHANGELOG.md` nella cartella dei backup, con voci come "NAV, riga 2 colonna 4 (Fn2 + B): Redo → Ctrl+Y" e "Combo aggiunta: J + K insieme → Esc".
 
    Dettagli del backup:
