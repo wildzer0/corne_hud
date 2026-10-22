@@ -4,7 +4,7 @@ Registro dei progressi per riprendere il lavoro tra una sessione e l'altra.
 Specifica completa: [docs/PROMPT_HUD.md](docs/PROMPT_HUD.md). Protocollo: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Aggiorna questo file alla fine di ogni sessione.
 
-_Ultimo aggiornamento: 2026-10-22. Release **v0.4.0** (mini indicatore esteso: one-shot, modificatori, connessione, avvisi; contenuto delle macro; avviso "altra metà scollegata")._
+_Ultimo aggiornamento: 2026-10-22. Release **v0.5.0** (stili: opacità e arrotondamento dei tasti, temi visivi; lucchetto Layer Lock dal firmware)._
 
 ---
 
