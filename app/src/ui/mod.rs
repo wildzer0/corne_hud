@@ -59,6 +59,31 @@ fn root_cmd(ctx: &egui::Context, cmd: ViewportCommand) {
     ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, cmd);
 }
 
+/// Where a window drag started: cursor on screen (physical pixels) and window
+/// position (points).
+#[derive(Debug, Clone, Copy)]
+struct WindowDrag {
+    cursor: egui::Pos2,
+    window: egui::Pos2,
+}
+
+/// Cursor position on screen, in physical pixels. Only on Windows, where
+/// winit's `StartDrag` stays dead for good once Windows does not start its
+/// move loop (button already released, or held still until egui calls it a
+/// drag): there the HUD moves its window by itself.
+#[cfg(windows)]
+fn cursor_on_screen() -> Option<egui::Pos2> {
+    let mut p = windows_sys::Win32::Foundation::POINT { x: 0, y: 0 };
+    // SAFETY: GetCursorPos only writes the POINT it is given
+    let ok = unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut p) } != 0;
+    ok.then(|| egui::pos2(p.x as f32, p.y as f32))
+}
+
+#[cfg(not(windows))]
+fn cursor_on_screen() -> Option<egui::Pos2> {
+    None
+}
+
 /// Statistics are counted from polled states: below this rate quick taps get lost.
 const MIN_STATS_HZ: u32 = 30;
 const HEAT_REFRESH: Duration = Duration::from_secs(1);
@@ -329,6 +354,8 @@ pub struct HudApp {
     pinned: bool,
     /// Mouse passthrough currently requested from the window system.
     passthrough: bool,
+    /// Window drag moved by the HUD itself (Windows).
+    drag: Option<WindowDrag>,
     search: SearchPanel,
     search_stale: bool,
     stats: Option<Stats>,
@@ -381,6 +408,7 @@ impl HudApp {
             headsup_on,
             pinned: false,
             passthrough: false,
+            drag: None,
             search: SearchPanel::default(),
             search_stale: true,
             stats,
@@ -665,6 +693,29 @@ impl HudApp {
         });
     }
 
+    /// Moves the window while the background is dragged: by itself where the
+    /// cursor position on screen is known, otherwise through the window system.
+    fn handle_drag(&mut self, ctx: &egui::Context, response: &egui::Response) {
+        if response.drag_started() {
+            let outer = ctx.input(|i| i.viewport().outer_rect);
+            match (cursor_on_screen(), outer) {
+                (Some(cursor), Some(outer)) => self.drag = Some(WindowDrag { cursor, window: outer.min }),
+                _ => ctx.send_viewport_cmd(ViewportCommand::StartDrag),
+            }
+        }
+        if !response.dragged() {
+            self.drag = None;
+            return;
+        }
+        // from the start position, not from the current one: no error piles up
+        if let (Some(d), Some(cursor)) = (self.drag, cursor_on_screen()) {
+            let target = d.window + (cursor - d.cursor) / ctx.pixels_per_point();
+            if ctx.input(|i| i.viewport().outer_rect).is_none_or(|r| r.min != target) {
+                ctx.send_viewport_cmd(ViewportCommand::OuterPosition(target));
+            }
+        }
+    }
+
     fn handle_zoom(&mut self, ctx: &egui::Context) {
         let zoom = ctx.input(|i| i.zoom_delta());
         if (zoom - 1.0).abs() > f32::EPSILON {
@@ -919,10 +970,8 @@ impl eframe::App for HudApp {
 
         let full = ui.max_rect();
         let response = ui.interact(full, ui.scope_id().with("background"), Sense::click_and_drag());
-        if response.drag_started() && !self.click_through {
-            ctx.send_viewport_cmd(ViewportCommand::StartDrag);
-        }
         if !self.click_through {
+            self.handle_drag(&ctx, &response);
             self.handle_zoom(&ctx);
         }
         // live data wins; otherwise the files loaded from disk
@@ -937,6 +986,7 @@ impl eframe::App for HudApp {
                     || self.search.open
                     || self.menu.is_some()
                     || ctx.any_popup_open()
+                    || self.drag.is_some()
                     || (self.headsup.level() > 0.5 && response.hovered());
                 self.headsup.update(wanted, force, hu, now)
             }

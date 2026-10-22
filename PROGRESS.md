@@ -4,7 +4,7 @@ Registro dei progressi per riprendere il lavoro tra una sessione e l'altra.
 Specifica completa: [docs/PROMPT_HUD.md](docs/PROMPT_HUD.md). Protocollo: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Aggiorna questo file alla fine di ogni sessione.
 
-_Ultimo aggiornamento: 2026-10-22. Release **v0.1.0** taggata e pubblicata; branch `main` allineato a `origin`._
+_Ultimo aggiornamento: 2026-10-22. Release **v0.1.0** pubblicata; su `main` ci sono commit locali non ancora pubblicati (correzione del trascinamento su Windows)._
 
 ---
 
@@ -33,6 +33,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - connessione, riconnessione dopo scollegamento, pausa con Vial aperto e ripresa;
    - `HUD_TOG` tocco e doppio tocco, heads-up, click-through;
    - lucchetti dei layer: "tenuto" e "bloccato" sono dedotti dall'app (vedi decisioni), da verificare.
+   - trascinamento dell'HUD su Windows dopo la correzione (vedi registro): clic tenuto fermo, clic rapidi, trascinamenti lunghi, anche su monitor con scala diversa.
 4. **File `LICENSE`** (GPL-2.0-or-later): manca ancora, anche se v0.1.0 è già pubblicata. In attesa di conferma dell'utente.
 5. **Prossime release**: aumentare `version` in `app/Cargo.toml`, poi `git tag vX.Y.Z && git push origin vX.Y.Z`. Il tag deve corrispondere alla versione, altrimenti la CI si ferma.
 
@@ -59,6 +60,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
 - Finestra senza barra delle applicazioni (`with_taskbar(false)`); Esc non chiude l'app; si esce dal menu contestuale.
 - Il worker inoltra lo stato solo quando cambia, così a tastiera ferma l'HUD non ridisegna.
 - Niente icona nella tray: la feature `tray` è stata tolta perché era vuota.
+- Su Windows l'HUD sposta la propria finestra da solo (`GetCursorPos` + `OuterPosition`), invece di usare `StartDrag` di winit (vedi registro).
 - Il menu contestuale è una finestra separata, non un popup dentro l'HUD (vedi registro, 2026-10-22).
 
 ## Ambiente di sviluppo
@@ -98,6 +100,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-22**: l'utente segnala che su Windows, dopo un po', l'HUD non si trascina più. Causa: in winit 0.30, `drag_window` alza il flag `dragging` e lo azzera solo con `WM_EXITSIZEMOVE`. Se Windows non avvia il ciclo di spostamento (bottone già rilasciato, oppure clic tenuto fermo: egui lo considera un trascinamento dopo 0,8 s), il flag resta alzato e ogni `StartDrag` successivo viene ignorato. Correzione: su Windows la finestra va alla posizione iniziale più lo spostamento del cursore letto con `GetCursorPos`. Il calcolo parte sempre dall'inizio del trascinamento, quindi gli errori non si sommano: un primo tentativo basato sugli spostamenti relativi del puntatore egui, provato in X11 con XTest, accumulava circa 60 px per trascinamento. Sugli altri sistemi resta `StartDrag`. Controllo con clippy anche per `x86_64-pc-windows-msvc` (target aggiunto a rustup). Da provare su Windows.
 
 - **2026-10-22**: l'utente conferma che la CI è verde sui tre sistemi. Push dei commit del menu e di `PROGRESS.md`, poi tag e pubblicazione di **v0.1.0**. Da ora i commit li fa Claude, su `main`; push e tag solo su richiesta.
 
