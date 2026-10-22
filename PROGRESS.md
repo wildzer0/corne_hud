@@ -4,7 +4,7 @@ Registro dei progressi per riprendere il lavoro tra una sessione e l'altra.
 Specifica completa: [docs/PROMPT_HUD.md](docs/PROMPT_HUD.md). Protocollo: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Aggiorna questo file alla fine di ogni sessione.
 
-_Ultimo aggiornamento: 2026-10-22. Release **v0.5.0** (stili: opacità e arrotondamento dei tasti, temi visivi; lucchetto Layer Lock dal firmware)._
+_Ultimo aggiornamento: 2026-10-22. Release **v1.0.0** (prima release stabile: finestra Diagnostica, keycast, interfaccia in inglese)._
 
 ---
 
@@ -154,6 +154,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-22**: versione **1.0.0**, la prima release stabile. Motivo: l'utente usava ancora l'exe della 0.5.0 con una config nuova (`[keycast]`, `appearance.language`), che veniva rifiutata per `deny_unknown_fields`; da una build di `main` non si capiva quale versione fosse, perché diceva ancora 0.5.0.
 
 - **2026-10-22**: interfaccia in inglese. `i18n.rs` ora ha italiano e inglese affiancati per ogni messaggio (una traduzione mancante non compila), lingua corrente globale (`i18n::set_current`, `pick`, macro `tr_format!`) per i testi costruiti lontano dalla UI: legende, ricerca, CHANGELOG, CSV, errori. `[appearance] language` (`auto`/`it`/`en`) e voce di menu; `auto` legge `LC_ALL`/`LC_MESSAGES`/`LANG`, su Windows `GetUserDefaultUILanguage` (feature `Win32_Globalization`), su macOS `defaults read -g AppleLanguages` (non provato: macOS non compila da Linux). Il log resta in italiano, come i dettagli tecnici di `ProtocolError::Invalid`. Clippy pulito anche per `x86_64-pc-windows-msvc`. Screenshot in inglese di menu e ricerca.
 
