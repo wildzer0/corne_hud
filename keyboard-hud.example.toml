@@ -68,6 +68,9 @@ hidden_opacity = 0.0      # 0 = invisibile, 0.15 = appena visibile
 # Un layer bloccato (TG, Layer Lock) tiene su l'HUD intero ("hud") oppure solo
 # il mini indicatore ("indicator").
 locked_layer = "hud"
+# Lo stesso per un one-shot in attesa (OSL, one-shot mods): con "indicator"
+# l'HUD resta nascosto e il badge mostra il layer o il modificatore in attesa.
+oneshot = "hud"
 
 [indicator]
 # Mini indicatore: con l'HUD nascosto mostra in un angolo dello schermo solo

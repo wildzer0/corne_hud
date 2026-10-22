@@ -10,15 +10,15 @@ pub mod theme;
 use crate::autostart;
 use crate::backup;
 use crate::changes;
-use crate::config::{Config, ConfigWatcher, LockedLayer, Reload, StatsConfig, ThemeChoice, ViewMode, WindowState};
-use crate::headsup::HeadsUp;
+use crate::config::{Config, ConfigWatcher, Reload, StatsConfig, ThemeChoice, ViewMode, WindowState};
+use crate::headsup::{self, HeadsUp};
 use crate::hid::protocol::{caps, HudInfo, HudState};
 use crate::hid::worker::{Event, PauseReason, Status, Worker};
 use crate::i18n::{tr, Lang, Msg};
 use crate::kle::{KeyRole, KleKey};
 use crate::labels::Labels;
 use crate::logging;
-use crate::model::{classify_layers, highest_layer, Keymap, LayerHold};
+use crate::model::{classify_layers, highest_layer, Keymap};
 use crate::paths;
 use crate::screen;
 use crate::stats::{Stats, Totals};
@@ -1328,15 +1328,9 @@ impl eframe::App for HudApp {
         let hu = &self.config.headsup;
         let level = match (&live_state, self.headsup_on) {
             (Some(s), true) => {
-                // locked layers may be left to the mini indicator
-                let mut s = *s;
-                if hu.locked_layer == LockedLayer::Indicator && self.config.indicator.enabled {
-                    for &(l, how) in &layers {
-                        if how == LayerHold::Locked {
-                            s.layer_state &= !(1u32 << l);
-                        }
-                    }
-                }
+                // locked layers and one-shots may be left to the mini indicator
+                let s =
+                    if self.config.indicator.enabled { headsup::without_indicator_states(s, &layers, hu) } else { *s };
                 let wanted = self.headsup.wants(&s, hu, now);
                 let force = self.pinned
                     || self.search.open

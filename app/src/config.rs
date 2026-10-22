@@ -113,7 +113,9 @@ pub struct HeadsUp {
     /// Opacity while faded out (0 = invisible).
     pub hidden_opacity: f32,
     /// What a locked layer (TG, Layer Lock) brings up.
-    pub locked_layer: LockedLayer,
+    pub locked_layer: ShownIn,
+    /// What a pending one-shot (OSL, one-shot mods) brings up.
+    pub oneshot: ShownIn,
 }
 
 impl Default for HeadsUp {
@@ -123,14 +125,15 @@ impl Default for HeadsUp {
             modifier_delay_ms: 400,
             hide_delay_ms: 800,
             hidden_opacity: 0.0,
-            locked_layer: LockedLayer::Hud,
+            locked_layer: ShownIn::Hud,
+            oneshot: ShownIn::Hud,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum LockedLayer {
+pub enum ShownIn {
     /// The whole HUD stays on screen.
     #[default]
     Hud,
@@ -417,7 +420,8 @@ mod tests {
         assert_eq!(parse_color(&c.layers[1].color), Some((0x00, 0xB9, 0xD7)));
         assert_eq!(c.polling.visible_hz, 60);
         assert!(c.headsup.enabled);
-        assert_eq!(c.headsup.locked_layer, LockedLayer::Hud);
+        assert_eq!(c.headsup.locked_layer, ShownIn::Hud);
+        assert_eq!(c.headsup.oneshot, ShownIn::Hud);
         assert_eq!(c.indicator.position, ScreenPlace::TopRight);
         assert_eq!(c.headsup.modifier_delay_ms, 400);
         assert!(c.labels.iter().any(|l| l.label == "Step over" && l.keycode.as_deref() == Some("KC_F10")));
