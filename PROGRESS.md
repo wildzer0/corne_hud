@@ -156,6 +156,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 
 ## Registro delle sessioni
 
+- **2026-10-22**: release **v0.4.0** pubblicata (tag su `6bbc726`, CI verde prima del tag) con tutti gli asset. Notato guardando il firmware: il byte 9 dello stato (`locked_layers`, da `is_layer_locked` per `QK_LLCK`) è letto in `protocol.rs` ma l'app non lo usa ancora; `TG` non vi compare.
+
 - **2026-10-22**: contenuto delle macro sui tasti (`legend::macro_legend`, `Dynamic::macros` letto via VIA a ogni connessione e dalla sezione `macro` del `.vil`) e avviso "Altra metà scollegata" dal flag `SLAVE_OK`, mai usato prima (`HudApp::split_seen`: solo dopo averla vista collegata, perché i firmware non split non mandano il flag), più il chip "Bloc Num" nella vista completa. 112 test; verificato con uno screenshot del mock modificato (macro su due tasti, flag tolto dopo 500 ms). Da provare con la tastiera vera staccando il TRRS.
 
 - **2026-10-22**: mini indicatore esteso su richiesta dell'utente. `[headsup] oneshot` e `modifiers` (`hud`/`indicator`, come `locked_layer`; filtro in `headsup::without_indicator_states`); chip della connessione (non trovata, in pausa, permessi, errore) con l'HUD nascosto; avvisi di 2 s per QWERTY/Colemak-DH, OS e HUD nascosto. Verificato con `--mock` e log temporanei (eframe non fa screenshot dei viewport immediati): one-shot ACC e Ctrl tenuto solo nel badge, avvisi Colemak e OS con mock modificato, "Tastiera non trovata" con `--vid` inesistente e HUD nascosto.
