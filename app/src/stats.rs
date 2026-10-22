@@ -3,7 +3,7 @@
 
 use crate::clock;
 use crate::model::Keymap;
-use crate::vial::keycode::{qmk_name, KC_NO, KC_TRNS};
+use crate::vial::keycode::{decode, qmk_name, Keycode, KC_NO, KC_TRNS};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -104,6 +104,13 @@ impl Stats {
         }
     }
 
+    /// Presses per day from `from_day` to `today`, days without presses included.
+    pub fn daily(&self, from_day: i64, today: i64) -> Vec<(i64, u64)> {
+        (from_day..=today)
+            .map(|d| (d, self.data.days.get(&clock::date_string(d)).map_or(0, |b| b.values().sum())))
+            .collect()
+    }
+
     /// Presses per position since `from_day` (inclusive), or over all days.
     pub fn totals(&self, from_day: Option<i64>) -> Totals {
         let from = from_day.map(clock::date_string);
@@ -170,6 +177,141 @@ pub fn finger_of(row: u8, col: u8, rows: u8) -> (Hand, Finger) {
     (hand, finger)
 }
 
+/// Row of a position within its half.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Row {
+    Home,
+    Top,
+    Bottom,
+    Thumb,
+}
+
+pub const ROWS: [Row; 4] = [Row::Home, Row::Top, Row::Bottom, Row::Thumb];
+
+impl Row {
+    pub fn name(self) -> &'static str {
+        match self {
+            Row::Home => "home row",
+            Row::Top => "riga alta",
+            Row::Bottom => "riga bassa",
+            Row::Thumb => "pollici",
+        }
+    }
+}
+
+pub fn row_of(row: u8, rows: u8) -> Row {
+    let half = (rows / 2).max(1);
+    match row % half {
+        r if r == half - 1 => Row::Thumb,
+        0 => Row::Top,
+        1 => Row::Home,
+        _ => Row::Bottom,
+    }
+}
+
+/// Rough effort of pressing a position (1 = index or middle finger on the
+/// home row). A heuristic for suggestions, not a measurement: finger
+/// strength, row, and the stretched columns (outer pinky, inner index).
+pub fn effort(row: u8, col: u8, rows: u8) -> f32 {
+    let (_, finger) = finger_of(row, col, rows);
+    if finger == Finger::Thumb {
+        // the middle thumb key is the natural one
+        return if col == 4 { 1.0 } else { 1.2 };
+    }
+    let base = match finger {
+        Finger::Pinky => 1.6,
+        Finger::Ring => 1.3,
+        _ => 1.0,
+    };
+    let row_factor = match row_of(row, rows) {
+        Row::Top => 1.2,
+        Row::Bottom => 1.3,
+        _ => 1.0,
+    };
+    let stretch = match col {
+        0 | 6 => 0.5,
+        5 => 0.3,
+        _ => 0.0,
+    };
+    base * row_factor + stretch
+}
+
+/// Move a busy key from a tiring position to an easy one on the same layer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Suggestion {
+    pub layer: u8,
+    /// Busy key: position and presses.
+    pub from: (u8, u8),
+    pub from_presses: u64,
+    /// Easy position: what it holds now (KC_NO or a rarely used key) and presses.
+    pub to: (u8, u8),
+    pub to_presses: u64,
+    /// Estimated saving, in % of the effort of the whole period.
+    pub saving_pct: f32,
+}
+
+/// Keys that must not move: layer switches (moving them changes how layers are reached).
+fn movable(code: u16) -> bool {
+    !matches!(decode(code), Keycode::Layer { .. } | Keycode::LayerTap { .. } | Keycode::LayerMod { .. })
+}
+
+/// Swaps of a busy, tiring key with an easy, quiet position, best first.
+/// Upper layers only: the letters of the base layer are a layout choice
+/// (QWERTY, Colemak-DH), not something to rearrange key by key.
+fn suggestions(recent: &Totals, keymap: &Keymap, positions: &[(u8, u8)], total_effort: f32) -> Vec<Suggestion> {
+    let rows = keymap.rows();
+    let mut out = Vec::new();
+    for layer in 1..keymap.layers() {
+        let n = |&(r, c): &(u8, u8)| recent.get(&(layer, r, c)).copied().unwrap_or(0);
+        let layer_total: u64 = positions.iter().map(n).sum();
+        if layer_total == 0 {
+            continue;
+        }
+        let mut busy: Vec<(u8, u8)> = positions
+            .iter()
+            .copied()
+            .filter(|p| {
+                let code = keymap.get(layer, p.0, p.1);
+                movable(code)
+                    && code != KC_TRNS
+                    && code != KC_NO
+                    && effort(p.0, p.1, rows) >= 1.4
+                    && n(p) >= (layer_total / 50).max(20)
+            })
+            .collect();
+        busy.sort_by(|a, b| (n(b) as f32 * effort(b.0, b.1, rows)).total_cmp(&(n(a) as f32 * effort(a.0, a.1, rows))));
+        let mut free: Vec<(u8, u8)> = positions
+            .iter()
+            .copied()
+            .filter(|p| {
+                let code = keymap.get(layer, p.0, p.1);
+                // a transparent key on an upper layer is usually meant to be
+                code != KC_TRNS && movable(code) && effort(p.0, p.1, rows) <= 1.0
+            })
+            .collect();
+        free.sort_by(|a, b| effort(a.0, a.1, rows).total_cmp(&effort(b.0, b.1, rows)).then(n(a).cmp(&n(b))));
+        for b in busy {
+            let pick = free.iter().position(|f| keymap.get(layer, f.0, f.1) == KC_NO || n(f) * 5 <= n(&b));
+            let Some(i) = pick else { continue };
+            let f = free.remove(i);
+            let gain = (n(&b) - n(&f)) as f32 * (effort(b.0, b.1, rows) - effort(f.0, f.1, rows));
+            if gain > 0.0 {
+                out.push(Suggestion {
+                    layer,
+                    from: b,
+                    from_presses: n(&b),
+                    to: f,
+                    to_presses: n(&f),
+                    saving_pct: 100.0 * gain / total_effort.max(1.0),
+                });
+            }
+        }
+    }
+    out.sort_by(|a, b| b.saving_pct.total_cmp(&a.saving_pct));
+    out.truncate(5);
+    out
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Report {
     pub days: u32,
@@ -183,6 +325,15 @@ pub struct Report {
     pub fingers: [[u64; 5]; 2],
     /// Keys with a function that were never pressed in the period.
     pub unused: Vec<(Position, u16)>,
+    /// Presses per row, in [`ROWS`] order.
+    pub rows: [u64; 4],
+    /// Most pressed keys, busiest first.
+    pub top: Vec<(Position, u64)>,
+    /// Presses per day in the period, oldest first.
+    pub daily: Vec<(i64, u64)>,
+    /// Average effort per press (see [`effort`]).
+    pub avg_effort: f32,
+    pub suggestions: Vec<Suggestion>,
 }
 
 /// Builds the report for the last `days` days. `positions` are the matrix
@@ -196,8 +347,12 @@ pub fn report(stats: &Stats, keymap: &Keymap, positions: &[(u8, u8)], days: u32,
         all_time: all.values().sum(),
         ..Default::default()
     };
+    let mut total_effort = 0.0;
     for (&(l, row, col), &n) in &recent {
         r.total += n;
+        total_effort += n as f32 * effort(row, col, keymap.rows());
+        let ri = ROWS.iter().position(|x| *x == row_of(row, keymap.rows())).unwrap_or(0);
+        r.rows[ri] += n;
         if let Some(v) = r.per_layer.get_mut(l as usize) {
             *v += n;
         }
@@ -216,6 +371,13 @@ pub fn report(stats: &Stats, keymap: &Keymap, positions: &[(u8, u8)], days: u32,
         }
     }
     r.unused.sort();
+    let mut top: Vec<(Position, u64)> = recent.iter().map(|(&p, &n)| (p, n)).collect();
+    top.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    top.truncate(10);
+    r.top = top;
+    r.daily = stats.daily(today - days as i64 + 1, today);
+    r.avg_effort = if r.total == 0 { 0.0 } else { total_effort / r.total as f32 };
+    r.suggestions = suggestions(&recent, keymap, positions, total_effort);
     r
 }
 
@@ -333,6 +495,49 @@ mod tests {
         assert!(text.starts_with("layer,nome_layer"));
         assert!(text.contains("0,BASE,1,1,sinistra,mignolo,\"KC_A\",3,3"), "{text}");
         assert!(text.contains("1,SYM,5,4,destra,indice,\"KC_1\",1,0"), "{text}");
+    }
+
+    #[test]
+    fn effort_model() {
+        // index on the home row is the reference; pinky on the top row is the worst letter key
+        assert_eq!(effort(1, 4, 8), 1.0);
+        assert!((effort(0, 1, 8) - 1.92).abs() < 1e-6);
+        assert!(effort(1, 0, 8) > effort(1, 1, 8)); // outer column
+        assert!(effort(5, 5, 8) > effort(5, 4, 8)); // inner index column
+        assert_eq!(effort(3, 4, 8), 1.0); // main thumb
+        assert_eq!(row_of(1, 8), Row::Home);
+        assert_eq!(row_of(4, 8), Row::Top);
+        assert_eq!(row_of(7, 8), Row::Thumb);
+    }
+
+    #[test]
+    fn suggests_moving_busy_keys_to_easy_places() {
+        let path = temp("suggest");
+        let today = clock::today();
+        let mut km = Keymap::new(2, 8, 7);
+        km.set(1, 0, 1, 0x1D); // Z on the top-left pinky: busy
+        km.set(1, 1, 4, 0x09); // F on the home row index: rarely used
+        km.set(1, 1, 3, 0x5241); // DF(1) on the home row: never a target
+        km.set(1, 1, 2, 0x04); // A on the home row ring: busy, but not tiring enough
+        km.set(0, 0, 1, 0x14); // the base layer is never rearranged
+        km.set(0, 1, 4, 0x09);
+        let positions = [(0, 1), (1, 4), (1, 3), (1, 2)];
+        let mut s = Stats::load(path);
+        for _ in 0..200 {
+            s.record((1, 0, 1), today);
+            s.record((1, 1, 2), today);
+            s.record((0, 0, 1), today);
+        }
+        s.record((1, 1, 4), today);
+        let r = report(&s, &km, &positions, 30, today);
+        assert_eq!(r.suggestions.len(), 1, "{:?}", r.suggestions);
+        let sg = &r.suggestions[0];
+        assert_eq!((sg.layer, sg.from, sg.to, sg.from_presses, sg.to_presses), (1, (0, 1), (1, 4), 200, 1));
+        assert!(sg.saving_pct > 5.0 && sg.saving_pct < 50.0, "{}", sg.saving_pct);
+        assert_eq!(r.top[0].1, 200);
+        assert_eq!(r.rows, [201, 400, 0, 0]);
+        assert_eq!(r.daily.len(), 30);
+        assert_eq!(r.daily.last(), Some(&(today, 601)));
     }
 
     #[test]
