@@ -92,6 +92,12 @@ enabled = true
 # top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right
 position = "top-right"
 
+[keycast]
+# Per video e presentazioni: mostra sullo schermo le scorciatoie premute
+# (Ctrl+C, Alt+Tab, F5...). Mai il testo, niente viene salvato. Anche dal menu.
+enabled = false
+position = "bottom"   # stessi valori di [indicator]
+
 [stats]
 # Solo contatori aggregati per tasto, layer e giorno: mai testo, sequenze o tempi.
 enabled = true

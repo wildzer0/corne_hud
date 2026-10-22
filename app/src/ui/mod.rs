@@ -4,6 +4,7 @@
 pub mod diagnostics;
 pub mod header;
 pub mod keyboard;
+pub mod keycast;
 pub mod report;
 pub mod search_panel;
 pub mod theme;
@@ -47,6 +48,10 @@ pub fn base_size(mode: ViewMode) -> Vec2 {
 /// The context menu lives in its own small window: inside the HUD it would
 /// be clipped when the HUD is small (low scale, compact view).
 const MENU_VIEWPORT: &str = "hud-menu";
+/// Keycast window: id and size.
+const KEYCAST_VIEWPORT: &str = "hud-keycast";
+const KEYCAST_SIZE: Vec2 = Vec2::new(720.0, 56.0);
+
 /// Mini indicator window: id and size (the panel inside fits its contents).
 const INDICATOR_VIEWPORT: &str = "hud-indicator";
 const INDICATOR_SIZE: Vec2 = Vec2::new(420.0, 32.0);
@@ -413,6 +418,8 @@ pub struct HudApp {
     headsup_on: bool,
     /// Combos drawn over the keys.
     show_combos: bool,
+    keycast_on: bool,
+    keycast: keycast::Keycast,
     /// Foreground application, for per-application labels.
     foreground: crate::foreground::Foreground,
     tray: Option<crate::tray::Tray>,
@@ -449,6 +456,7 @@ impl HudApp {
         let stats = s.config.stats.enabled.then(|| Stats::load(stats_path(&s.config.stats)));
         let headsup_on = s.window.headsup.unwrap_or(s.config.headsup.enabled);
         let show_combos = s.window.combos.unwrap_or(false);
+        let keycast_on = s.window.keycast.unwrap_or(s.config.keycast.enabled);
         let style_name = s
             .window
             .style
@@ -502,6 +510,8 @@ impl HudApp {
             headsup: HeadsUp::default(),
             headsup_on,
             show_combos,
+            keycast_on,
+            keycast: keycast::Keycast::default(),
             foreground: crate::foreground::Foreground::new(),
             tray: None,
             autostart_args: s.autostart_args,
@@ -650,12 +660,24 @@ impl HudApp {
                     self.search_stale = true;
                 }
                 Event::State(s) => {
+                    let presses = self.fade.new_presses(&s.matrix);
+                    let layer = highest_layer(s.active_mask());
                     if let Some(stats) = &mut self.stats {
                         // counters only: which key, on which layer, which day
-                        let layer = highest_layer(s.active_mask());
                         let today = crate::clock::today();
-                        for (r, c) in self.fade.new_presses(&s.matrix) {
+                        for &(r, c) in &presses {
                             stats.record((layer, r, c), today);
+                        }
+                    }
+                    if self.keycast_on {
+                        if let Some(l) = &self.live {
+                            let codes: Vec<((u8, u8), u16)> = presses
+                                .iter()
+                                .map(|&(r, c)| ((r, c), l.keymap.resolve(layer, s.active_mask(), r, c).0))
+                                .collect();
+                            let ctx = l.legend_context(&self.layer_names);
+                            let held = s.mods | s.oneshot_mods | s.oneshot_locked_mods;
+                            self.keycast.update(&codes, |r, c| s.is_pressed(r, c), held, s.active_os, &ctx, now);
                         }
                     }
                     self.fade.update(&s.matrix, now);
@@ -855,6 +877,9 @@ impl HudApp {
         if config.headsup.enabled != self.config.headsup.enabled {
             self.headsup_on = config.headsup.enabled;
         }
+        if config.keycast.enabled != self.config.keycast.enabled {
+            self.keycast_on = config.keycast.enabled;
+        }
         // appearance values edited in the file win over the remembered ones
         let (old, new) = (&self.config.appearance, &config.appearance);
         if new.opacity != old.opacity {
@@ -942,6 +967,7 @@ impl HudApp {
         self.window.theme = Some(self.theme);
         self.window.headsup = Some(self.headsup_on);
         self.window.combos = Some(self.show_combos);
+        self.window.keycast = Some(self.keycast_on);
         self.window.style = Some(self.style_name.clone());
         self.window.key_opacity = self.key_opacity;
         self.window.key_radius = self.key_radius;
@@ -1251,6 +1277,38 @@ impl HudApp {
         });
     }
 
+    /// Keycast: a click-through window at the bottom of the screen, empty
+    /// when there is nothing to show.
+    fn show_keycast(&self, ctx: &egui::Context, palette: &Palette) {
+        let now = Instant::now();
+        let (col, row) = self.config.keycast.position.cell();
+        let builder = egui::ViewportBuilder::default()
+            .with_title("Keyboard HUD · Keycast")
+            .with_decorations(false)
+            .with_transparent(true)
+            .with_always_on_top()
+            .with_resizable(false)
+            .with_taskbar(false)
+            .with_mouse_passthrough(true)
+            .with_inner_size(KEYCAST_SIZE);
+        let place = root_outer_rect(ctx).and_then(|r| work_area(ctx, r)).map(|area| {
+            screen::anchored(screen::Anchor { col, row }, KEYCAST_SIZE, area, self.config.appearance.screen_margin)
+        });
+        let builder = match place {
+            Some(p) => builder.with_position(p),
+            None => builder,
+        };
+        ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(KEYCAST_VIEWPORT), builder, |ui, _class| {
+            let rect = ui.max_rect().shrink(4.0);
+            if self.keycast.draw(ui.painter(), rect, col, palette, now) {
+                ui.ctx().request_repaint();
+            }
+        });
+        if !self.keycast.is_empty(now) {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
+    }
+
     /// Mini indicator: a small click-through window in a corner of the screen.
     fn show_indicator(&self, ctx: &egui::Context, view: Option<&header::IndicatorView>, palette: &Palette) {
         let size = Vec2::new(INDICATOR_SIZE.x, INDICATOR_SIZE.y);
@@ -1475,6 +1533,14 @@ impl HudApp {
             .on_hover_text(hint)
             .on_disabled_hover_text(hint);
         if r.changed() {
+            self.mark_dirty();
+        }
+        if ui
+            .checkbox(&mut self.keycast_on, tr(lang, Msg::MenuKeycast))
+            .on_hover_text(tr(lang, Msg::KeycastHint))
+            .changed()
+        {
+            self.keycast = keycast::Keycast::default();
             self.mark_dirty();
         }
         ui.horizontal(|ui| {
@@ -1862,6 +1928,9 @@ impl eframe::App for HudApp {
             };
             let shown = (!self.visible || faded) && header::indicator_needed(&view);
             self.show_indicator(&ctx, shown.then_some(&view), &palette);
+        }
+        if self.keycast_on && self.live.is_some() && self.started.elapsed() > Duration::from_secs(1) {
+            self.show_keycast(&ctx, &palette);
         }
         let names = self.layer_names.clone();
         let name_of = |l: u8| names.get(l as usize).cloned().unwrap_or_else(|| format!("L{l}"));

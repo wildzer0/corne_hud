@@ -155,6 +155,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 
 ## Registro delle sessioni
 
+- **2026-10-22**: keycast (`ui/keycast.rs`, `[keycast]`, voce di menu). Regola di privacy in `keycast::describe`: un tasto che scrive compare solo con Ctrl/Alt/Gui; da soli solo F-tasti, Esc, Tab, navigazione, media. Un tasto premuto senza modificatore resta "in attesa" per 400 ms finché è giù, perché il Ctrl dei mod-tap arriva nello stato dopo il tasto. Verificato con uno screenshot del mock (finestre incorporate con una patch temporanea): `Ctrl+C` dal mod-tap.
+
 - **2026-10-22**: finestra Diagnostica (`ui/diagnostics.rs`, menu e `--diagnostics`): le cifre del collegamento vengono dal worker (`LinkStats` in `Control`, aggiornate ogni secondo da `Meter`), perché lo stato arriva alla UI solo quando cambia. Verificata con uno screenshot del mock.
 
 - **2026-10-22**: l'utente ha provato l'app con la tastiera vera e la usa ogni giorno: "funziona alla grande". File `LICENSE` aggiunto (GPL-2.0, testo FSF; il progetto è GPL-2.0-or-later come in `Cargo.toml`).

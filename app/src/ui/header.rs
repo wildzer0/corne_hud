@@ -109,7 +109,7 @@ impl Chips<'_> {
     }
 }
 
-fn mod_label(m: Modifier, os: OsKind) -> &'static str {
+pub fn mod_label(m: Modifier, os: OsKind) -> &'static str {
     match (m, os) {
         (Modifier::Ctrl, _) => "Ctrl",
         (Modifier::Shift, _) => "Shift",

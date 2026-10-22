@@ -156,6 +156,8 @@ pub enum Msg {
     DiagOff,
     DiagAgo,
     DiagLast,
+    MenuKeycast,
+    KeycastHint,
 }
 
 pub fn tr(lang: Lang, msg: Msg) -> &'static str {
@@ -315,6 +317,8 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
             Msg::DiagOff => "disattivato",
             Msg::DiagAgo => "fa",
             Msg::DiagLast => "ultimo",
+            Msg::MenuKeycast => "Keycast (mostra le scorciatoie)",
+            Msg::KeycastHint => "Per video e presentazioni: mostra in basso le scorciatoie premute (Ctrl+C, Alt+Tab, F5...). Mai il testo, niente viene salvato.",
         },
     }
 }

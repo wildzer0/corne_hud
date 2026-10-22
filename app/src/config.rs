@@ -200,6 +200,20 @@ impl Default for IndicatorConfig {
     }
 }
 
+/// Shortcuts shown on screen, for videos and presentations.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct KeycastConfig {
+    pub enabled: bool,
+    pub position: ScreenPlace,
+}
+
+impl Default for KeycastConfig {
+    fn default() -> Self {
+        KeycastConfig { enabled: false, position: ScreenPlace::Bottom }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct BackupConfig {
@@ -272,6 +286,7 @@ pub struct Config {
     pub appearance: Appearance,
     pub headsup: HeadsUp,
     pub indicator: IndicatorConfig,
+    pub keycast: KeycastConfig,
     pub layers: Vec<LayerConfig>,
     pub labels: Vec<LabelConfig>,
     pub stats: StatsConfig,
@@ -403,6 +418,7 @@ pub struct WindowState {
     pub headsup: Option<bool>,
     pub combos: Option<bool>,
     pub style: Option<String>,
+    pub keycast: Option<bool>,
     pub key_opacity: Option<f32>,
     pub key_radius: Option<f32>,
 }
@@ -442,6 +458,8 @@ mod tests {
         assert_eq!(c.headsup.oneshot, ShownIn::Hud);
         assert_eq!(c.headsup.modifiers, ShownIn::Hud);
         assert_eq!(c.indicator.position, ScreenPlace::TopRight);
+        assert!(!c.keycast.enabled);
+        assert_eq!(c.keycast.position, ScreenPlace::Bottom);
         assert_eq!(c.headsup.modifier_delay_ms, 400);
         assert!(c.labels.iter().any(|l| l.label == "Step over" && l.keycode.as_deref() == Some("KC_F10")));
         assert!(c
