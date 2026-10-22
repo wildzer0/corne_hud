@@ -38,6 +38,8 @@ pub enum Msg {
     MenuPause,
     MenuBackups,
     BackupSaved,
+    BackupFirst,
+    BackupChanges,
     MenuAutostart,
     AutostartHint,
     AutostartStale,
@@ -128,6 +130,8 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
             Msg::MenuPause => "Pausa",
             Msg::MenuBackups => "Backup della tastiera…",
             Msg::BackupSaved => "Backup della configurazione salvato",
+            Msg::BackupFirst => "primo backup di questa tastiera",
+            Msg::BackupChanges => "modifiche (dettagli in CHANGELOG.md)",
             Msg::MenuAutostart => "Avvia con il sistema",
             Msg::AutostartHint => "Avvia l'HUD all'accesso, solo per questo utente",
             Msg::AutostartStale => {

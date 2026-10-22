@@ -16,6 +16,33 @@ pub struct Settings {
     pub keep: usize,
 }
 
+/// File with the history of changes, newest first.
+pub const CHANGELOG: &str = "CHANGELOG.md";
+
+/// Adds an entry for the backup `file` at the top of the history in `dir`.
+pub fn append_changelog(dir: &Path, keyboard: &str, file: &Path, now_secs: u64, lines: &[String]) -> io::Result<()> {
+    let path = dir.join(CHANGELOG);
+    let title = "# Storico della configurazione della tastiera\n\nOgni voce corrisponde a un backup `.vil` di questa cartella (ora UTC), dal più recente.\n";
+    let old = std::fs::read_to_string(&path).unwrap_or_else(|_| title.to_string());
+    let (head, rest) = match old.find("\n## ") {
+        Some(i) => old.split_at(i + 1),
+        None => (old.as_str(), ""),
+    };
+    let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let mut entry = format!("\n## {} · {keyboard} · `{name}`\n\n", clock::timestamp_at(now_secs));
+    for l in lines {
+        entry.push_str(&format!("- {l}\n"));
+    }
+    std::fs::write(
+        &path,
+        format!(
+            "{}{entry}{}{rest}",
+            head.trim_end_matches('\n').to_string() + "\n",
+            if rest.is_empty() { "" } else { "\n" }
+        ),
+    )
+}
+
 /// Opens `dir` in the file manager (created if missing).
 pub fn open_folder(dir: &Path) -> io::Result<()> {
     std::fs::create_dir_all(dir)?;
@@ -145,6 +172,25 @@ mod tests {
         assert_eq!(stamp_of(Path::new("/x/corne_2026-10-22T081530Z-x.vil")), None);
         assert_eq!(stamp_of(Path::new("/x/corne.vil")), None);
         assert_eq!(stamp_of(Path::new("/x/corne_2026-10-22T081530Z.json")), None);
+    }
+
+    #[test]
+    fn changelog_newest_first() {
+        let dir = temp_dir("log");
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = |n: &str| PathBuf::from(format!("corne-v4_{n}.vil"));
+        append_changelog(&dir, "Corne v4", &f("a"), 0, &["Primo backup".into()]).unwrap();
+        append_changelog(&dir, "Corne v4", &f("b"), 60, &["uno".into(), "due".into()]).unwrap();
+        let text = std::fs::read_to_string(dir.join(CHANGELOG)).unwrap();
+        let b = text.find("`corne-v4_b.vil`").unwrap();
+        let a = text.find("`corne-v4_a.vil`").unwrap();
+        assert!(text.starts_with("# Storico"));
+        assert!(b < a, "{text}");
+        assert!(
+            text.contains("## 1970-01-01 00:01:00 UTC · Corne v4 · `corne-v4_b.vil`\n\n- uno\n- due\n\n## "),
+            "{text}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

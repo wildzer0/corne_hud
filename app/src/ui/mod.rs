@@ -9,6 +9,7 @@ pub mod theme;
 
 use crate::autostart;
 use crate::backup;
+use crate::changes;
 use crate::config::{Config, ConfigWatcher, Reload, StatsConfig, ThemeChoice, ViewMode, WindowState};
 use crate::headsup::HeadsUp;
 use crate::hid::protocol::{caps, HudInfo, HudState};
@@ -29,7 +30,7 @@ use egui::{Align2, Color32, FontId, Key, Rect, Sense, Vec2, ViewportCommand};
 use report::{ReportInput, ReportWindow};
 use search_panel::SearchPanel;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use theme::{layer_table, Palette};
 
@@ -533,9 +534,8 @@ impl HudApp {
                     self.info = info;
                     self.search_stale = true;
                 }
-                Event::Backup(path) => {
-                    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                    self.notify(format!("{}: {name}", tr(self.lang, Msg::BackupSaved)));
+                Event::Backup { path, current, previous, keyboard } => {
+                    self.backup_saved(&path, &current, previous, &keyboard)
                 }
                 Event::Keymap(km) => {
                     if let Some(l) = &mut self.live {
@@ -601,6 +601,37 @@ impl HudApp {
             let on = self.config.backup.enabled && !self.is_mock();
             w.set_backup(on.then(|| backup::Settings { dir: self.backup_dir(), keep: self.config.backup.keep }));
         }
+    }
+
+    /// Writes what changed into the history next to the backups.
+    fn backup_saved(
+        &mut self,
+        path: &Path,
+        current: &serde_json::Value,
+        previous: Option<serde_json::Value>,
+        keyboard: &str,
+    ) {
+        let custom = self.live.as_ref().map(|l| l.definition.custom.as_slice()).unwrap_or(&[]);
+        let lines = match &previous {
+            Some(prev) => {
+                let ctx = changes::Context { layer_names: &self.layer_names, custom };
+                changes::describe(prev, current, &ctx)
+            }
+            None => vec![changes::summary(current)],
+        };
+        let dir = path.parent().unwrap_or(Path::new("."));
+        if let Err(e) = backup::append_changelog(dir, keyboard, path, crate::clock::now_secs(), &lines) {
+            log::warn!("{}: {e}", dir.join(backup::CHANGELOG).display());
+        }
+        for l in &lines {
+            log::info!("modifica: {l}");
+        }
+        let what = match (&previous, lines.len()) {
+            (None, _) => tr(self.lang, Msg::BackupFirst).to_string(),
+            (Some(_), 1) => lines[0].clone(),
+            (Some(_), n) => format!("{n} {}", tr(self.lang, Msg::BackupChanges)),
+        };
+        self.notify(format!("{}: {what}", tr(self.lang, Msg::BackupSaved)));
     }
 
     fn set_visible(&mut self, ctx: &egui::Context, visible: bool) {

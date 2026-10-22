@@ -220,6 +220,18 @@ L'HUD salva da solo la configurazione della tastiera come file `.vil`, lo stesso
 
 - **Quando**: alla connessione, quando chiudi Vial (o finisce il traffico della web app), quando il keymap cambia e, ogni 2 minuti a tastiera ferma, per combo e macro, che il firmware non segnala. Un nuovo file nasce **solo se qualcosa è cambiato** rispetto all'ultimo backup della stessa tastiera.
 - **Dove**: cartella `backups/` accanto alla configurazione; si apre da menu → *Backup della tastiera…*. I file si chiamano `corne-v4_2026-10-22T081530Z.vil` (ora UTC); se ne tengono 30 per tastiera.
+- **Storico**: nella stessa cartella, `CHANGELOG.md` racconta a parole cosa è cambiato a ogni backup, dal più recente. Per esempio:
+
+  ```markdown
+  ## 2026-10-22 06:53:40 UTC · Corne v4 · `corne-v4_2026-10-22T065340Z.vil`
+
+  - NAV · tasto B (riga 2, colonna 5): Redo → Ctrl+Y
+  - Combo aggiunta: J + K insieme → Esc
+  - Key override disattivato: Shift + Bksp → Del (tutti i layer)
+  - tapping term: 180 → 200
+  ```
+
+  Le stesse righe finiscono nel log, e l'HUD mostra un avviso con il numero di modifiche.
 - **Ripristino**: in Vial, *File → Load saved layout*. I keycode sono scritti come numeri, una forma che Vial accetta: il file non è fatto per essere letto a mano.
 - Le letture usano gli stessi comandi di Vial e non richiedono lo sblocco. Si disattiva con `enabled = false` nella sezione `[backup]`.
 

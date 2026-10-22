@@ -80,8 +80,14 @@ pub enum Event {
     },
     Keymap(Keymap),
     State(HudState),
-    /// A backup was written.
-    Backup(std::path::PathBuf),
+    /// A backup was written: the new file, its content and the previous
+    /// backup's content (none for the first one).
+    Backup {
+        path: std::path::PathBuf,
+        current: serde_json::Value,
+        previous: Option<serde_json::Value>,
+        keyboard: String,
+    },
 }
 
 /// Settings shared with the HID thread.
@@ -486,10 +492,11 @@ fn run_backup(conn: &mut Connection, def: &Definition, ctx: &Ctx) {
             return;
         }
     };
-    match backup::save_if_changed(&settings, &def.name, &dump.to_vil(), crate::clock::now_secs()) {
-        Ok(Some((path, _previous))) => {
+    let vil = dump.to_vil();
+    match backup::save_if_changed(&settings, &def.name, &vil, crate::clock::now_secs()) {
+        Ok(Some((path, previous))) => {
             log::info!("backup salvato: {} ({} ms)", path.display(), started.elapsed().as_millis());
-            ctx.send(Event::Backup(path));
+            ctx.send(Event::Backup { path, current: vil, previous, keyboard: def.name.clone() });
         }
         Ok(None) => log::debug!("backup: nessuna modifica ({} ms)", started.elapsed().as_millis()),
         Err(e) => log::warn!("backup in {}: {e}", settings.dir.display()),
@@ -560,7 +567,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(5);
         let mut path = None;
         while Instant::now() < deadline && path.is_none() {
-            if let Ok(Event::Backup(p)) = w.events.recv_timeout(Duration::from_millis(100)) {
+            if let Ok(Event::Backup { path: p, .. }) = w.events.recv_timeout(Duration::from_millis(100)) {
                 path = Some(p);
             }
         }
@@ -574,7 +581,7 @@ mod tests {
         w.set_paused(false);
         let deadline = Instant::now() + Duration::from_secs(2);
         while Instant::now() < deadline {
-            if let Ok(Event::Backup(p)) = w.events.recv_timeout(Duration::from_millis(100)) {
+            if let Ok(Event::Backup { path: p, .. }) = w.events.recv_timeout(Duration::from_millis(100)) {
                 panic!("unexpected backup {}", p.display());
             }
         }

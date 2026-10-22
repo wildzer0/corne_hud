@@ -35,6 +35,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - lucchetti dei layer: "tenuto" e "bloccato" sono dedotti dall'app (vedi decisioni), da verificare.
    - trascinamento dell'HUD su Windows dopo la correzione (vedi registro): clic tenuto fermo, clic rapidi, trascinamenti lunghi, anche su monitor con scala diversa;
    - aggancio ai bordi (anche con la taskbar in un lato diverso dal basso), menu → Posizione, ritorno sullo schermo all'avvio dopo aver scollegato un monitor;
+   - backup: alla prima connessione deve nascere `backups/corne-v4_<data>.vil` con "Primo backup" in `CHANGELOG.md`; cambiare un tasto in Vial e chiuderlo deve produrre un nuovo backup con la riga giusta; **ricaricare un backup in Vial** (*File → Load saved layout*) e controllare che tutto torni (keymap, encoder, macro, combo, impostazioni); provare anche con la web app (pausa "un altro programma usa la tastiera");
    - combo, tap dance e key override: nel log deve comparire "Vial: N tap dance, N combo, N key override"; Shift tenuto deve mostrare ⌦ su ⌫; dopo una modifica in Vial e la chiusura di Vial l'HUD deve vedere le nuove voci;
    - avvio con il sistema: spuntare dal menu, controllare in `regedit` il valore `Keyboard HUD` sotto `HKCU\...\Run`, riavviare la sessione; poi togliere la spunta;
    - icona dell'`.exe` in Esplora risorse e in Proprietà → Dettagli (versione). La CI deve trovare `rc.exe`: se manca, nel log di build compare l'avviso "risorse Windows non incluse".
@@ -62,7 +63,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
 4. **Backup automatico della configurazione** (proposta dell'utente, 2026-10-22), in quest'ordine:
    1. ✅ **pausa automatica sul traffico altrui** (`Device::take_foreign`/`listen`, `worker::foreign_pause`, silenzio richiesto 20 s): la web app di Vial (WebHID nel browser) non si vede tra i processi. Se l'HUD riceve risposte che non ha chiesto, va in pausa e riprende dopo alcuni secondi di silenzio. La pausa manuale resta consigliata per lavorare con la web app;
    2. ✅ **backup del `.vil`** (`vial/dump.rs`, `backup.rs`, `Device::dump`, `worker::run_backup`; keycode scritti come numeri, accettati da vial-gui) alla prima connessione, alla chiusura di Vial, alla fine del traffico altrui, al cambio di `keymap_version` e con un controllo periodico (circa 1 minuto, a tastiera ferma) per combo, tap dance e key override, che non aggiornano `keymap_version`;
-   3. **storico con diff leggibile**: `CHANGELOG.md` nella cartella dei backup, con voci come "NAV, riga 2 colonna 4 (Fn2 + B): Redo → Ctrl+Y" e "Combo aggiunta: J + K insieme → Esc".
+   3. ✅ **storico con diff leggibile** (`changes.rs`, `backup::append_changelog`; lo scrive la UI, che conosce i nomi dei layer): `CHANGELOG.md` nella cartella dei backup, con voci come "NAV, riga 2 colonna 4 (Fn2 + B): Redo → Ctrl+Y" e "Combo aggiunta: J + K insieme → Esc".
 
    Dettagli del backup:
    - quando: alla prima connessione e soprattutto **alla ripresa dopo la pausa per Vial** (Vial chiuso = modifiche finite); si salva solo se l'impronta del contenuto è diversa dall'ultimo backup;
@@ -104,6 +105,8 @@ Idee rimandate: etichette per applicazione (idea 1), esportazione PNG/SVG della 
 - Key override sull'HUD: modificatori = `mods | oneshot_mods | oneshot_locked_mods`; il layer considerato è quello mostrato (QMK usa il layer da cui è stato letto il tasto). Le regole dei modificatori sono quelle di `key_override_matches_active_modifiers` di QMK.
 - Combo: si disegnano solo se tutti i tasti sono sul layer mostrato; con tasti adiacenti solo l'etichetta, con tasti lontani anche le linee. Il mock ha tre combo dimostrative (J+K, X+C, D+F), oltre all'override della `.vil`.
 - Avvio con il sistema: l'elemento è "attivo" solo se coincide esattamente con quello che questo eseguibile scriverebbe (percorso + opzioni `--x11`, `--vid`, `--pid`, `--verbose`); altrimenti è "da aggiornare" e la casella appare vuota. Lo stato si rilegge a ogni apertura del menu. Solo per l'utente corrente, mai voci di sistema.
+- Backup: `.vil` con keycode **numerici** (vial-gui li accetta; la tabella `VIAL_NAMES` mescola nomi e costanti, quindi niente conversione inversa). Si confronta il JSON con l'ultimo backup dello stesso UID; i file si chiamano `<slug>_<YYYY-MM-DDTHHMMSSZ>.vil` e solo quelli vengono potati (`keep`, default 30). Il mock non fa backup. Impostazioni QMK: larghezze da `qmk_settings.c` (`dump::qmk_setting_width`), id sconosciuti saltati.
+- Traffico altrui: durante il polling l'HUD invia solo richieste `0xF0`, quindi ogni report con un altro primo byte è di un altro programma. La pausa ascolta senza inviare e chiude la sessione dopo 20 s di silenzio.
 - Il menu contestuale è una finestra separata, non un popup dentro l'HUD (vedi registro, 2026-10-22).
 
 ## Ambiente di sviluppo
@@ -144,6 +147,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-22**: punto 4 completo, in tre commit. (1) Pausa sul traffico altrui (web app di Vial). (2) Backup automatico del `.vil`: letture `Device::dump` (keymap grezzo, encoder, macro decodificate dal buffer, voci dinamiche con gli slot vuoti, alt repeat, impostazioni QMK), `backup.rs` per file e potatura, trigger nel worker (connessione, cambio keymap, ogni 2 minuti a tastiera ferma). Formato verificato sui sorgenti di vial-gui (macro `["text"|"tap"|"down"|"up"|"delay", ...]`, keycode numerici accettati). (3) `CHANGELOG.md` leggibile. 104 test; prova completa con il mock (abilitando i backup solo per la prova): primo backup e poi tre modifiche descritte correttamente. **Da verificare con Vial vero il ricaricamento di un backup.**
 
 - **2026-10-22**: punto 6 (avvio con il sistema) e nel piano il punto 4, backup automatico del `.vil` (proposta dell'utente; verificato in vial-qmk che keymap grezzo, macro, voci dinamiche e impostazioni si leggono senza sblocco). 93 test. Il codice Windows del registro è controllato solo con clippy; quello macOS solo dalla CI.
 

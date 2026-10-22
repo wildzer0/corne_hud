@@ -4,6 +4,7 @@
 
 mod autostart;
 mod backup;
+mod changes;
 mod cli;
 mod clock;
 mod config;
