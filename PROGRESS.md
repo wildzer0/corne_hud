@@ -58,6 +58,13 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - [x] ricerca: output delle combo (tutti i tasti evidenziati), azioni dei tap dance, key override.
 3. **Avvio automatico** (idea 6): voce nel menu; Windows con la chiave `Run` del registro, Linux con `~/.config/autostart/*.desktop`, macOS con un LaunchAgent.
 
+4. **Backup automatico della configurazione** (proposta dell'utente, 2026-10-22): l'HUD salva da solo un `.vil` quando la configurazione della tastiera cambia, senza export manuale da Vial.
+   - quando: alla prima connessione e soprattutto **alla ripresa dopo la pausa per Vial** (Vial chiuso = modifiche finite); si salva solo se l'impronta del contenuto è diversa dall'ultimo backup;
+   - cosa: lo stesso formato di vial-gui (`version`, `uid`, `layout` con il keymap **grezzo** via VIA `0x12`, non quello con Colemak dell'HUD, `layout_options`, `macro`, `tap_dance`, `combo`, `key_override`, `alt_repeat_key`, `settings`, `encoder_layout`). Verificato in vial-qmk: tutte queste letture funzionano senza sblocco;
+   - dove: cartella `backups/` accanto alla configurazione, file con data e ora (`corne-2026-10-22_0815.vil`), con un numero massimo da tenere (es. 30) e una voce di menu "Apri la cartella dei backup";
+   - da verificare: che vial-gui ricarichi il file (*File → Load saved layout*). I nomi dei keycode vanno scritti come li scrive vial-gui; in alternativa i numeri, che vial-gui accetta;
+   - da decidere: backup anche delle impostazioni QMK (`qmk_settings`, dipendono dalla versione del firmware).
+
 Idee rimandate: etichette per applicazione (idea 1), esportazione PNG/SVG della keymap (3), WPM (5).
 
 ## Decisioni prese (non rimetterle in discussione senza motivo)
