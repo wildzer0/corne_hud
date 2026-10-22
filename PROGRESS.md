@@ -156,6 +156,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 
 ## Registro delle sessioni
 
+- **2026-10-22**: release **v0.3.0** pubblicata (tag su `bebf08f`, CI verde prima del tag) con tutti gli asset. L'eseguibile Linux passa da 8,1 a 10,0 MB per `ksni`/zbus (icona nella tray via D-Bus).
+
 - **2026-10-22**: corretto il menu contestuale tagliato con l'HUD negli angoli in basso (segnalato dall'utente). La direzione di apertura dipendeva dalla metà dell'HUD cliccata, non dallo spazio sullo schermo: ora `screen::popup_position` usa la direzione preferita solo se c'è spazio nell'area di lavoro, altrimenti l'opposta, e tiene sempre il menu dentro lo schermo. Se lo schermo è più basso del menu, il menu scorre; la sua altezza si misura sul contenuto intero (`content_size`), non sulla parte visibile. Verificato in X11 con l'HUD in tre angoli.
 
 - **2026-10-22**: release **v0.2.0** pubblicata con tutti gli asset (CI di `e36a328` verde prima del tag, controllata via API GitHub con `curl`). Punto 5.1: etichette per applicazione. Punto 5.3: icona nella tray, verificata su Linux via D-Bus. Punto 5.4: statistiche, verificate con un file sintetico di 30 giorni e screenshot della finestra. Punto 5.2: mini indicatore, verificato in X11 (posizione in alto a destra, chip "DEBUG" col lucchetto in uno screenshot incorporato, fotogrammi anche con l'HUD nascosto).
