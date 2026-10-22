@@ -41,11 +41,24 @@ pub struct Appearance {
     /// Initial window position (logical pixels); the last position is remembered anyway.
     pub x: Option<f32>,
     pub y: Option<f32>,
+    /// While dragging, the HUD snaps to screen edges and middle closer than this (0 = off).
+    pub snap_distance: f32,
+    /// Gap between the HUD and the screen edges, for snapping and quick positions.
+    pub screen_margin: f32,
 }
 
 impl Default for Appearance {
     fn default() -> Self {
-        Appearance { opacity: 0.85, scale: 1.0, theme: ThemeChoice::System, mode: ViewMode::Full, x: None, y: None }
+        Appearance {
+            opacity: 0.85,
+            scale: 1.0,
+            theme: ThemeChoice::System,
+            mode: ViewMode::Full,
+            x: None,
+            y: None,
+            snap_distance: 16.0,
+            screen_margin: 8.0,
+        }
     }
 }
 
@@ -174,6 +187,8 @@ impl Config {
         let a = &mut self.appearance;
         a.opacity = if a.opacity.is_finite() { a.opacity.clamp(0.2, 1.0) } else { 0.85 };
         a.scale = if a.scale.is_finite() { a.scale.clamp(0.5, 2.0) } else { 1.0 };
+        a.snap_distance = if a.snap_distance.is_finite() { a.snap_distance.clamp(0.0, 200.0) } else { 16.0 };
+        a.screen_margin = if a.screen_margin.is_finite() { a.screen_margin.clamp(0.0, 200.0) } else { 8.0 };
         let p = &mut self.polling;
         p.visible_hz = p.visible_hz.clamp(1, 250);
         p.hidden_hz = p.hidden_hz.clamp(1, 250);

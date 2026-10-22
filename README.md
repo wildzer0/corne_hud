@@ -1,4 +1,4 @@
-# Keyboard HUD
+# <img src="app/packaging/icon/icon.png" width="40" align="top" alt=""> Keyboard HUD
 
 Un HUD sempre in primo piano che mostra la mia **Corne v4.1** (firmware Vial) e la aggiorna in tempo reale: layer attivo con le sue legende, tasti premuti, modificatori, one-shot, Caps Lock / Caps Word, QWERTY o Colemak-DH, sistema operativo.
 
@@ -24,15 +24,16 @@ Un HUD sempre in primo piano che mostra la mia **Corne v4.1** (firmware Vial) e 
 3. [Firmware](#firmware)
 4. [Uso](#uso)
 5. [Linux: regola udev](#linux-regola-udev)
-6. [Wayland](#wayland)
-7. [Convivenza con Vial](#convivenza-con-vial)
-8. [Configurazione](#configurazione)
-9. [Statistiche e privacy](#statistiche-e-privacy)
-10. [Modalità offline e simulata](#modalità-offline-e-simulata)
-11. [Opzioni da riga di comando](#opzioni-da-riga-di-comando)
-12. [Compilare l'app](#compilare-lapp)
-13. [Risoluzione dei problemi](#risoluzione-dei-problemi)
-14. [Licenza e crediti](#licenza-e-crediti)
+6. [Windows: SmartScreen](#windows-smartscreen)
+7. [Wayland](#wayland)
+8. [Convivenza con Vial](#convivenza-con-vial)
+9. [Configurazione](#configurazione)
+10. [Statistiche e privacy](#statistiche-e-privacy)
+11. [Modalità offline e simulata](#modalità-offline-e-simulata)
+12. [Opzioni da riga di comando](#opzioni-da-riga-di-comando)
+13. [Compilare l'app](#compilare-lapp)
+14. [Risoluzione dei problemi](#risoluzione-dei-problemi)
+15. [Licenza e crediti](#licenza-e-crediti)
 
 ---
 
@@ -52,7 +53,7 @@ Ogni release contiene anche `SHA256SUMS.txt` e `keyboard-hud.example.toml`.
 
 1. Flasha il firmware con il supporto HUD su **entrambe** le metà (vedi [Firmware](#firmware)).
 2. Metti l'eseguibile in una cartella qualsiasi e avvialo:
-   - **Windows**: doppio clic. Se SmartScreen avvisa (l'eseguibile non è firmato), scegli *Ulteriori informazioni → Esegui comunque*.
+   - **Windows**: doppio clic. Se SmartScreen avvisa (l'eseguibile non è firmato), scegli *Ulteriori informazioni → Esegui comunque*, oppure sblocca il file una volta per tutte (vedi [Windows: SmartScreen](#windows-smartscreen)).
    - **macOS**: estrai lo zip. La prima volta fai clic destro su `Keyboard HUD.app` → *Apri* (l'app è firmata ad-hoc, non da uno sviluppatore Apple registrato). In alternativa: `xattr -dr com.apple.quarantine "Keyboard HUD.app"`. L'app non compare nel Dock: si chiude dal menu contestuale dell'HUD.
    - **Linux**: `chmod +x keyboard-hud-linux-x86_64 && ./keyboard-hud-linux-x86_64`. Serve una regola udev, una sola volta (vedi [Linux](#linux-regola-udev)).
 3. L'HUD compare in sovrimpressione. Con l'**heads-up** attivo (default) si nasconde da solo e ricompare quando tieni Fn1/Fn2, quando un one-shot è in attesa o quando tieni un modificatore.
@@ -89,9 +90,10 @@ Il firmware funziona identico anche senza HUD collegato. Risponde solo alle rich
 
 | Azione | Come |
 |---|---|
-| Spostare l'HUD | trascinalo con il mouse |
+| Spostare l'HUD | trascinalo con il mouse. Su Windows si aggancia ai bordi, agli angoli e al centro dello schermo |
+| Metterlo in un angolo, a metà di un bordo o al centro | menu → Posizione (griglia 3×3) |
 | Ingrandire / rimpicciolire (50–200%) | Ctrl + rotellina sull'HUD, oppure menu → Scala |
-| Menu (opacità, scala, vista, tema, heads-up, heatmap, statistiche, ricerca, click-through, pausa, esci) | clic destro sull'HUD |
+| Menu (opacità, scala, vista, posizione, tema, heads-up, heatmap, statistiche, ricerca, click-through, pausa, esci) | clic destro sull'HUD |
 | Mostrare / nascondere | un tocco di **HUD_TOG**. Con l'heads-up attivo il tocco *fissa* l'HUD a schermo, e un altro tocco lo restituisce all'heads-up |
 | Click-through (i clic passano alle finestre sotto) | menu, oppure **doppio tocco** di HUD_TOG. Si disattiva solo con il doppio tocco |
 | Cercare un tasto | Ctrl+F o `/` con l'HUD in primo piano, oppure menu → Cerca. Frecce per scegliere, Invio/Esc per chiudere |
@@ -130,6 +132,15 @@ sudo udevadm control --reload && sudo udevadm trigger
 
 Poi scollega e ricollega la tastiera.
 
+## Windows: SmartScreen
+
+L'eseguibile non è firmato con un certificato di sviluppatore, quindi la prima volta Microsoft Defender SmartScreen mostra *"Windows ha protetto il PC"*. L'avviso dipende dal segno "scaricato da Internet" che il browser mette sul file, non da un problema dell'app. Per toglierlo una volta per tutte:
+
+- clic destro sull'`.exe` → *Proprietà* → spunta **Sblocca** → *OK*;
+- oppure, da PowerShell: `Unblock-File .\keyboard-hud-windows-x86_64.exe`.
+
+Prima di sbloccarlo puoi confrontarlo con `SHA256SUMS.txt` della release: `Get-FileHash .\keyboard-hud-windows-x86_64.exe`. Se è l'antivirus di Defender a segnalarlo (falso positivo), il file si può inviare a Microsoft per l'analisi dal portale *Microsoft Security Intelligence*. Un eseguibile compilato da te dai sorgenti non ha il segno e non fa scattare l'avviso.
+
 ## Wayland
 
 Su Wayland è il compositor a decidere la posizione delle finestre e se possono restare sempre in primo piano: molti (GNOME in particolare) ignorano entrambe le richieste. Se l'HUD finisce sotto le altre finestre o non ricorda la posizione, avvialo con:
@@ -157,7 +168,7 @@ Copia [`keyboard-hud.example.toml`](keyboard-hud.example.toml) accanto all'esegu
 | Sezione | Cosa regola |
 |---|---|
 | `[device]` | `vid` / `pid` per scegliere la tastiera (default: la prima che risponde al protocollo HUD) |
-| `[appearance]` | opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale |
+| `[appearance]` | opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale, distanza di aggancio ai bordi (`snap_distance`, 16) e margine dai bordi (`screen_margin`, 8) |
 | `[headsup]` | attivo, ritardo dei modificatori (400 ms), ritardo di scomparsa (800 ms), opacità da nascosto |
 | `[[layers]]` | nome e colore di ogni layer, in ordine |
 | `[[labels]]` | etichette personalizzate, per keycode (anche limitato a un layer) o per posizione |
@@ -274,6 +285,7 @@ Le tabelle dei keycode sono **generate** da `build.rs` a partire dai file hjson 
 | "In pausa: Vial è aperto" | Chiudi Vial: l'HUD riprende da solo |
 | L'HUD non resta sopra le altre finestre (Linux) | Wayland: avvia con `--x11` |
 | Non riesco più a cliccare l'HUD | Il click-through è attivo: doppio tocco di HUD_TOG. Riavviare l'app lo disattiva comunque |
+| L'HUD è fuori dallo schermo | All'avvio torna da solo sullo schermo più vicino (anche se il monitor dove stava è scollegato). Altrimenti menu → Posizione |
 | L'HUD è sparito | Heads-up: ricompare tenendo Fn1/Fn2. Oppure è nascosto: tocca HUD_TOG |
 | Legende sbagliate dopo una modifica in Vial | Si aggiornano da sole entro un secondo. Altrimenti metti in pausa e riprendi dal menu |
 | Dettagli | `keyboard-hud.log`, con `--verbose` per il livello debug |

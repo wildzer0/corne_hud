@@ -20,6 +20,11 @@ mode = "full"       # "full" (tastiera completa) o "compact" (striscia piccola)
 # l'ultima posizione in keyboard-hud-state.toml.
 # x = 100
 # y = 800
+# Trascinando l'HUD vicino ai bordi o al centro dello schermo ci si aggancia
+# (solo Windows). Distanza di aggancio in pixel logici, 0 = disattivato.
+snap_distance = 16
+# Spazio tra l'HUD e i bordi, per l'aggancio e per menu → Posizione.
+screen_margin = 8
 
 # Nomi e colori dei layer, nell'ordine del firmware (0, 1, 2, ...).
 # color: "#RRGGBB", oppure "" per un layer neutro.

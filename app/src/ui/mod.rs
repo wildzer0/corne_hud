@@ -17,6 +17,7 @@ use crate::labels::Labels;
 use crate::logging;
 use crate::model::{classify_layers, highest_layer, Keymap};
 use crate::paths;
+use crate::screen;
 use crate::stats::{Stats, Totals};
 use crate::vial::definition::Definition;
 use crate::vial::legend::LegendContext;
@@ -58,6 +59,25 @@ struct MenuWindow {
 fn root_cmd(ctx: &egui::Context, cmd: ViewportCommand) {
     ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, cmd);
 }
+
+/// Position and size of the HUD window, also while drawing another window.
+fn root_outer_rect(ctx: &egui::Context) -> Option<Rect> {
+    ctx.input(|i| i.raw.viewports.get(&egui::ViewportId::ROOT).and_then(|v| v.outer_rect))
+}
+
+/// Work area of the monitor showing most of `window` (points): exact on
+/// Windows, guessed from the monitor size elsewhere.
+fn work_area(ctx: &egui::Context, window: Rect) -> Option<Rect> {
+    let ppp = ctx.pixels_per_point();
+    if let Some(a) = screen::monitor_work_area((window.center().to_vec2() * ppp).to_pos2()) {
+        return Some(Rect::from_min_max((a.min.to_vec2() / ppp).to_pos2(), (a.max.to_vec2() / ppp).to_pos2()));
+    }
+    let monitor = ctx.input(|i| i.raw.viewports.get(&egui::ViewportId::ROOT).and_then(|v| v.monitor_size))?;
+    screen::guess_monitor_area(window, monitor)
+}
+
+/// Grid of the quick positions in the menu, as (anchor, arrow).
+const POSITIONS: [[&str; 3]; 3] = [["↖", "↑", "↗"], ["←", "•", "→"], ["↙", "↓", "↘"]];
 
 /// Where a window drag started: cursor on screen (physical pixels) and window
 /// position (points).
@@ -356,6 +376,8 @@ pub struct HudApp {
     passthrough: bool,
     /// Window drag moved by the HUD itself (Windows).
     drag: Option<WindowDrag>,
+    /// The remembered position was checked against the screens.
+    checked_on_screen: bool,
     search: SearchPanel,
     search_stale: bool,
     stats: Option<Stats>,
@@ -409,6 +431,7 @@ impl HudApp {
             pinned: false,
             passthrough: false,
             drag: None,
+            checked_on_screen: false,
             search: SearchPanel::default(),
             search_stale: true,
             stats,
@@ -603,8 +626,34 @@ impl HudApp {
     }
 
     fn resize(&mut self, ctx: &egui::Context) {
-        root_cmd(ctx, ViewportCommand::InnerSize(base_size(self.view) * self.scale));
+        let size = base_size(self.view) * self.scale;
+        root_cmd(ctx, ViewportCommand::InnerSize(size));
+        if let Some(r) = root_outer_rect(ctx) {
+            self.keep_on_screen(ctx, Rect::from_min_size(r.min, size));
+        }
         self.mark_dirty();
+    }
+
+    /// Brings the HUD back on screen when part of it is out (larger size, or
+    /// remembered position on a monitor that is gone).
+    fn keep_on_screen(&self, ctx: &egui::Context, window: Rect) {
+        if let Some(area) = work_area(ctx, window) {
+            let pos = screen::keep_inside(window, area, self.config.appearance.screen_margin);
+            if pos != window.min {
+                root_cmd(ctx, ViewportCommand::OuterPosition(pos));
+            }
+        }
+    }
+
+    /// Moves the HUD to one of the quick positions.
+    fn move_to(&self, ctx: &egui::Context, anchor: screen::Anchor) {
+        if let Some(r) = root_outer_rect(ctx) {
+            if let Some(area) = work_area(ctx, r) {
+                let pos = screen::anchored(anchor, r.size(), area, self.config.appearance.screen_margin);
+                log::debug!("posizione {anchor:?}: finestra {r:?}, area {area:?} -> {pos:?}");
+                root_cmd(ctx, ViewportCommand::OuterPosition(pos));
+            }
+        }
     }
 
     fn mark_dirty(&mut self) {
@@ -709,8 +758,16 @@ impl HudApp {
         }
         // from the start position, not from the current one: no error piles up
         if let (Some(d), Some(cursor)) = (self.drag, cursor_on_screen()) {
-            let target = d.window + (cursor - d.cursor) / ctx.pixels_per_point();
-            if ctx.input(|i| i.viewport().outer_rect).is_none_or(|r| r.min != target) {
+            let outer = ctx.input(|i| i.viewport().outer_rect);
+            let mut target = d.window + (cursor - d.cursor) / ctx.pixels_per_point();
+            if let Some(r) = outer {
+                let moved = Rect::from_min_size(target, r.size());
+                if let Some(area) = work_area(ctx, moved) {
+                    let a = &self.config.appearance;
+                    target = screen::snap(moved, area, a.snap_distance, a.screen_margin);
+                }
+            }
+            if outer.is_none_or(|r| r.min != target) {
                 ctx.send_viewport_cmd(ViewportCommand::OuterPosition(target));
             }
         }
@@ -835,6 +892,25 @@ impl HudApp {
             }
         });
         ui.horizontal(|ui| {
+            ui.label(tr(lang, Msg::MenuPosition));
+            let movable = root_outer_rect(&ctx).is_some();
+            ui.add_enabled_ui(movable, |ui| {
+                egui::Grid::new("positions").spacing([2.0, 2.0]).show(ui, |ui| {
+                    for (row, arrows) in POSITIONS.iter().enumerate() {
+                        for (col, arrow) in arrows.iter().enumerate() {
+                            if ui.small_button(*arrow).clicked() {
+                                self.move_to(&ctx, screen::Anchor { col: col as u8, row: row as u8 });
+                                self.close_menu();
+                            }
+                        }
+                        ui.end_row();
+                    }
+                });
+            })
+            .response
+            .on_disabled_hover_text(tr(lang, Msg::PositionUnavailable));
+        });
+        ui.horizontal(|ui| {
             ui.label(tr(lang, Msg::MenuTheme));
             let before = self.theme;
             ui.selectable_value(&mut self.theme, ThemeChoice::System, tr(lang, Msg::ThemeSystem));
@@ -928,6 +1004,12 @@ impl eframe::App for HudApp {
             Reload::Error(e) => {
                 let path = self.watcher.path().display().to_string();
                 self.notify(format!("{} ({path}): {e}", tr(self.lang, Msg::ConfigError)));
+            }
+        }
+        if !self.checked_on_screen && self.started.elapsed() > Duration::from_millis(500) {
+            self.checked_on_screen = true;
+            if let Some(r) = root_outer_rect(ctx) {
+                self.keep_on_screen(ctx, r);
             }
         }
         self.track_position(ctx);

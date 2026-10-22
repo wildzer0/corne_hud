@@ -103,7 +103,8 @@ jobs:
         run: |
           version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
           app="../dist/Keyboard HUD.app"
-          mkdir -p "$app/Contents/MacOS"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+          cp packaging/icon/icon.icns "$app/Contents/Resources/AppIcon.icns"
           lipo -create -output "$app/Contents/MacOS/keyboard-hud" \
             target/aarch64-apple-darwin/release/keyboard-hud \
             target/x86_64-apple-darwin/release/keyboard-hud

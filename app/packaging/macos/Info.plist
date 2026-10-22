@@ -8,6 +8,8 @@
     <string>Keyboard HUD</string>
     <key>CFBundleIdentifier</key>
     <string>io.github.keyboard-hud</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleExecutable</key>
     <string>keyboard-hud</string>
     <key>CFBundlePackageType</key>

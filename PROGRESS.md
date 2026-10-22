@@ -33,9 +33,26 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - connessione, riconnessione dopo scollegamento, pausa con Vial aperto e ripresa;
    - `HUD_TOG` tocco e doppio tocco, heads-up, click-through;
    - lucchetti dei layer: "tenuto" e "bloccato" sono dedotti dall'app (vedi decisioni), da verificare.
-   - trascinamento dell'HUD su Windows dopo la correzione (vedi registro): clic tenuto fermo, clic rapidi, trascinamenti lunghi, anche su monitor con scala diversa.
+   - trascinamento dell'HUD su Windows dopo la correzione (vedi registro): clic tenuto fermo, clic rapidi, trascinamenti lunghi, anche su monitor con scala diversa;
+   - aggancio ai bordi (anche con la taskbar in un lato diverso dal basso), menu → Posizione, ritorno sullo schermo all'avvio dopo aver scollegato un monitor;
+   - icona dell'`.exe` in Esplora risorse e in Proprietà → Dettagli (versione). La CI deve trovare `rc.exe`: se manca, nel log di build compare l'avviso "risorse Windows non incluse".
 4. **File `LICENSE`** (GPL-2.0-or-later): manca ancora, anche se v0.1.0 è già pubblicata. In attesa di conferma dell'utente.
 5. **Prossime release**: aumentare `version` in `app/Cargo.toml`, poi `git tag vX.Y.Z && git push origin vX.Y.Z`. Il tag deve corrispondere alla versione, altrimenti la CI si ferma.
+
+## Piano delle prossime funzioni (concordato il 2026-10-22, in quest'ordine)
+
+1. **Aggancio ai bordi e posizioni rapide** (idea 2): ✅ fatto, da provare su Windows.
+   - [x] area di lavoro del monitor (su Windows con `GetMonitorInfo`, che esclude la taskbar; altrove una stima da `monitor_size`);
+   - [x] aggancio a bordi, angoli e centro durante il trascinamento manuale (Windows), con `snap_distance` e `screen_margin` in `[appearance]`;
+   - [x] menu "Posizione": griglia 3×3 per spostare l'HUD in un angolo, a metà di un bordo o al centro;
+   - [x] l'HUD torna dentro lo schermo dopo un ridimensionamento e all'avvio (monitor scollegato);
+   - [x] icona del progetto: finestra (tutti i sistemi), `.exe` (risorsa Windows), `.app` (macOS);
+   - [x] metadati di versione nell'`.exe`; sezione "Windows: SmartScreen" nel README;
+   - [ ] **firma del codice per Windows: in attesa di una scelta dell'utente** (SignPath Foundation gratuita per progetti open source, che però richiede il file `LICENSE`; oppure Azure Artifact Signing o un certificato OV a pagamento).
+2. **Combo, tap dance e key override di Vial** (idea 4): letti via Raw HID con il protocollo Vial (`vial_dynamic_entry_op`), mostrati nella ricerca e sull'HUD.
+3. **Avvio automatico** (idea 6): voce nel menu; Windows con la chiave `Run` del registro, Linux con `~/.config/autostart/*.desktop`, macOS con un LaunchAgent.
+
+Idee rimandate: etichette per applicazione (idea 1), esportazione PNG/SVG della keymap (3), WPM (5).
 
 ## Decisioni prese (non rimetterle in discussione senza motivo)
 
@@ -61,6 +78,9 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
 - Il worker inoltra lo stato solo quando cambia, così a tastiera ferma l'HUD non ridisegna.
 - Niente icona nella tray: la feature `tray` è stata tolta perché era vuota.
 - Su Windows l'HUD sposta la propria finestra da solo (`GetCursorPos` + `OuterPosition`), invece di usare `StartDrag` di winit (vedi registro).
+- Aggancio e posizioni rapide lavorano sulla finestra esterna (`outer_rect`) in punti egui. Su Windows l'area di lavoro è esatta (`GetMonitorInfo`), altrove è stimata da `monitor_size` supponendo monitor affiancati della stessa misura. Su Wayland la posizione non è nota: la griglia "Posizione" è disattivata.
+- L'aggancio esiste solo dove l'HUD trascina da sé (Windows); con `StartDrag` (Linux, macOS) lo spostamento lo gestisce il sistema.
+- Icona: sorgente unica `app/packaging/icon/make_icon.py` (numpy), che genera `icon.png`, `.ico`, `.icns` e `icon-64.rgba` (icona della finestra, incorporata con `include_bytes!`). I file generati sono committati: la CI non esegue Python.
 - Il menu contestuale è una finestra separata, non un popup dentro l'HUD (vedi registro, 2026-10-22).
 
 ## Ambiente di sviluppo
@@ -96,10 +116,13 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `firmware/mia/keymap.c`: sezione 9 (HUD). `vial.json`: `customKeycodes` + `HUD`.
 - `app/src/hid/`: `protocol.rs` (formato), `device.rs` (richieste), `transport.rs` (hidapi, udev), `worker.rs` (thread, riconnessione, pausa Vial), `mock.rs`.
 - `app/src/vial/`: `definition.rs`, `keycode.rs`, `names.rs` (tabelle generate, `parse_keycode`), `legend.rs`, `vil.rs`.
-- `app/src/`: `kle.rs`, `model.rs`, `config.rs`, `labels.rs`, `headsup.rs`, `search.rs`, `stats.rs`, `clock.rs`, `logging.rs`, `paths.rs`, `cli.rs`, `i18n.rs` (tutte le stringhe utente).
+- `app/src/`: `kle.rs`, `model.rs`, `config.rs`, `screen.rs` (geometria dello schermo), `labels.rs`, `headsup.rs`, `search.rs`, `stats.rs`, `clock.rs`, `logging.rs`, `paths.rs`, `cli.rs`, `i18n.rs` (tutte le stringhe utente).
+- `app/packaging/`: `icon/` (icona e script che la genera), `macos/Info.plist`.
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-22**: aggancio ai bordi e posizioni rapide (nuovo `screen.rs`, con test), icona del progetto, risorse dell'`.exe` (`winresource` in `build.rs`; da Linux esce solo un avviso), icona del bundle macOS, sezione SmartScreen nel README. Verificato in WSLg/X11 con XTest: la griglia del menu sposta l'HUD nella posizione calcolata. Le coordinate X11 di WSLg includono una cornice finta, quindi la finestra esterna misura 976×497 invece di 900×400. Lo script dell'icona ricampiona con due `tensordot`: la prima versione con `einsum` ci metteva 2 min 45 s. Prossimo passo del piano: combo, tap dance e key override di Vial.
 
 - **2026-10-22**: l'utente segnala che su Windows, dopo un po', l'HUD non si trascina più. Causa: in winit 0.30, `drag_window` alza il flag `dragging` e lo azzera solo con `WM_EXITSIZEMOVE`. Se Windows non avvia il ciclo di spostamento (bottone già rilasciato, oppure clic tenuto fermo: egui lo considera un trascinamento dopo 0,8 s), il flag resta alzato e ogni `StartDrag` successivo viene ignorato. Correzione: su Windows la finestra va alla posizione iniziale più lo spostamento del cursore letto con `GetCursorPos`. Il calcolo parte sempre dall'inizio del trascinamento, quindi gli errori non si sommano: un primo tentativo basato sugli spostamenti relativi del puntatore egui, provato in X11 con XTest, accumulava circa 60 px per trascinamento. Sugli altri sistemi resta `StartDrag`. Controllo con clippy anche per `x86_64-pc-windows-msvc` (target aggiunto a rustup). Da provare su Windows.
 

@@ -13,6 +13,7 @@ mod labels;
 mod logging;
 mod model;
 mod paths;
+mod screen;
 mod search;
 mod stats;
 mod ui;
@@ -130,7 +131,12 @@ fn run(opts: Options) -> ExitCode {
         .with_decorations(false)
         .with_transparent(true)
         .with_always_on_top()
-        .with_taskbar(false);
+        .with_taskbar(false)
+        .with_icon(egui::IconData {
+            rgba: include_bytes!("../packaging/icon/icon-64.rgba").to_vec(),
+            width: 64,
+            height: 64,
+        });
     if let (Some(x), Some(y)) = (window.x.or(a.x), window.y.or(a.y)) {
         viewport = viewport.with_position([x, y]);
     }

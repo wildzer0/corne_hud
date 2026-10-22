@@ -24,6 +24,27 @@ fn main() {
 
     let dest = PathBuf::from(env::var("OUT_DIR").unwrap()).join("keycodes_generated.rs");
     fs::write(dest, out).expect("write generated keycodes");
+
+    windows_resources();
+}
+
+/// Icon and version information of the Windows executable. Needs the
+/// resource compiler of the Windows SDK: without it (e.g. `cargo check` from
+/// Linux) the executable just has no icon.
+fn windows_resources() {
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+        return;
+    }
+    println!("cargo:rerun-if-changed=packaging/icon/icon.ico");
+    let mut res = winresource::WindowsResource::new();
+    res.set_icon("packaging/icon/icon.ico")
+        .set("ProductName", "Keyboard HUD")
+        .set("FileDescription", "Keyboard HUD")
+        .set("OriginalFilename", "keyboard-hud.exe")
+        .set("LegalCopyright", "GPL-2.0-or-later");
+    if let Err(e) = res.compile() {
+        println!("cargo:warning=risorse Windows non incluse (icona, versione): {e}");
+    }
 }
 
 fn version_key(v: &str) -> Vec<u32> {

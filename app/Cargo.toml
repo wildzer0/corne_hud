@@ -20,10 +20,12 @@ log = "0.4"
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
 [target.'cfg(windows)'.dependencies]
-# GetCursorPos, to move the window by hand (see ui::cursor_on_screen)
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+# cursor and monitor geometry, to move the window by hand (ui::cursor_on_screen, screen.rs)
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]
+# icon and version information of the Windows executable (build.rs)
+winresource = { version = "0.1", default-features = false }
 deser-hjson = "2.2"
 serde_json = "1"
 
