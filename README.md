@@ -116,6 +116,7 @@ Il click-through si attiva solo se la tastiera collegata ha il tasto HUD_TOG, co
 - **Modificatori**: Ctrl, Shift, Alt, Gui (Cmd/Opt su macOS). Pieno = tenuto, pallido = weak, contorno pulsante = one-shot, lucchetto = one-shot bloccato.
 - **Caps Lock / Caps Word, QWERTY / Colemak-DH, OS** rilevato o forzato.
 - **Tasti premuti**: si accendono subito e sfumano in 200 ms.
+- **Mini indicatore**: quando l'HUD è nascosto (heads-up o HUD_TOG), un piccolo badge in un angolo dello schermo ricorda gli stati che restano dopo aver rilasciato i tasti: layer bloccato (per esempio DEBUG con il lucchetto), one-shot in attesa, modificatori bloccati, Caps Lock, Caps Word. Non intercetta i clic. Con `locked_layer = "indicator"` un layer bloccato non tiene più su l'HUD intero, ma solo il badge.
 - **Tap dance, combo e key override** configurati in Vial, letti dalla tastiera a ogni connessione (quindi anche quando l'HUD riprende dopo la pausa per Vial) oppure dal `.vil` in modalità offline:
   - un tasto tap dance mostra in grande l'azione al tocco e in piccolo quella tenendolo premuto (o il doppio tocco); il tooltip le elenca tutte;
   - con *Mostra le combo* ogni combo è un'etichetta con il risultato fra i tasti da premere insieme;
@@ -183,7 +184,8 @@ Copia [`keyboard-hud.example.toml`](keyboard-hud.example.toml) accanto all'esegu
 |---|---|
 | `[device]` | `vid` / `pid` per scegliere la tastiera (default: la prima che risponde al protocollo HUD) |
 | `[appearance]` | opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale, distanza di aggancio ai bordi (`snap_distance`, 16) e margine dai bordi (`screen_margin`, 8) |
-| `[headsup]` | attivo, ritardo dei modificatori (400 ms), ritardo di scomparsa (800 ms), opacità da nascosto |
+| `[headsup]` | attivo, ritardo dei modificatori (400 ms), ritardo di scomparsa (800 ms), opacità da nascosto, cosa mostra un layer bloccato (`locked_layer`: `hud` o `indicator`) |
+| `[indicator]` | mini indicatore attivo, angolo dello schermo (`position`, default `top-right`) |
 | `[[layers]]` | nome e colore di ogni layer, in ordine |
 | `[[labels]]` | etichette personalizzate, per keycode (anche limitato a un layer) o per posizione, anche solo per un'applicazione |
 | `[stats]` | statistiche attive, file, periodo del report "mai usati" |

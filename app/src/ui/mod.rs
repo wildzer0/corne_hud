@@ -10,7 +10,7 @@ pub mod theme;
 use crate::autostart;
 use crate::backup;
 use crate::changes;
-use crate::config::{Config, ConfigWatcher, Reload, StatsConfig, ThemeChoice, ViewMode, WindowState};
+use crate::config::{Config, ConfigWatcher, LockedLayer, Reload, StatsConfig, ThemeChoice, ViewMode, WindowState};
 use crate::headsup::HeadsUp;
 use crate::hid::protocol::{caps, HudInfo, HudState};
 use crate::hid::worker::{Event, PauseReason, Status, Worker};
@@ -18,7 +18,7 @@ use crate::i18n::{tr, Lang, Msg};
 use crate::kle::{KeyRole, KleKey};
 use crate::labels::Labels;
 use crate::logging;
-use crate::model::{classify_layers, highest_layer, Keymap};
+use crate::model::{classify_layers, highest_layer, Keymap, LayerHold};
 use crate::paths;
 use crate::screen;
 use crate::stats::{Stats, Totals};
@@ -45,6 +45,10 @@ pub fn base_size(mode: ViewMode) -> Vec2 {
 /// The context menu lives in its own small window: inside the HUD it would
 /// be clipped when the HUD is small (low scale, compact view).
 const MENU_VIEWPORT: &str = "hud-menu";
+/// Mini indicator window: id and size (the panel inside fits its contents).
+const INDICATOR_VIEWPORT: &str = "hud-indicator";
+const INDICATOR_SIZE: Vec2 = Vec2::new(420.0, 32.0);
+
 /// Menu size before the first measurement.
 const MENU_ESTIMATE: Vec2 = Vec2::new(300.0, 340.0);
 
@@ -903,6 +907,34 @@ impl HudApp {
         });
     }
 
+    /// Mini indicator: a small click-through window in a corner of the screen.
+    fn show_indicator(&self, ctx: &egui::Context, view: Option<&header::IndicatorView>, palette: &Palette) {
+        let size = Vec2::new(INDICATOR_SIZE.x, INDICATOR_SIZE.y);
+        let (col, row) = self.config.indicator.position.cell();
+        let builder = egui::ViewportBuilder::default()
+            .with_title("Keyboard HUD · Indicatore")
+            .with_decorations(false)
+            .with_transparent(true)
+            .with_always_on_top()
+            .with_resizable(false)
+            .with_taskbar(false)
+            .with_mouse_passthrough(true)
+            .with_inner_size(size);
+        let place = root_outer_rect(ctx).and_then(|r| work_area(ctx, r)).map(|area| {
+            screen::anchored(screen::Anchor { col, row }, size, area, self.config.appearance.screen_margin)
+        });
+        let builder = match place {
+            Some(p) => builder.with_position(p),
+            None => builder,
+        };
+        ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(INDICATOR_VIEWPORT), builder, |ui, _class| {
+            let rect = ui.max_rect().shrink(2.0);
+            if view.is_some_and(|v| header::draw_indicator(ui.painter(), rect, col, v, palette)) {
+                ui.ctx().request_repaint();
+            }
+        });
+    }
+
     fn show_menu(&mut self, ctx: &egui::Context) {
         let Some(m) = self.menu else { return };
         let size = m.size.unwrap_or(MENU_ESTIMATE);
@@ -1196,11 +1228,25 @@ impl eframe::App for HudApp {
         // live data wins; otherwise the files loaded from disk
         let live_state = self.live.as_ref().and(self.state);
 
+        let layers = match (&live_state, self.live.as_ref()) {
+            (Some(s), Some(l)) => classify_layers(&l.keymap, s),
+            _ => Vec::new(),
+        };
+
         // heads-up: fade in/out; without live state the HUD stays visible
         let hu = &self.config.headsup;
         let level = match (&live_state, self.headsup_on) {
             (Some(s), true) => {
-                let wanted = self.headsup.wants(s, hu, now);
+                // locked layers may be left to the mini indicator
+                let mut s = *s;
+                if hu.locked_layer == LockedLayer::Indicator && self.config.indicator.enabled {
+                    for &(l, how) in &layers {
+                        if how == LayerHold::Locked {
+                            s.layer_state &= !(1u32 << l);
+                        }
+                    }
+                }
+                let wanted = self.headsup.wants(&s, hu, now);
                 let force = self.pinned
                     || self.search.open
                     || self.menu.is_some()
@@ -1240,11 +1286,6 @@ impl eframe::App for HudApp {
             }
             (None, None) => (0, 1, false),
         };
-        let layers = match (&live_state, layout) {
-            (Some(s), Some(l)) => classify_layers(&l.keymap, s),
-            _ => Vec::new(),
-        };
-
         let pad = if compact { 10.0 } else { 16.0 };
         let header_h = if compact { 22.0 } else { 28.0 };
         let footer_h = if compact { 14.0 } else { 18.0 };
@@ -1385,6 +1426,26 @@ impl eframe::App for HudApp {
             self.open_menu(&ctx, full, full.center() + Vec2::new(-10.0, -10.0));
         }
         self.show_menu(&ctx);
+        // the indicator window lives as long as there is a keyboard, empty when not
+        // needed: created at the right moment it could take the focus while typing
+        // (and in the very first frames it would not be created at all)
+        if let Some(s) =
+            live_state.filter(|_| self.config.indicator.enabled && self.started.elapsed() > Duration::from_secs(1))
+        {
+            let shown = (!self.visible || faded) && header::indicator_needed(&layers, &s);
+            let (layer_names, layer_colors) = (self.layer_names.clone(), self.layer_colors.clone());
+            let names = |l: u8| layer_names.get(l as usize).cloned().unwrap_or_else(|| format!("L{l}"));
+            let colors = |l: u8| layer_colors.get(l as usize).copied().flatten();
+            let view = header::IndicatorView {
+                lang: self.lang,
+                layers: &layers,
+                layer_name: &names,
+                layer_color: &colors,
+                state: &s,
+                time: self.started.elapsed().as_secs_f64(),
+            };
+            self.show_indicator(&ctx, shown.then_some(&view), &palette);
+        }
         let names = self.layer_names.clone();
         let name_of = |l: u8| names.get(l as usize).cloned().unwrap_or_else(|| format!("L{l}"));
         self.search.show(&ctx, self.lang, &palette, &name_of);

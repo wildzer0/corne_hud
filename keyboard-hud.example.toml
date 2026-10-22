@@ -60,6 +60,17 @@ enabled = true
 modifier_delay_ms = 400   # Ctrl/Shift/Alt/Gui tenuto almeno così a lungo
 hide_delay_ms = 800       # scompare dopo questo tempo dal ritorno a BASE
 hidden_opacity = 0.0      # 0 = invisibile, 0.15 = appena visibile
+# Un layer bloccato (TG, Layer Lock) tiene su l'HUD intero ("hud") oppure solo
+# il mini indicatore ("indicator").
+locked_layer = "hud"
+
+[indicator]
+# Mini indicatore: con l'HUD nascosto mostra in un angolo dello schermo solo
+# gli stati che restano dopo aver rilasciato i tasti: layer bloccati, one-shot
+# in attesa, modificatori bloccati, Caps Lock e Caps Word.
+enabled = true
+# top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right
+position = "top-right"
 
 [stats]
 # Solo contatori aggregati per tasto, layer e giorno: mai testo, sequenze o tempi.

@@ -109,11 +109,76 @@ pub struct HeadsUp {
     pub hide_delay_ms: u64,
     /// Opacity while faded out (0 = invisible).
     pub hidden_opacity: f32,
+    /// What a locked layer (TG, Layer Lock) brings up.
+    pub locked_layer: LockedLayer,
 }
 
 impl Default for HeadsUp {
     fn default() -> Self {
-        HeadsUp { enabled: true, modifier_delay_ms: 400, hide_delay_ms: 800, hidden_opacity: 0.0 }
+        HeadsUp {
+            enabled: true,
+            modifier_delay_ms: 400,
+            hide_delay_ms: 800,
+            hidden_opacity: 0.0,
+            locked_layer: LockedLayer::Hud,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LockedLayer {
+    /// The whole HUD stays on screen.
+    #[default]
+    Hud,
+    /// Only the mini indicator.
+    Indicator,
+}
+
+/// Screen corner, edge middle or centre.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ScreenPlace {
+    TopLeft,
+    Top,
+    #[default]
+    TopRight,
+    Left,
+    Center,
+    Right,
+    BottomLeft,
+    Bottom,
+    BottomRight,
+}
+
+impl ScreenPlace {
+    /// `(column, row)`, 0..=2 each.
+    pub fn cell(self) -> (u8, u8) {
+        match self {
+            ScreenPlace::TopLeft => (0, 0),
+            ScreenPlace::Top => (1, 0),
+            ScreenPlace::TopRight => (2, 0),
+            ScreenPlace::Left => (0, 1),
+            ScreenPlace::Center => (1, 1),
+            ScreenPlace::Right => (2, 1),
+            ScreenPlace::BottomLeft => (0, 2),
+            ScreenPlace::Bottom => (1, 2),
+            ScreenPlace::BottomRight => (2, 2),
+        }
+    }
+}
+
+/// Mini indicator shown while the HUD is hidden.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct IndicatorConfig {
+    pub enabled: bool,
+    pub position: ScreenPlace,
+}
+
+impl Default for IndicatorConfig {
+    fn default() -> Self {
+        IndicatorConfig { enabled: true, position: ScreenPlace::TopRight }
     }
 }
 
@@ -188,6 +253,7 @@ pub struct Config {
     pub device: DeviceConfig,
     pub appearance: Appearance,
     pub headsup: HeadsUp,
+    pub indicator: IndicatorConfig,
     pub layers: Vec<LayerConfig>,
     pub labels: Vec<LabelConfig>,
     pub stats: StatsConfig,
@@ -348,6 +414,8 @@ mod tests {
         assert_eq!(parse_color(&c.layers[1].color), Some((0x00, 0xB9, 0xD7)));
         assert_eq!(c.polling.visible_hz, 60);
         assert!(c.headsup.enabled);
+        assert_eq!(c.headsup.locked_layer, LockedLayer::Hud);
+        assert_eq!(c.indicator.position, ScreenPlace::TopRight);
         assert_eq!(c.headsup.modifier_delay_ms, 400);
         assert!(c.labels.iter().any(|l| l.label == "Step over" && l.keycode.as_deref() == Some("KC_F10")));
         assert!(c

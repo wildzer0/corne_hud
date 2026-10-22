@@ -59,6 +59,8 @@ struct Chips<'p> {
     size: f32,
     gap: f32,
     time: f64,
+    /// Only measure: advance `x` without painting.
+    dry: bool,
 }
 
 impl Chips<'_> {
@@ -86,6 +88,10 @@ impl Chips<'_> {
                 (c.gamma_multiply(0.15), Stroke::new(2.0, c.gamma_multiply(a)), palette.text)
             }
         };
+        if self.dry {
+            self.x += rect.width() + self.gap;
+            return;
+        }
         painter.rect(rect, radius, fill, stroke, StrokeKind::Inside);
         let text = painter.layout_no_wrap(text.to_string(), FontId::proportional(size), text_color);
         let text_right = rect.min.x + pad.x + text.size().x;
@@ -146,7 +152,7 @@ pub fn draw(painter: &Painter, rect: Rect, view: &HeaderView, palette: &Palette)
         draw_lock(painter, Pos2::new(r.right() + big * 0.55, y), big * 0.8, color);
         x += big * 0.9;
     }
-    let mut chips = Chips { painter, palette, x, y, size: small, gap, time: view.time };
+    let mut chips = Chips { painter, palette, x, y, size: small, gap, time: view.time, dry: false };
 
     // other active layers below the main one (e.g. DEBUG locked while holding Fn1)
     for &(l, how) in view.layers.iter().filter(|(l, _)| *l != view.layer) {
@@ -197,4 +203,100 @@ pub fn draw(painter: &Painter, rect: Rect, view: &HeaderView, palette: &Palette)
         chips.add(&format!("{} · {how}", os_name(s.active_os)), neutral);
     }
     animating
+}
+
+/// Mini indicator: the states that last after the keys are released, shown
+/// while the HUD itself is hidden.
+pub struct IndicatorView<'a> {
+    pub lang: Lang,
+    pub layers: &'a [(u8, LayerHold)],
+    pub layer_name: &'a dyn Fn(u8) -> String,
+    pub layer_color: &'a dyn Fn(u8) -> Option<Color32>,
+    pub state: &'a HudState,
+    pub time: f64,
+}
+
+/// Is there anything for the mini indicator to show?
+pub fn indicator_needed(layers: &[(u8, LayerHold)], s: &HudState) -> bool {
+    layers.iter().any(|(_, h)| *h != LayerHold::Held)
+        || MODIFIERS.iter().any(|&m| matches!(mod_level(s, m), ModLevel::OneShot | ModLevel::OneShotLocked))
+        || s.flag(flags::CAPS_WORD)
+        || s.flag(flags::CAPS_LOCK)
+}
+
+fn indicator_chips(chips: &mut Chips, view: &IndicatorView, palette: &Palette) -> bool {
+    let mut animating = false;
+    for &(l, how) in view.layers.iter().filter(|(_, h)| *h != LayerHold::Held) {
+        let c = (view.layer_color)(l).unwrap_or(palette.neutral_layer);
+        match how {
+            LayerHold::OneShot => {
+                chips.add(&format!("{} {ONE_SHOT_MARK}", (view.layer_name)(l)), ChipStyle::Pulse(c));
+                animating = true;
+            }
+            _ => chips.add_with(&(view.layer_name)(l), ChipStyle::Filled(c), true),
+        }
+    }
+    let s = view.state;
+    for m in MODIFIERS {
+        match mod_level(s, m) {
+            ModLevel::OneShot => {
+                chips.add(mod_label(m, s.active_os), ChipStyle::Pulse(palette.accent));
+                animating = true;
+            }
+            ModLevel::OneShotLocked => {
+                chips.add_with(mod_label(m, s.active_os), ChipStyle::Filled(palette.accent), true)
+            }
+            _ => {}
+        }
+    }
+    if s.flag(flags::CAPS_WORD) {
+        chips.add(tr(view.lang, Msg::CapsWord), ChipStyle::Filled(palette.caps_word));
+    }
+    if s.flag(flags::CAPS_LOCK) {
+        chips.add(tr(view.lang, Msg::CapsLock), ChipStyle::Filled(palette.text));
+    }
+    animating
+}
+
+/// Draws the indicator on a small panel inside `rect`, aligned left, centered
+/// or right (`align` 0, 1, 2). Returns true while something animates.
+pub fn draw_indicator(painter: &Painter, rect: Rect, align: u8, view: &IndicatorView, palette: &Palette) -> bool {
+    let (size, gap, pad) = (14.0, 6.0, 8.0);
+    let y = rect.center().y;
+    let mut measure = Chips { painter, palette, x: 0.0, y, size, gap, time: view.time, dry: true };
+    indicator_chips(&mut measure, view, palette);
+    let width = (measure.x - gap).max(0.0) + 2.0 * pad;
+    let left = match align {
+        0 => rect.left(),
+        1 => rect.center().x - width / 2.0,
+        _ => rect.right() - width,
+    };
+    let panel = Rect::from_min_max(Pos2::new(left, rect.top()), Pos2::new(left + width, rect.bottom()));
+    painter.rect(
+        panel,
+        CornerRadius::same((panel.height() / 2.0) as u8),
+        palette.background,
+        Stroke::new(1.0, palette.key_border),
+        StrokeKind::Inside,
+    );
+    let mut chips = Chips { painter, palette, x: left + pad, y, size, gap, time: view.time, dry: false };
+    indicator_chips(&mut chips, view, palette)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn indicator_only_for_lasting_states() {
+        let s = HudState::default();
+        assert!(!indicator_needed(&[], &s));
+        assert!(!indicator_needed(&[(1, LayerHold::Held)], &s));
+        assert!(indicator_needed(&[(4, LayerHold::Locked)], &s));
+        assert!(indicator_needed(&[(5, LayerHold::OneShot)], &s));
+        assert!(indicator_needed(&[], &HudState { flags: flags::CAPS_WORD, ..s }));
+        assert!(indicator_needed(&[], &HudState { oneshot_locked_mods: 0x02, ..s }));
+        // a modifier simply held is not worth an indicator
+        assert!(!indicator_needed(&[], &HudState { mods: 0x02, ..s }));
+    }
 }
