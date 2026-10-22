@@ -381,7 +381,7 @@ Le tabelle dei keycode sono **generate** da `build.rs` a partire dai file hjson 
 
 ## Licenza e crediti
 
-- Codice dell'app: **GPL-2.0-or-later**. Le tabelle dei keycode derivano da [vial-qmk](https://github.com/vial-kb/vial-qmk) (GPL-2.0-or-later) e [vial-gui](https://github.com/vial-kb/vial-gui) (GPL-2.0).
+- Codice dell'app: **GPL-2.0-or-later** (testo della licenza in [`LICENSE`](LICENSE)). Le tabelle dei keycode derivano da [vial-qmk](https://github.com/vial-kb/vial-qmk) (GPL-2.0-or-later) e [vial-gui](https://github.com/vial-kb/vial-gui) (GPL-2.0).
 - Firmware: basato su QMK/vial-qmk (GPL-2.0-or-later).
 - Font: [DejaVu Sans](https://dejavu-fonts.github.io/) (licenza in `app/data/fonts/DejaVu-LICENSE.txt`), usato per i simboli dei tasti.
 - Interfaccia: [egui/eframe](https://github.com/emilk/egui); accesso HID: [hidapi](https://github.com/ruabmbua/hidapi-rs).

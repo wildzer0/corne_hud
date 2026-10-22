@@ -13,7 +13,7 @@ _Ultimo aggiornamento: 2026-10-22. Release **v0.5.0** (stili: opacità e arroton
 | # | Milestone | Stato | Note |
 |---|---|---|---|
 | 1 | Analisi e protocollo | ✅ fatta | Protocollo HUD v1 in `docs/PROTOCOL.md` |
-| 2 | Firmware | ✅ scritto, compila | **Mai provato sulla tastiera vera** |
+| 2 | Firmware | ✅ fatta | Provato dall'utente sulla tastiera vera (2026-10-22) |
 | 3 | App base | ✅ fatta | Verificata con `--mock` e `--offline` |
 | 4 | Live (stato, overlay, Vial, robustezza) | ✅ fatta | Verificata solo con `--mock` |
 | 5 | Heads-up, etichette, ricerca, statistiche, HUD_TOG | ✅ fatta | Verificata solo con `--mock` |
@@ -41,8 +41,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - icona nella tray su Windows (area di notifica): clic sinistro, menu, spunte di pausa e avvio automatico; su macOS nella barra dei menu;
    - mini indicatore su Windows: nessun furto di focus all'avvio o dopo (la finestra ora esiste anche senza tastiera), chip "In pausa · Vial" aprendo Vial con l'HUD nascosto, avvisi di `CMK_TOG` e del cambio di OS, click-through, aggiornamento anche con l'HUD nascosto da HUD_TOG (su X11 i fotogrammi continuano, su Windows da verificare);
    - icona dell'`.exe` in Esplora risorse e in Proprietà → Dettagli (versione). La CI deve trovare `rc.exe`: se manca, nel log di build compare l'avviso "risorse Windows non incluse".
-4. **File `LICENSE`** (GPL-2.0-or-later): manca ancora, anche se v0.1.0 è già pubblicata. In attesa di conferma dell'utente.
-5. **Prossime release**: aumentare `version` in `app/Cargo.toml`, poi `git tag vX.Y.Z && git push origin vX.Y.Z`. Il tag deve corrispondere alla versione, altrimenti la CI si ferma.
+4. **Prossime release**: aumentare `version` in `app/Cargo.toml`, poi `git tag vX.Y.Z && git push origin vX.Y.Z`. Il tag deve corrispondere alla versione, altrimenti la CI si ferma.
 
 ## Piano delle prossime funzioni (concordato il 2026-10-22, in quest'ordine)
 
@@ -155,6 +154,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-22**: l'utente ha provato l'app con la tastiera vera e la usa ogni giorno: "funziona alla grande". File `LICENSE` aggiunto (GPL-2.0, testo FSF; il progetto è GPL-2.0-or-later come in `Cargo.toml`).
 
 - **2026-10-22**: stili, cioè i temi visivi chiesti dall'utente come "templating" (nuovo `style.rs`, `data/styles/*.toml` inclusi con `include_str!`, cartella `styles/` accanto alla config). Chiamati "stili" e non "temi" perché `[appearance] theme` è già sistema/scuro/chiaro. `Palette::new` applica i colori dello stile e porta la forma (`Look`): opacità dei tasti (il tasto premuto torna pieno), raggio (`keyboard::rounded_polygon`, curve quadratiche che restano convesse, anche sui tasti ruotati), bordo, scala delle legende, angoli della finestra. Menu: stile, opacità tasti, arrotondamento, "Salva come stile", "Cartella stili". Precedenza menu > config > stile; l'opacità della finestra dello stile si applica a ogni cambio di stile. 117 test; screenshot dei quattro stili in scuro e chiaro, vista compatta, menu; ricaricamento al volo provato modificando il file (valido e non valido). "Salva come stile" non provato col clic (solo `to_toml` + rilettura nei test).
 
