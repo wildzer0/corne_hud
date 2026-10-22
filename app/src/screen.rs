@@ -81,6 +81,27 @@ pub fn snap(window: Rect, area: Rect, distance: f32, margin: f32) -> Pos2 {
     )
 }
 
+/// Top-left corner of a popup of `size` opening from `anchor` (e.g. the
+/// click): towards the preferred side when it fits, otherwise towards the
+/// other one, and always inside `area`.
+pub fn popup_position(anchor: Pos2, size: Vec2, area: Rect, prefer_left: bool, prefer_up: bool, margin: f32) -> Pos2 {
+    let axis = |a: f32, len: f32, lo: f32, hi: f32, prefer_before: bool| {
+        let (before, after) = (a - len, a);
+        let fits_before = before >= lo + margin;
+        let fits_after = after + len <= hi - margin;
+        let pos = match (prefer_before, fits_before, fits_after) {
+            (true, true, _) | (false, true, false) => before,
+            _ => after,
+        };
+        // still out (larger than the space on both sides): clamp
+        pos.min(hi - margin - len).max(lo + margin)
+    };
+    Pos2::new(
+        axis(anchor.x, size.x, area.left(), area.right(), prefer_left),
+        axis(anchor.y, size.y, area.top(), area.bottom(), prefer_up),
+    )
+}
+
 /// Moves `window` back inside `area` (keeping `margin` from the edges when it
 /// fits). A window larger than the area sticks to its top-left corner.
 pub fn keep_inside(window: Rect, area: Rect, margin: f32) -> Pos2 {
@@ -150,6 +171,23 @@ mod tests {
         // larger than the area
         let big = Rect::from_min_size(Pos2::new(50.0, 50.0), Vec2::new(2000.0, 300.0));
         assert_eq!(keep_inside(big, area(), 8.0).x, 0.0);
+    }
+
+    #[test]
+    fn popups_stay_on_screen() {
+        let size = Vec2::new(300.0, 420.0);
+        // plenty of room: the preferred side
+        assert_eq!(popup_position(Pos2::new(1000.0, 600.0), size, area(), true, true, 8.0), Pos2::new(700.0, 180.0));
+        assert_eq!(popup_position(Pos2::new(1000.0, 300.0), size, area(), false, false, 8.0), Pos2::new(1000.0, 300.0));
+        // HUD in the bottom-right corner, click in its upper half: opening down
+        // would leave the screen, so it opens up
+        assert_eq!(popup_position(Pos2::new(1700.0, 800.0), size, area(), false, false, 8.0), Pos2::new(1400.0, 380.0));
+        // bottom-left corner, preferring left: no room, so right
+        assert_eq!(popup_position(Pos2::new(100.0, 1000.0), size, area(), true, true, 8.0), Pos2::new(100.0, 580.0));
+        // no room either way: clamped inside
+        let tall = Vec2::new(300.0, 700.0);
+        let p = popup_position(Pos2::new(500.0, 520.0), tall, area(), false, false, 8.0);
+        assert!(p.y >= 8.0 && p.y + 700.0 <= 1032.0, "{p:?}");
     }
 
     #[test]

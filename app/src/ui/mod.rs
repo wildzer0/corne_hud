@@ -1007,8 +1007,17 @@ impl HudApp {
 
     fn show_menu(&mut self, ctx: &egui::Context) {
         let Some(m) = self.menu else { return };
+        let margin = self.config.appearance.screen_margin;
+        // the work area of the monitor where the click happened
+        let area = m.anchor.and_then(|a| work_area(ctx, Rect::from_center_size(a, Vec2::splat(2.0))));
+        // taller than the screen (small or scaled displays): it scrolls
+        let max_height = area.map_or(f32::INFINITY, |a| a.height() - 2.0 * margin);
         let size = m.size.unwrap_or(MENU_ESTIMATE);
-        let offset = Vec2::new(if m.left { size.x } else { 0.0 }, if m.up { size.y } else { 0.0 });
+        let size = Vec2::new(size.x, size.y.min(max_height));
+        let place = m.anchor.map(|a| match area {
+            Some(area) => screen::popup_position(a, size, area, m.left, m.up, margin),
+            None => a - Vec2::new(if m.left { size.x } else { 0.0 }, if m.up { size.y } else { 0.0 }),
+        });
         let builder = egui::ViewportBuilder::default()
             .with_title("Keyboard HUD · Menu")
             .with_decorations(false)
@@ -1016,8 +1025,8 @@ impl HudApp {
             .with_resizable(false)
             .with_taskbar(false)
             .with_inner_size(size);
-        let builder = match m.anchor {
-            Some(a) => builder.with_position(a - offset),
+        let builder = match place {
+            Some(p) => builder.with_position(p),
             None => builder,
         };
         let mut close = false;
@@ -1037,9 +1046,20 @@ impl HudApp {
                 _ => {}
             }
             close |= esc || close_requested;
-            // the frame hugs the contents: its size is the window size to use
-            let r = egui::Frame::central_panel(ui.style()).show(ui, |ui| self.context_menu(ui)).response.rect;
-            measured = Some(r.size().ceil());
+            // the window size to use: the frame around the whole contents, also
+            // the part scrolled out of view
+            let mut content = Vec2::ZERO;
+            let mut visible = Vec2::ZERO;
+            let r = egui::Frame::central_panel(ui.style())
+                .show(ui, |ui| {
+                    let out =
+                        egui::ScrollArea::vertical().max_height(max_height - 16.0).show(ui, |ui| self.context_menu(ui));
+                    content = out.content_size;
+                    visible = out.inner_rect.size();
+                })
+                .response
+                .rect;
+            measured = Some(Vec2::new(r.width(), r.height() - visible.y + content.y).ceil());
         });
         match &mut self.menu {
             Some(m) if !close => {
