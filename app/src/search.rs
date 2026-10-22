@@ -3,6 +3,8 @@
 
 use crate::labels::Labels;
 use crate::model::Keymap;
+use crate::vial::dynamic::{Dynamic, TapAction};
+use crate::vial::keycode::Mods5;
 use crate::vial::keycode::{
     decode, qmk_name, Keycode, LayerOp, KC_NO, KC_TRNS, TRI_LAYER_ADJUST, TRI_LAYER_LOWER, TRI_LAYER_UPPER,
 };
@@ -19,6 +21,8 @@ pub struct Hit {
     /// Keys to press, e.g. "Fn1 + D".
     pub sequence: String,
     pub score: u32,
+    /// Other keys of a combo, on the same layer.
+    pub also: Vec<(u8, u8)>,
 }
 
 fn norm(s: &str) -> String {
@@ -118,8 +122,110 @@ pub fn sequence(keymap: &Keymap, ctx: &LegendContext, labels: &Labels, layer: u8
     }
 }
 
-/// Finds keys matching `query` on every layer, best first.
-pub fn search(query: &str, keymap: &Keymap, positions: &[(u8, u8)], ctx: &LegendContext, labels: &Labels) -> Vec<Hit> {
+/// Score of `query` against what a keycode shows (legend and QMK name).
+fn score_code(q: &str, code: u16, ctx: &LegendContext) -> (u32, Legend) {
+    let leg = legend(code, ctx);
+    let name = qmk_name(code);
+    let n = norm(&name);
+    let score = [
+        score_text(q, &leg.tap.symbol, 100, 60, 40),
+        score_text(q, &leg.tap.text, 100, 60, 40),
+        if n == q || n == format!("kc_{q}") { 95 } else { score_text(q, &name, 0, 55, 35) },
+    ]
+    .into_iter()
+    .max()
+    .unwrap_or(0);
+    (score, leg)
+}
+
+/// First position showing `code` on `layer`.
+fn find_key(keymap: &Keymap, positions: &[(u8, u8)], layer: u8, code: u16) -> Option<(u8, u8)> {
+    positions.iter().copied().find(|&(r, c)| keymap.get(layer, r, c) == code)
+}
+
+/// Combos and key overrides whose output matches; their keys are found on
+/// the lowest layer that has them all.
+fn dynamic_hits(
+    q: &str,
+    keymap: &Keymap,
+    positions: &[(u8, u8)],
+    ctx: &LegendContext,
+    labels: &Labels,
+    dynamic: &Dynamic,
+) -> Vec<Hit> {
+    let mut hits = Vec::new();
+    for combo in &dynamic.combos {
+        let (score, leg) = score_code(q, combo.output, ctx);
+        if score == 0 {
+            continue;
+        }
+        let found = (0..keymap.layers()).find_map(|layer| {
+            let keys: Option<Vec<(u8, u8)>> = combo.inputs().map(|kc| find_key(keymap, positions, layer, kc)).collect();
+            keys.map(|k| (layer, k))
+        });
+        let Some((layer, keys)) = found else { continue };
+        let names: Vec<String> = keys.iter().map(|&(r, c)| key_name_on(keymap, ctx, labels, layer, r, c)).collect();
+        let together = format!("{} insieme", names.join(" + "));
+        let sequence = match layer {
+            0 => together,
+            _ => format!("{}: {together}", ctx.layer_names.get(layer as usize).cloned().unwrap_or(format!("L{layer}"))),
+        };
+        let (row, col) = keys[0];
+        hits.push(Hit {
+            layer,
+            row,
+            col,
+            code: combo.output,
+            shown: leg.tap.text,
+            sequence: format!("combo: {sequence}"),
+            score: score * 10 + (9 - layer.min(9)) as u32,
+            also: keys[1..].to_vec(),
+        });
+    }
+    for o in &dynamic.key_overrides {
+        let (score, leg) = score_code(q, o.replacement, ctx);
+        if score == 0 {
+            continue;
+        }
+        let found = (0..keymap.layers().min(16))
+            .filter(|&l| o.layers & (1 << l) != 0)
+            .find_map(|l| find_key(keymap, positions, l, o.trigger).map(|k| (l, k)));
+        let Some((layer, (row, col))) = found else { continue };
+        hits.push(Hit {
+            layer,
+            row,
+            col,
+            code: o.replacement,
+            shown: leg.tap.text,
+            sequence: format!("{} + {}", Mods5(o.mods5()).display(), sequence(keymap, ctx, labels, layer, row, col)),
+            score: score * 10 + (9 - layer.min(9)) as u32,
+            also: Vec::new(),
+        });
+    }
+    hits
+}
+
+/// Name of a key on any layer, as printed on it.
+fn key_name_on(keymap: &Keymap, ctx: &LegendContext, labels: &Labels, layer: u8, row: u8, col: u8) -> String {
+    let code = keymap.get(layer, row, col);
+    let (leg, _) = legend_with_label(code, ctx, labels, (layer, row, col));
+    if leg.tap.text.is_empty() {
+        format!("{row},{col}")
+    } else {
+        leg.tap.text
+    }
+}
+
+/// Finds keys matching `query` on every layer, best first, together with the
+/// combos, tap dance actions and key overrides that produce it.
+pub fn search(
+    query: &str,
+    keymap: &Keymap,
+    positions: &[(u8, u8)],
+    ctx: &LegendContext,
+    labels: &Labels,
+    dynamic: &Dynamic,
+) -> Vec<Hit> {
     let q = norm(query);
     if q.is_empty() {
         return Vec::new();
@@ -145,23 +251,34 @@ pub fn search(query: &str, keymap: &Keymap, positions: &[(u8, u8)], ctx: &Legend
             .into_iter()
             .max()
             .unwrap_or(0);
+            // tap dance: each action counts like a key of its own
+            let mut how = "";
+            if let Keycode::TapDance(t) = decode(code) {
+                for (action, c) in dynamic.tap_dance(t).into_iter().flat_map(|td| td.actions()) {
+                    let s = if c == 0 { 0 } else { score_code(&q, c, ctx).0 };
+                    if s > score {
+                        score = s;
+                        how = match action {
+                            TapAction::Tap => "",
+                            other => other.describe(),
+                        };
+                    }
+                }
+            }
             if score == 0 {
                 continue;
             }
             // same match on several layers: prefer the easier to reach
             score = score * 10 + (9 - layer.min(9)) as u32;
             let shown = if leg.tap.text.is_empty() { name } else { leg.tap.text.clone() };
-            hits.push(Hit {
-                layer,
-                row,
-                col,
-                code,
-                shown,
-                sequence: sequence(keymap, ctx, labels, layer, row, col),
-                score,
-            });
+            let mut seq = sequence(keymap, ctx, labels, layer, row, col);
+            if !how.is_empty() {
+                seq = format!("{seq} ({how})");
+            }
+            hits.push(Hit { layer, row, col, code, shown, sequence: seq, score, also: Vec::new() });
         }
     }
+    hits.extend(dynamic_hits(&q, keymap, positions, ctx, labels, dynamic));
     hits.sort_by(|a, b| b.score.cmp(&a.score).then((a.layer, a.row, a.col).cmp(&(b.layer, b.row, b.col))));
     hits
 }
@@ -177,6 +294,7 @@ mod tests {
         def: Definition,
         names: Vec<String>,
         labels: Labels,
+        dynamic: Dynamic,
     }
 
     fn fixture() -> Fixture {
@@ -193,12 +311,13 @@ mod tests {
         let cfg = crate::config::Config::parse(include_str!("../../keyboard-hud.example.toml")).unwrap();
         let (labels, _) = Labels::from_config(&cfg.labels);
         let names = ["BASE", "SYM", "NAV", "SYS", "DEBUG", "ACC"].map(String::from).to_vec();
-        Fixture { keymap, positions, def, names, labels }
+        let dynamic = crate::hid::mock::mock_dynamic();
+        Fixture { keymap, positions, def, names, labels, dynamic }
     }
 
     fn first(f: &Fixture, q: &str) -> Hit {
-        let ctx = LegendContext { layer_names: &f.names, custom: &f.def.custom };
-        search(q, &f.keymap, &f.positions, &ctx, &f.labels)
+        let ctx = LegendContext { layer_names: &f.names, custom: &f.def.custom, tap_dances: &[] };
+        search(q, &f.keymap, &f.positions, &ctx, &f.labels, &f.dynamic)
             .into_iter()
             .next()
             .unwrap_or_else(|| panic!("no hit for {q}"))
@@ -237,10 +356,32 @@ mod tests {
     }
 
     #[test]
+    fn finds_combos_key_overrides_and_tap_dances() {
+        let mut f = fixture();
+        let all = |f: &Fixture, q: &str| {
+            let ctx = LegendContext { layer_names: &f.names, custom: &f.def.custom, tap_dances: &f.dynamic.tap_dances };
+            search(q, &f.keymap, &f.positions, &ctx, &f.labels, &f.dynamic)
+        };
+        // combo J + K = Esc (mock): both keys marked
+        let h = all(&f, "esc").into_iter().find(|h| h.sequence.starts_with("combo")).expect("combo hit");
+        assert_eq!(h.sequence, "combo: J + K insieme");
+        assert_eq!((h.layer, h.row, h.col, h.also.as_slice()), (0, 5, 4, &[(5, 3)][..]));
+        // key override Shift + Backspace = Delete, from the .vil
+        let h = all(&f, "del").into_iter().find(|h| h.sequence.starts_with("Shift")).expect("override hit");
+        assert_eq!((h.layer, h.row, h.col, h.sequence.as_str()), (0, 4, 0, "Shift + Bksp"));
+        // tap dance on Q's place: F13 when held
+        f.keymap.set(0, 0, 1, 0x5700);
+        f.dynamic.tap_dances =
+            vec![crate::vial::dynamic::TapDance { on_tap: 0x14, on_hold: 0x68, ..Default::default() }];
+        let h = all(&f, "f13").into_iter().next().expect("tap dance hit");
+        assert_eq!((h.layer, h.row, h.col, h.sequence.as_str()), (0, 0, 1, "Q (tieni)"));
+    }
+
+    #[test]
     fn empty_and_unknown_queries() {
         let f = fixture();
-        let ctx = LegendContext { layer_names: &f.names, custom: &f.def.custom };
-        assert!(search("   ", &f.keymap, &f.positions, &ctx, &f.labels).is_empty());
-        assert!(search("zzzqqq", &f.keymap, &f.positions, &ctx, &f.labels).is_empty());
+        let ctx = LegendContext { layer_names: &f.names, custom: &f.def.custom, tap_dances: &[] };
+        assert!(search("   ", &f.keymap, &f.positions, &ctx, &f.labels, &f.dynamic).is_empty());
+        assert!(search("zzzqqq", &f.keymap, &f.positions, &ctx, &f.labels, &f.dynamic).is_empty());
     }
 }

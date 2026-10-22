@@ -82,6 +82,8 @@ Quando la versione cambia, l'HUD rilegge il keymap con `GET_KEYMAP`.
 | `0xFE 0x00` | protocollo Vial (u32 LE) e UID (8 byte) | chiave della cache della definizione |
 | `0xFE 0x01` | dimensione della definizione (u32 LE) | |
 | `0xFE 0x02` + pagina (u16 LE) | 32 byte di definizione | JSON compresso xz |
+| `0xFE 0x0D 0x00` | numero di tap dance, combo, key override (un byte ciascuno) | `vial_dynamic_entry_op`; un firmware senza questo comando restituisce la richiesta invariata |
+| `0xFE 0x0D` + `0x01`/`0x03`/`0x05` + indice | stato (0 = OK) e 10 byte: tap dance, combo o key override | strutture di `quantum/vial.h`, LE. Letti a ogni connessione, senza sblocco |
 | `0x02 0x02` | opzioni di layout (u32 **BE**) | per filtrare le alternative del KLE |
 | `0x11` | numero di layer | |
 | `0x12` | keymap grezzo (offset u16 **BE**, size ≤ 28, keycode **BE**) | senza Colemak; solo per confronto o in modalità degradata |

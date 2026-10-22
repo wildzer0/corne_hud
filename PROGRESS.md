@@ -35,6 +35,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - lucchetti dei layer: "tenuto" e "bloccato" sono dedotti dall'app (vedi decisioni), da verificare.
    - trascinamento dell'HUD su Windows dopo la correzione (vedi registro): clic tenuto fermo, clic rapidi, trascinamenti lunghi, anche su monitor con scala diversa;
    - aggancio ai bordi (anche con la taskbar in un lato diverso dal basso), menu → Posizione, ritorno sullo schermo all'avvio dopo aver scollegato un monitor;
+   - combo, tap dance e key override: nel log deve comparire "Vial: N tap dance, N combo, N key override"; Shift tenuto deve mostrare ⌦ su ⌫; dopo una modifica in Vial e la chiusura di Vial l'HUD deve vedere le nuove voci;
    - icona dell'`.exe` in Esplora risorse e in Proprietà → Dettagli (versione). La CI deve trovare `rc.exe`: se manca, nel log di build compare l'avviso "risorse Windows non incluse".
 4. **File `LICENSE`** (GPL-2.0-or-later): manca ancora, anche se v0.1.0 è già pubblicata. In attesa di conferma dell'utente.
 5. **Prossime release**: aumentare `version` in `app/Cargo.toml`, poi `git tag vX.Y.Z && git push origin vX.Y.Z`. Il tag deve corrispondere alla versione, altrimenti la CI si ferma.
@@ -49,7 +50,12 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - [x] icona del progetto: finestra (tutti i sistemi), `.exe` (risorsa Windows), `.app` (macOS);
    - [x] metadati di versione nell'`.exe`; sezione "Windows: SmartScreen" nel README;
    - [ ] firma del codice per Windows: **rimandata dall'utente** (2026-10-22) (SignPath Foundation gratuita per progetti open source, che però richiede il file `LICENSE`; oppure Azure Artifact Signing o un certificato OV a pagamento).
-2. **Combo, tap dance e key override di Vial** (idea 4): letti via Raw HID con il protocollo Vial (`vial_dynamic_entry_op`), mostrati nella ricerca e sull'HUD.
+2. **Combo, tap dance e key override di Vial** (idea 4): ✅ fatto, da provare con la tastiera vera.
+   - [x] lettura via Raw HID (`vial_dynamic_entry_op`, senza sblocco) a ogni connessione, e dal `.vil` in offline;
+   - [x] tap dance: tocco in grande, tenuto (o doppio tocco) in piccolo, tutte le azioni nel tooltip;
+   - [x] combo: menu → "Mostra le combo" (ricordato nello stato), etichetta con l'output fra i tasti;
+   - [x] key override dal vivo: con i modificatori giusti il tasto mostra il sostituto in colore accento;
+   - [x] ricerca: output delle combo (tutti i tasti evidenziati), azioni dei tap dance, key override.
 3. **Avvio automatico** (idea 6): voce nel menu; Windows con la chiave `Run` del registro, Linux con `~/.config/autostart/*.desktop`, macOS con un LaunchAgent.
 
 Idee rimandate: etichette per applicazione (idea 1), esportazione PNG/SVG della keymap (3), WPM (5).
@@ -81,6 +87,9 @@ Idee rimandate: etichette per applicazione (idea 1), esportazione PNG/SVG della 
 - Aggancio e posizioni rapide lavorano sulla finestra esterna (`outer_rect`) in punti egui. Su Windows l'area di lavoro è esatta (`GetMonitorInfo`), altrove è stimata da `monitor_size` supponendo monitor affiancati della stessa misura. Su Wayland la posizione non è nota: la griglia "Posizione" è disattivata.
 - L'aggancio esiste solo dove l'HUD trascina da sé (Windows); con `StartDrag` (Linux, macOS) lo spostamento lo gestisce il sistema.
 - Icona: sorgente unica `app/packaging/icon/make_icon.py` (numpy), che genera `icon.png`, `.ico`, `.icns` e `icon-64.rgba` (icona della finestra, incorporata con `include_bytes!`). I file generati sono committati: la CI non esegue Python.
+- Tap dance, combo e key override (`vial/dynamic.rs`) si leggono solo a ogni connessione: `keymap_version` non li copre, ma Vial li modifica solo mentre è aperto, cioè con l'HUD in pausa, e alla ripresa la sessione riparte. Un firmware senza `vial_dynamic_entry_op` dà un insieme vuoto, non un errore.
+- Key override sull'HUD: modificatori = `mods | oneshot_mods | oneshot_locked_mods`; il layer considerato è quello mostrato (QMK usa il layer da cui è stato letto il tasto). Le regole dei modificatori sono quelle di `key_override_matches_active_modifiers` di QMK.
+- Combo: si disegnano solo se tutti i tasti sono sul layer mostrato; con tasti adiacenti solo l'etichetta, con tasti lontani anche le linee. Il mock ha tre combo dimostrative (J+K, X+C, D+F), oltre all'override della `.vil`.
 - Il menu contestuale è una finestra separata, non un popup dentro l'HUD (vedi registro, 2026-10-22).
 
 ## Ambiente di sviluppo
@@ -115,12 +124,14 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 
 - `firmware/mia/keymap.c`: sezione 9 (HUD). `vial.json`: `customKeycodes` + `HUD`.
 - `app/src/hid/`: `protocol.rs` (formato), `device.rs` (richieste), `transport.rs` (hidapi, udev), `worker.rs` (thread, riconnessione, pausa Vial), `mock.rs`.
-- `app/src/vial/`: `definition.rs`, `keycode.rs`, `names.rs` (tabelle generate, `parse_keycode`), `legend.rs`, `vil.rs`.
+- `app/src/vial/`: `definition.rs`, `dynamic.rs` (tap dance, combo, key override), `keycode.rs`, `names.rs` (tabelle generate, `parse_keycode`), `legend.rs`, `vil.rs`.
 - `app/src/`: `kle.rs`, `model.rs`, `config.rs`, `screen.rs` (geometria dello schermo), `labels.rs`, `headsup.rs`, `search.rs`, `stats.rs`, `clock.rs`, `logging.rs`, `paths.rs`, `cli.rs`, `i18n.rs` (tutte le stringhe utente).
 - `app/packaging/`: `icon/` (icona e script che la genera), `macos/Info.plist`.
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-22**: punto 4 del piano. Nuovo `vial/dynamic.rs` (strutture da 10 byte, regole dei key override come in QMK, lettura dal `.vil`), richieste in `protocol.rs`, `Device::dynamic()`, `Event::Layout` con `dynamic`, risposte del mock. UI: legenda dei tap dance, key override dal vivo, combo sull'HUD, ricerca estesa (`Hit::also` per i tasti delle combo). 88 test. Verificato con screenshot: combo sul layer BASE del mock, ricerca "ctrl+c" (prima la combo X+C, poi il tasto di NAV) e, forzando Shift per lo screenshot, ⌦ al posto di ⌫. Da provare sulla tastiera vera; la `.vil` dell'utente ha solo l'override Shift+⌫ = Canc.
 
 - **2026-10-22**: aggancio ai bordi e posizioni rapide (nuovo `screen.rs`, con test), icona del progetto, risorse dell'`.exe` (`winresource` in `build.rs`; da Linux esce solo un avviso), icona del bundle macOS, sezione SmartScreen nel README. Verificato in WSLg/X11 con XTest: la griglia del menu sposta l'HUD nella posizione calcolata. Le coordinate X11 di WSLg includono una cornice finta, quindi la finestra esterna misura 976×497 invece di 900×400. Lo script dell'icona ricampiona con due `tensordot`: la prima versione con `einsum` ci metteva 2 min 45 s. Prossimo passo del piano: combo, tap dance e key override di Vial.
 

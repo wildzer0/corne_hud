@@ -20,6 +20,8 @@ use crate::paths;
 use crate::screen;
 use crate::stats::{Stats, Totals};
 use crate::vial::definition::Definition;
+use crate::vial::dynamic::Dynamic;
+use crate::vial::keycode::Mods5;
 use crate::vial::legend::LegendContext;
 use egui::{Align2, Color32, FontId, Key, Rect, Sense, Vec2, ViewportCommand};
 use report::{ReportInput, ReportWindow};
@@ -162,12 +164,17 @@ pub struct Layout {
     pub definition: Definition,
     pub keys: Vec<KleKey>,
     pub keymap: Keymap,
+    pub dynamic: Dynamic,
 }
 
 impl Layout {
-    pub fn new(definition: Definition, layout_options: u32, keymap: Keymap) -> Self {
+    pub fn new(definition: Definition, layout_options: u32, keymap: Keymap, dynamic: Dynamic) -> Self {
         let keys = definition.visible_keys(layout_options);
-        Layout { definition, keys, keymap }
+        Layout { definition, keys, keymap, dynamic }
+    }
+
+    pub fn legend_context<'a>(&'a self, layer_names: &'a [String]) -> LegendContext<'a> {
+        LegendContext { layer_names, custom: &self.definition.custom, tap_dances: &self.dynamic.tap_dances }
     }
 }
 
@@ -370,6 +377,8 @@ pub struct HudApp {
     labels: Labels,
     headsup: HeadsUp,
     headsup_on: bool,
+    /// Combos drawn over the keys.
+    show_combos: bool,
     /// Heads-up mode: HUD_TOG pinned the HUD on screen.
     pinned: bool,
     /// Mouse passthrough currently requested from the window system.
@@ -396,6 +405,7 @@ impl HudApp {
         let (labels, label_errors) = Labels::from_config(&s.config.labels);
         let stats = s.config.stats.enabled.then(|| Stats::load(stats_path(&s.config.stats)));
         let headsup_on = s.window.headsup.unwrap_or(s.config.headsup.enabled);
+        let show_combos = s.window.combos.unwrap_or(false);
         let mut app = HudApp {
             lang: Lang::It,
             mode: s.mode,
@@ -428,6 +438,7 @@ impl HudApp {
             labels,
             headsup: HeadsUp::default(),
             headsup_on,
+            show_combos,
             pinned: false,
             passthrough: false,
             drag: None,
@@ -507,8 +518,8 @@ impl HudApp {
                     }
                     self.status = Some(s);
                 }
-                Event::Layout { definition, layout_options, keymap, info } => {
-                    self.live = Some(Layout::new(definition, layout_options, keymap));
+                Event::Layout { definition, layout_options, keymap, dynamic, info } => {
+                    self.live = Some(Layout::new(definition, layout_options, keymap, dynamic));
                     self.info = info;
                     self.search_stale = true;
                 }
@@ -666,6 +677,7 @@ impl HudApp {
         self.window.mode = Some(self.view);
         self.window.theme = Some(self.theme);
         self.window.headsup = Some(self.headsup_on);
+        self.window.combos = Some(self.show_combos);
         self.window.save(&self.window_path);
         self.window_dirty = None;
     }
@@ -929,6 +941,15 @@ impl HudApp {
             self.pinned = false;
             self.mark_dirty();
         }
+        let has_combos = self.live.as_ref().or(self.offline.as_ref()).is_some_and(|l| !l.dynamic.combos.is_empty());
+        let hint = tr(lang, if has_combos { Msg::CombosHint } else { Msg::NoCombos });
+        let r = ui
+            .add_enabled(has_combos, egui::Checkbox::new(&mut self.show_combos, tr(lang, Msg::MenuCombos)))
+            .on_hover_text(hint)
+            .on_disabled_hover_text(hint);
+        if r.changed() {
+            self.mark_dirty();
+        }
         ui.horizontal(|ui| {
             ui.label(tr(lang, Msg::MenuHeatmap));
             ui.add_enabled_ui(self.stats.is_some(), |ui| {
@@ -1146,9 +1167,9 @@ impl eframe::App for HudApp {
         }
         match layout {
             Some(l) => {
-                let legends = LegendContext { layer_names: &self.layer_names, custom: &l.definition.custom };
+                let legends = l.legend_context(&self.layer_names);
                 let pos = positions(&l.keys);
-                self.search.refresh(&l.keymap, &pos, &legends, &self.labels, self.search_stale);
+                self.search.refresh(&l.keymap, &pos, &legends, &self.labels, &l.dynamic, self.search_stale);
                 self.search_stale = false;
                 let search = &self.search;
                 let mark = |r: u8, c: u8| search.mark(layer, r, c);
@@ -1172,6 +1193,14 @@ impl eframe::App for HudApp {
                 };
                 let fade = &self.fade;
                 let highlight = |r: u8, c: u8| if live_state.is_some() { fade.level(r, c, now) } else { 0.0 };
+                // key overrides firing with the modifiers held now
+                let mods = live_state.map_or(0, |s| s.mods | s.oneshot_mods | s.oneshot_locked_mods);
+                let key_override = |code: u16| {
+                    let o = l.dynamic.override_for(code, mods, layer)?;
+                    let trigger = crate::vial::legend::legend(o.trigger, &legends).tap.text;
+                    Some((o.replacement, format!("Key override: {}+{trigger}", Mods5(o.mods5()).display())))
+                };
+                let combos = (self.show_combos && !l.dynamic.combos.is_empty()).then_some(l.dynamic.combos.as_slice());
                 let view = keyboard::KeyboardView {
                     keys: &l.keys,
                     keymap: &l.keymap,
@@ -1183,6 +1212,8 @@ impl eframe::App for HudApp {
                     layer_color: &colors,
                     mark: &mark,
                     heat: heat_counts.is_some().then_some(&heat_fn as &dyn Fn(u8, u8) -> (f32, u64)),
+                    key_override: &key_override,
+                    combos,
                 };
                 let hover = if self.click_through { None } else { response.hover_pos() };
                 if let Some(tip) = keyboard::draw(&painter, body, &view, &palette, hover) {

@@ -277,6 +277,7 @@ pub struct WindowState {
     pub mode: Option<ViewMode>,
     pub theme: Option<ThemeChoice>,
     pub headsup: Option<bool>,
+    pub combos: Option<bool>,
 }
 
 impl WindowState {

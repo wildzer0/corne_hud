@@ -5,6 +5,7 @@ use super::protocol::{self as p, HudCommand, HudInfo, HudState, ProtocolError, R
 use super::transport::{Transport, TransportError};
 use crate::model::Keymap;
 use crate::vial::definition::DefinitionError;
+use crate::vial::dynamic::{Combo, Dynamic, KeyOverride, TapDance, ENTRY_SIZE};
 use std::fmt;
 use std::time::{Duration, Instant};
 
@@ -151,6 +152,25 @@ impl Device {
             );
         }
         Ok(km)
+    }
+
+    /// Tap dances, combos and key overrides configured in Vial. Reading them
+    /// does not need the Vial unlock.
+    pub fn dynamic(&mut self) -> Result<Dynamic, DeviceError> {
+        let req = p::dynamic_counts_request();
+        let (tap_dances, combos, overrides) = p::decode_dynamic_counts(&req, &self.via(&req, None)?)?;
+        let mut read = |kind: p::DynamicKind, n: u8| -> Result<Vec<[u8; ENTRY_SIZE]>, DeviceError> {
+            (0..n)
+                .map(|i| {
+                    let req = p::dynamic_entry_request(kind, i);
+                    Ok(p::decode_dynamic_entry(&req, &self.via(&req, None)?)?)
+                })
+                .collect()
+        };
+        let tap_dances = read(p::DynamicKind::TapDance, tap_dances)?.iter().map(TapDance::from_bytes).collect();
+        let combos = read(p::DynamicKind::Combo, combos)?.iter().map(Combo::from_bytes).collect();
+        let overrides = read(p::DynamicKind::KeyOverride, overrides)?.iter().map(KeyOverride::from_bytes).collect();
+        Ok(Dynamic::new(tap_dances, combos, overrides))
     }
 
     pub fn layer_count(&mut self) -> Result<u8, DeviceError> {

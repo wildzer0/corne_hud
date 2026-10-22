@@ -93,10 +93,11 @@ Il firmware funziona identico anche senza HUD collegato. Risponde solo alle rich
 | Spostare l'HUD | trascinalo con il mouse. Su Windows si aggancia ai bordi, agli angoli e al centro dello schermo |
 | Metterlo in un angolo, a metà di un bordo o al centro | menu → Posizione (griglia 3×3) |
 | Ingrandire / rimpicciolire (50–200%) | Ctrl + rotellina sull'HUD, oppure menu → Scala |
-| Menu (opacità, scala, vista, posizione, tema, heads-up, heatmap, statistiche, ricerca, click-through, pausa, esci) | clic destro sull'HUD |
+| Menu (opacità, scala, vista, posizione, tema, heads-up, combo, heatmap, statistiche, ricerca, click-through, pausa, esci) | clic destro sull'HUD |
 | Mostrare / nascondere | un tocco di **HUD_TOG**. Con l'heads-up attivo il tocco *fissa* l'HUD a schermo, e un altro tocco lo restituisce all'heads-up |
 | Click-through (i clic passano alle finestre sotto) | menu, oppure **doppio tocco** di HUD_TOG. Si disattiva solo con il doppio tocco |
-| Cercare un tasto | Ctrl+F o `/` con l'HUD in primo piano, oppure menu → Cerca. Frecce per scegliere, Invio/Esc per chiudere |
+| Cercare un tasto | Ctrl+F o `/` con l'HUD in primo piano, oppure menu → Cerca. Frecce per scegliere, Invio/Esc per chiudere. Trova anche combo, tap dance e key override |
+| Vedere le combo | menu → Mostra le combo |
 | Sfogliare i layer (solo offline) | rotellina o tasti 0–9 |
 
 Il menu si apre in una piccola finestra separata accanto al punto del clic, così resta leggibile anche con l'HUD rimpicciolito o in vista compatta. Si chiude con ✕, con Esc, con un clic sull'HUD o con un clic altrove. Su Wayland è il compositor a decidere dove compare.
@@ -110,6 +111,11 @@ Il click-through si attiva solo se la tastiera collegata ha il tasto HUD_TOG, co
 - **Modificatori**: Ctrl, Shift, Alt, Gui (Cmd/Opt su macOS). Pieno = tenuto, pallido = weak, contorno pulsante = one-shot, lucchetto = one-shot bloccato.
 - **Caps Lock / Caps Word, QWERTY / Colemak-DH, OS** rilevato o forzato.
 - **Tasti premuti**: si accendono subito e sfumano in 200 ms.
+- **Tap dance, combo e key override** configurati in Vial, letti dalla tastiera a ogni connessione (quindi anche quando l'HUD riprende dopo la pausa per Vial) oppure dal `.vil` in modalità offline:
+  - un tasto tap dance mostra in grande l'azione al tocco e in piccolo quella tenendolo premuto (o il doppio tocco); il tooltip le elenca tutte;
+  - con *Mostra le combo* ogni combo è un'etichetta con il risultato fra i tasti da premere insieme;
+  - un key override si vede mentre lo usi: tenendo Shift, il tasto ⌫ mostra ⌦ in colore (con l'override Shift+⌫ = Canc).
+- **Ricerca**: oltre ai tasti trova le combo (`combo: J + K insieme`), le azioni dei tap dance (`Q (tieni)`) e i key override (`Shift + Bksp`).
 
 ## Linux: regola udev
 

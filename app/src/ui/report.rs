@@ -6,7 +6,7 @@ use crate::clock;
 use crate::i18n::{tr, Lang, Msg};
 use crate::labels::Labels;
 use crate::stats::{self, Stats, FINGERS};
-use crate::vial::legend::{legend, LegendContext};
+use crate::vial::legend::legend;
 use egui::{RichText, ViewportBuilder, ViewportId};
 use std::path::PathBuf;
 
@@ -117,7 +117,7 @@ impl ReportWindow {
         ui.separator();
 
         ui.strong(format!("{} ({} {})", tr(lang, Msg::StatsUnused), input.days, tr(lang, Msg::Days)));
-        let ctx = LegendContext { layer_names: input.layer_names, custom: &layout.definition.custom };
+        let ctx = layout.legend_context(input.layer_names);
         let mut current = None;
         let mut line = String::new();
         let flush = |ui: &mut egui::Ui, layer: Option<u8>, line: &mut String| {

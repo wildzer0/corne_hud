@@ -9,6 +9,7 @@ use super::transport::{self, HidTransport, TransportError};
 use crate::model::Keymap;
 use crate::paths;
 use crate::vial::definition::Definition;
+use crate::vial::dynamic::Dynamic;
 use hidapi::HidApi;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -58,7 +59,14 @@ pub enum Status {
 #[derive(Debug, Clone)]
 pub enum Event {
     Status(Status),
-    Layout { definition: Definition, layout_options: u32, keymap: Keymap, info: Option<HudInfo> },
+    Layout {
+        definition: Definition,
+        layout_options: u32,
+        keymap: Keymap,
+        /// Tap dances, combos and key overrides (empty if the firmware has none).
+        dynamic: Dynamic,
+        info: Option<HudInfo>,
+    },
     Keymap(Keymap),
     State(HudState),
 }
@@ -336,6 +344,21 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
         Ok(v) => v,
         Err(e) => return SessionEnd::Lost(Status::Error(e.to_string())),
     };
+    // read at every connection: Vial changes them while the HUD is paused
+    let dynamic = match conn.device.dynamic() {
+        Ok(d) => d,
+        Err(DeviceError::Protocol(ProtocolError::Unsupported)) => Dynamic::default(),
+        Err(e) => {
+            log::warn!("tap dance, combo e key override non letti: {e}");
+            Dynamic::default()
+        }
+    };
+    log::info!(
+        "Vial: {} tap dance, {} combo, {} key override",
+        dynamic.tap_dances.iter().filter(|t| !t.is_empty()).count(),
+        dynamic.combos.len(),
+        dynamic.key_overrides.len()
+    );
     let status = match conn.info {
         Some(_) => Status::Connected { product: conn.product.clone() },
         None => Status::NoHudFirmware { product: conn.product.clone() },
@@ -343,7 +366,7 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
     // force the status event: the UI drops the layout on any non-connected status
     reporter.last = None;
     if !reporter.report(ctx, status)
-        || !ctx.send(Event::Layout { definition: definition.clone(), layout_options, keymap, info: conn.info })
+        || !ctx.send(Event::Layout { definition: definition.clone(), layout_options, keymap, dynamic, info: conn.info })
     {
         return SessionEnd::Lost(Status::Searching);
     }

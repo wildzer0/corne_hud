@@ -44,7 +44,7 @@ fn layout_from(def_text: &str, vil_text: &str) -> Result<Layout, String> {
     if !vil.unknown.is_empty() {
         log::warn!("keycode sconosciuti nel .vil: {:?}", vil.unknown);
     }
-    Ok(Layout::new(def, vil.layout_options, vil.keymap))
+    Ok(Layout::new(def, vil.layout_options, vil.keymap, vil.dynamic))
 }
 
 /// `vial.json` and the first `*.vil` in the app folder, if present.

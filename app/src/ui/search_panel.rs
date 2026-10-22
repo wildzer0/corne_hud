@@ -6,6 +6,7 @@ use crate::i18n::{tr, Lang, Msg};
 use crate::labels::Labels;
 use crate::model::Keymap;
 use crate::search::{search, Hit};
+use crate::vial::dynamic::Dynamic;
 use crate::vial::legend::LegendContext;
 use egui::{Align2, Color32, Key, RichText, Vec2};
 
@@ -43,9 +44,10 @@ impl SearchPanel {
     /// Mark for the keyboard: 1 for the selected result, 0.4 for the others on its layer.
     pub fn mark(&self, layer: u8, row: u8, col: u8) -> f32 {
         let Some(sel) = self.selected() else { return 0.0 };
-        if (sel.layer, sel.row, sel.col) == (layer, row, col) {
+        let is = |h: &Hit| h.layer == layer && ((h.row, h.col) == (row, col) || h.also.contains(&(row, col)));
+        if is(sel) {
             1.0
-        } else if self.hits.iter().take(MAX_SHOWN).any(|h| (h.layer, h.row, h.col) == (layer, row, col)) {
+        } else if self.hits.iter().take(MAX_SHOWN).any(is) {
             0.4
         } else {
             0.0
@@ -59,10 +61,11 @@ impl SearchPanel {
         positions: &[(u8, u8)],
         ctx: &LegendContext,
         labels: &Labels,
+        dynamic: &Dynamic,
         force: bool,
     ) {
         if self.open && (force || self.searched.as_deref() != Some(self.query.as_str())) {
-            self.hits = search(&self.query, keymap, positions, ctx, labels);
+            self.hits = search(&self.query, keymap, positions, ctx, labels, dynamic);
             self.selected = 0;
             self.searched = Some(self.query.clone());
         }

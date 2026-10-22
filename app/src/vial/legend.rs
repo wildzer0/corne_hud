@@ -1,6 +1,7 @@
 //! Human-friendly legends for keycodes (what is drawn on each key).
 
 use super::definition::CustomKeycode;
+use super::dynamic::TapDance;
 use super::keycode::{decode, qmk_name, Keycode, LayerOp, Mods5};
 use super::names;
 
@@ -49,6 +50,8 @@ pub struct Legend {
 pub struct LegendContext<'a> {
     pub layer_names: &'a [String],
     pub custom: &'a [CustomKeycode],
+    /// Indexed by tap dance number.
+    pub tap_dances: &'a [TapDance],
 }
 
 impl LegendContext<'_> {
@@ -189,6 +192,37 @@ fn layer_legend(op: LayerOp, layer: u8, ctx: &LegendContext) -> (String, String)
     (short, format!("{}: layer {layer} {name} ({what})", op.prefix()))
 }
 
+/// Tap dance: the tap action large, the hold action small (like a mod-tap),
+/// every action in the tooltip.
+fn tap_dance_legend(n: u8, ctx: &LegendContext) -> Legend {
+    let Some(td) = ctx.tap_dances.get(n as usize).filter(|t| !t.is_empty()) else {
+        return Legend {
+            tap: Text::plain(format!("TD{n}")),
+            hold: None,
+            tooltip: format!("Tap dance {n}"),
+            kind: LegendKind::Normal,
+        };
+    };
+    // nested tap dances would recurse: show them by number
+    let part = |code: u16| match decode(code) {
+        Keycode::TapDance(m) => Text::plain(format!("TD{m}")),
+        _ => legend(code, ctx).tap,
+    };
+    let mut lines = vec![format!("Tap dance {n}")];
+    for (action, code) in td.actions() {
+        if code != 0 {
+            lines.push(format!("{}: {}", action.describe(), part(code).text));
+        }
+    }
+    if td.term_ms != 0 {
+        lines.push(format!("tapping term {} ms", td.term_ms));
+    }
+    let tap = if td.on_tap != 0 { part(td.on_tap) } else { Text::plain(format!("TD{n}")) };
+    // the second action shown: hold, else double tap
+    let hold = [td.on_hold, td.on_double_tap].into_iter().find(|&c| c != 0).map(part);
+    Legend { tap, hold, tooltip: lines.join("\n"), kind: LegendKind::Normal }
+}
+
 /// Builds the legend for `code`.
 pub fn legend(code: u16, ctx: &LegendContext) -> Legend {
     let normal = |tap: Text, tooltip: String| Legend { tap, hold: None, tooltip, kind: LegendKind::Normal };
@@ -243,7 +277,7 @@ pub fn legend(code: u16, ctx: &LegendContext) -> Legend {
             Legend { tap: Text::plain(short), hold: None, tooltip, kind: LegendKind::Layer(layer) }
         }
         Keycode::OneShotMod(m) => normal(Text::plain(format!("1×{}", m.display())), qmk_name(code)),
-        Keycode::TapDance(n) => normal(Text::plain(format!("TD{n}")), format!("Tap dance {n}")),
+        Keycode::TapDance(n) => tap_dance_legend(n, ctx),
         Keycode::Macro(n) => normal(Text::plain(format!("M{n}")), format!("Macro {n}")),
         Keycode::Custom(n) => match ctx.custom.get(n as usize) {
             Some(c) => Legend {
@@ -268,7 +302,7 @@ mod tests {
     use super::*;
 
     fn ctx_with<'a>(names: &'a [String], custom: &'a [CustomKeycode]) -> LegendContext<'a> {
-        LegendContext { layer_names: names, custom }
+        LegendContext { layer_names: names, custom, tap_dances: &[] }
     }
 
     fn names() -> Vec<String> {
@@ -319,6 +353,18 @@ mod tests {
         assert_eq!(legend(0xE1, &ctx_with(&n, &[])).kind, LegendKind::Modifier);
         assert_eq!(legend(0x04, &ctx_with(&n, &[])).tap.text, "A");
         assert_eq!(legend(0x33, &ctx_with(&n, &[])).tap.text, ";");
+    }
+
+    #[test]
+    fn tap_dance_shows_its_actions() {
+        let n = names();
+        let tds = [TapDance { on_tap: 0x04, on_hold: 0xE0, on_double_tap: 0x29, on_tap_hold: 0, term_ms: 0 }];
+        let ctx = LegendContext { layer_names: &n, custom: &[], tap_dances: &tds };
+        let l = legend(0x5700, &ctx);
+        assert_eq!((l.tap.text.as_str(), l.hold.map(|h| h.text)), ("A", Some("Ctrl".into())));
+        assert_eq!(l.tooltip, "Tap dance 0\ntocca: A\ntieni: Ctrl\ndoppio tocco: Esc");
+        // unknown or empty: by number
+        assert_eq!(legend(0x5701, &ctx).tap.text, "TD1");
     }
 
     #[test]

@@ -1,6 +1,8 @@
 //! Wire format of the HUD protocol (see `docs/PROTOCOL.md`) and of the
 //! VIA/Vial commands used by the app. Pure functions, no I/O.
 
+use crate::vial::dynamic::ENTRY_SIZE;
+
 pub const REPORT_SIZE: usize = 32;
 pub type Report = [u8; REPORT_SIZE];
 
@@ -18,6 +20,16 @@ pub const VIAL_PREFIX: u8 = 0xFE;
 pub const VIAL_GET_KEYBOARD_ID: u8 = 0x00;
 pub const VIAL_GET_SIZE: u8 = 0x01;
 pub const VIAL_GET_DEF: u8 = 0x02;
+pub const VIAL_DYNAMIC_ENTRY_OP: u8 = 0x0D;
+
+/// Sub-commands of `vial_dynamic_entry_op` (reads only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DynamicKind {
+    TapDance = 0x01,
+    Combo = 0x03,
+    KeyOverride = 0x05,
+}
+const DYNAMIC_GET_COUNTS: u8 = 0x00;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -326,6 +338,36 @@ pub fn vial_def_request(page: u16) -> Report {
     via_request(&[VIAL_PREFIX, VIAL_GET_DEF, p[0], p[1]])
 }
 
+pub fn dynamic_counts_request() -> Report {
+    via_request(&[VIAL_PREFIX, VIAL_DYNAMIC_ENTRY_OP, DYNAMIC_GET_COUNTS])
+}
+
+/// Entries of each kind: `(tap dances, combos, key overrides)`. A firmware
+/// without dynamic entries leaves the request unchanged.
+pub fn decode_dynamic_counts(req: &Report, resp: &Report) -> Result<(u8, u8, u8), ProtocolError> {
+    if resp == req {
+        return Err(ProtocolError::Unsupported);
+    }
+    Ok((resp[0], resp[1], resp[2]))
+}
+
+pub fn dynamic_entry_request(kind: DynamicKind, index: u8) -> Report {
+    via_request(&[VIAL_PREFIX, VIAL_DYNAMIC_ENTRY_OP, kind as u8, index])
+}
+
+/// One entry: status in byte 0 (0 = OK), then the 10-byte struct.
+pub fn decode_dynamic_entry(req: &Report, resp: &Report) -> Result<[u8; ENTRY_SIZE], ProtocolError> {
+    if resp == req {
+        return Err(ProtocolError::Unsupported);
+    }
+    if resp[0] != 0 {
+        return Err(ProtocolError::Status(resp[0]));
+    }
+    let mut e = [0u8; ENTRY_SIZE];
+    e.copy_from_slice(&resp[1..1 + ENTRY_SIZE]);
+    Ok(e)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -474,5 +516,23 @@ mod tests {
         id[0] = 6;
         id[4..12].copy_from_slice(&[0x89, 0x36, 0x2A, 0xC7, 0xFA, 0xD8, 0x89, 0x45]);
         assert_eq!(decode_vial_id(&id), (6, 5010774632021243529));
+    }
+
+    #[test]
+    fn dynamic_entries() {
+        let req = dynamic_counts_request();
+        assert_eq!(&req[..3], &[0xFE, 0x0D, 0x00]);
+        assert_eq!(decode_dynamic_counts(&req, &req), Err(ProtocolError::Unsupported));
+        let mut r = [0u8; REPORT_SIZE];
+        r[..3].copy_from_slice(&[8, 16, 4]);
+        assert_eq!(decode_dynamic_counts(&req, &r), Ok((8, 16, 4)));
+
+        let req = dynamic_entry_request(DynamicKind::Combo, 3);
+        assert_eq!(&req[..4], &[0xFE, 0x0D, 0x03, 0x03]);
+        let mut r = [0u8; REPORT_SIZE];
+        r[1..11].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        assert_eq!(decode_dynamic_entry(&req, &r), Ok([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
+        r[0] = 1;
+        assert_eq!(decode_dynamic_entry(&req, &r), Err(ProtocolError::Status(1)));
     }
 }

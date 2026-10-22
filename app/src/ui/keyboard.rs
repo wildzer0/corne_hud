@@ -4,6 +4,7 @@ use super::theme::{mix, text_on, Palette};
 use crate::kle::{KeyRole, KleKey};
 use crate::labels::Labels;
 use crate::model::Keymap;
+use crate::vial::dynamic::Combo;
 use crate::vial::keycode::KC_TRNS;
 use crate::vial::legend::{legend, LegendContext, LegendKind, Text};
 use egui::epaint::TextShape;
@@ -28,6 +29,11 @@ pub struct KeyboardView<'a> {
     pub mark: &'a dyn Fn(u8, u8) -> f32,
     /// Heatmap: `(intensity 0..1, presses)` per position, when shown.
     pub heat: Option<&'a dyn Fn(u8, u8) -> (f32, u64)>,
+    /// Key override firing with the modifiers held now: replacement of a keycode
+    /// and a description for the tooltip.
+    pub key_override: &'a dyn Fn(u16) -> Option<(u16, String)>,
+    /// Combos to draw over the keys, when shown.
+    pub combos: Option<&'a [Combo]>,
 }
 
 /// Cold → hot: dark blue, cyan, yellow, red.
@@ -127,6 +133,8 @@ pub fn draw(
 ) -> Option<String> {
     let tf = Transform::fit(view.keys, rect)?;
     let mut tooltip = None;
+    // keycode shown on each key, for the combos
+    let mut centers: Vec<(u16, Pos2)> = Vec::new();
 
     for key in view.keys {
         let role = key.role();
@@ -143,8 +151,23 @@ pub fn draw(
 
         let own = view.keymap.get(view.layer, row, col);
         let (code, from) = view.keymap.resolve(view.layer, view.active_mask, row, col);
-        let mut leg = legend(code, view.legends);
-        view.labels.apply(&mut leg, view.layer, row, col, code, from);
+        centers.push((code, center));
+        let overridden = (view.key_override)(code);
+        let mut leg = match &overridden {
+            Some((replacement, why)) => {
+                let mut l = legend(*replacement, view.legends);
+                l.tooltip = format!("{}\n{why}", l.tooltip);
+                l
+            }
+            None => {
+                let mut l = legend(code, view.legends);
+                view.labels.apply(&mut l, view.layer, row, col, code, from);
+                l
+            }
+        };
+        if overridden.is_some() {
+            leg.kind = LegendKind::Normal;
+        }
         let transparent = own == KC_TRNS;
         let glow = (view.highlight)(row, col).clamp(0.0, 1.0);
 
@@ -157,7 +180,11 @@ pub fn draw(
             fill = mix(fill, palette.key_empty, 0.5);
         }
         let heat = view.heat.map(|f| f(row, col));
-        let mut base_text = if transparent { palette.text_dim } else { palette.text };
+        let mut base_text = match () {
+            _ if overridden.is_some() => palette.accent,
+            _ if transparent => palette.text_dim,
+            _ => palette.text,
+        };
         if let Some((t, n)) = heat {
             fill = if n == 0 { palette.key_empty } else { heat_color(t) };
             base_text = if n == 0 { palette.text_dim } else { text_on(fill) };
@@ -204,6 +231,62 @@ pub fn draw(
                 tip.push_str(&format!("\n{n} pressioni"));
             }
             tooltip = Some(tip);
+        }
+    }
+    if let Some(combos) = view.combos {
+        if let Some(tip) = draw_combos(painter, combos, &centers, view, palette, tf.scale, hover) {
+            tooltip = Some(tip);
+        }
+    }
+    tooltip
+}
+
+/// Each combo whose keys are all on the layer shown: a badge with the output
+/// between its keys, linked to them. Returns the tooltip of the hovered badge.
+fn draw_combos(
+    painter: &Painter,
+    combos: &[Combo],
+    centers: &[(u16, Pos2)],
+    view: &KeyboardView,
+    palette: &Palette,
+    unit: f32,
+    hover: Option<Pos2>,
+) -> Option<String> {
+    let mut tooltip = None;
+    for combo in combos {
+        let keys: Option<Vec<(u16, Pos2)>> =
+            combo.inputs().map(|kc| centers.iter().find(|(c, _)| *c == kc).copied()).collect();
+        let Some(keys) = keys else { continue };
+        let mid = keys.iter().fold(Vec2::ZERO, |acc, (_, p)| acc + p.to_vec2()) / keys.len() as f32;
+        let mid = mid.to_pos2();
+        // keys far apart: lines from the badge to the edge of each key
+        let line = Stroke::new(1.5, palette.accent.gamma_multiply(0.8));
+        for (_, p) in &keys {
+            let d = mid - *p;
+            if d.length() > unit * 0.8 {
+                let edge = *p + d.normalized() * unit * 0.45;
+                painter.line_segment([mid, edge], line);
+                painter.circle_filled(edge, 2.5, palette.accent);
+            }
+        }
+        let out = legend(combo.output, view.legends);
+        let size = unit * 0.18;
+        let font = FontId::proportional(size);
+        let text =
+            if painter.fonts_mut(|f| f.has_glyphs(&font, &out.tap.symbol)) { out.tap.symbol } else { out.tap.text };
+        let galley = painter.layout_no_wrap(text, font, text_on(palette.accent));
+        let badge = Rect::from_center_size(mid, galley.size() + Vec2::new(size * 0.8, size * 0.35));
+        painter.rect(
+            badge,
+            size * 0.4,
+            palette.accent,
+            Stroke::new(1.0, palette.background),
+            egui::StrokeKind::Outside,
+        );
+        painter.galley(badge.center() - galley.size() / 2.0, galley, text_on(palette.accent));
+        if hover.is_some_and(|p| badge.contains(p)) {
+            let names: Vec<String> = keys.iter().map(|(c, _)| legend(*c, view.legends).tap.text).collect();
+            tooltip = Some(format!("Combo: {} insieme → {}", names.join(" + "), out.tooltip));
         }
     }
     tooltip

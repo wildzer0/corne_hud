@@ -4,6 +4,7 @@
 //! `"LCTL_T(KC_TAB)"`, `"USER03"`, `"0x7e12"`), integers, or `-1` for
 //! matrix positions without a key.
 
+use super::dynamic::Dynamic;
 use super::names::vial_code;
 use crate::model::Keymap;
 use serde_json::Value;
@@ -16,6 +17,8 @@ pub struct Vil {
     pub keymap: Keymap,
     /// Names that could not be decoded (shown as `KC_NO`).
     pub unknown: Vec<String>,
+    /// Tap dances, combos and key overrides.
+    pub dynamic: Dynamic,
 }
 
 #[derive(Debug)]
@@ -74,6 +77,7 @@ impl Vil {
             layout_options: v.get("layout_options").and_then(Value::as_i64).map(|o| o.max(0) as u32).unwrap_or(0),
             keymap,
             unknown,
+            dynamic: Dynamic::from_vil(&v),
         })
     }
 }

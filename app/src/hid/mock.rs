@@ -5,6 +5,7 @@
 use super::protocol::{self as p, flags, Report, REPORT_SIZE};
 use super::transport::{Transport, TransportError};
 use crate::model::Keymap;
+use crate::vial::dynamic::{Combo, Dynamic};
 use crate::vial::vil::Vil;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -118,9 +119,23 @@ pub struct MockKeyboard {
     start: Instant,
     keymap: Keymap,
     definition_xz: Vec<u8>,
+    dynamic: Dynamic,
     pending: VecDeque<Report>,
     /// Fixed time for tests; `None` = real clock.
     frozen_ms: Option<u64>,
+}
+
+/// What the simulated keyboard has configured in Vial: the `.vil` entries
+/// plus a few combos on the base layer, to show them off.
+pub fn mock_dynamic() -> Dynamic {
+    let vil = serde_json::from_str(MOCK_VIL).map(|v| Dynamic::from_vil(&v)).unwrap_or_default();
+    let combo = |keys: [u16; 2], output| Combo { keys: [keys[0], keys[1], 0, 0], output };
+    let combos = vec![
+        combo([0x0D, 0x0E], 0x29),   // J + K = Esc
+        combo([0x1B, 0x06], 0x0106), // X + C = Ctrl+C
+        combo([0x07, 0x09], 0x2B),   // D + F = Tab
+    ];
+    Dynamic { combos, ..vil }
 }
 
 impl MockKeyboard {
@@ -136,7 +151,14 @@ impl MockKeyboard {
         let mut definition_xz = Vec::new();
         // compressing an in-memory buffer cannot fail
         let _ = lzma_rs::xz_compress(&mut MOCK_VIAL_JSON.as_bytes(), &mut definition_xz);
-        MockKeyboard { start: Instant::now(), keymap, definition_xz, pending: VecDeque::new(), frozen_ms: None }
+        MockKeyboard {
+            start: Instant::now(),
+            keymap,
+            definition_xz,
+            dynamic: mock_dynamic(),
+            pending: VecDeque::new(),
+            frozen_ms: None,
+        }
     }
 
     #[cfg(test)]
@@ -168,6 +190,27 @@ impl MockKeyboard {
                         }
                         let end = (start + REPORT_SIZE).min(self.definition_xz.len());
                         r[..end - start].copy_from_slice(&self.definition_xz[start..end]);
+                    }
+                    p::VIAL_DYNAMIC_ENTRY_OP => {
+                        let d = &self.dynamic;
+                        let entry = match req[2] {
+                            0x00 => {
+                                r[..3].copy_from_slice(&[
+                                    d.tap_dances.len() as u8,
+                                    d.combos.len() as u8,
+                                    d.key_overrides.len() as u8,
+                                ]);
+                                return Some(r);
+                            }
+                            0x01 => d.tap_dances.get(req[3] as usize).map(|e| e.to_bytes()),
+                            0x03 => d.combos.get(req[3] as usize).map(|e| e.to_bytes()),
+                            0x05 => d.key_overrides.get(req[3] as usize).map(|e| e.to_bytes()),
+                            _ => return Some(*req),
+                        };
+                        match entry {
+                            Some(e) => r[1..11].copy_from_slice(&e),
+                            None => r[0] = 1,
+                        }
                     }
                     _ => r = *req,
                 }
@@ -299,6 +342,13 @@ mod tests {
         assert_eq!(device_at(10_000).state().unwrap().mods, 0x01);
         assert!(device_at(14_000).state().unwrap().flag(flags::DEBUG_LOCK));
         assert_eq!(device_at(PERIOD_MS + 3000).state().unwrap().layer_state, 1 << 1);
+    }
+
+    #[test]
+    fn dynamic_entries_over_the_protocol() {
+        let mut d = Device::new(Box::new(MockKeyboard::frozen(0)), Duration::from_millis(50));
+        assert_eq!(d.dynamic().unwrap(), mock_dynamic());
+        assert_eq!(mock_dynamic().combos.len(), 3);
     }
 
     #[test]
