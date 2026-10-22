@@ -35,6 +35,12 @@ pub enum Msg {
     ClickThroughOn,
     ClickThroughOff,
     MenuPause,
+    MenuAutostart,
+    AutostartHint,
+    AutostartStale,
+    AutostartOn,
+    AutostartOff,
+    AutostartError,
     MenuQuit,
     MenuClose,
     ConfigError,
@@ -116,6 +122,14 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
             Msg::ClickThroughOn => "Click-through attivo (doppio tocco di HUD_TOG per disattivarlo)",
             Msg::ClickThroughOff => "Click-through disattivato",
             Msg::MenuPause => "Pausa",
+            Msg::MenuAutostart => "Avvia con il sistema",
+            Msg::AutostartHint => "Avvia l'HUD all'accesso, solo per questo utente",
+            Msg::AutostartStale => {
+                "Registrato per un altro percorso o con altre opzioni: spunta per aggiornarlo a questo eseguibile"
+            }
+            Msg::AutostartOn => "Avvio con il sistema attivato",
+            Msg::AutostartOff => "Avvio con il sistema disattivato",
+            Msg::AutostartError => "Avvio con il sistema non modificabile",
             Msg::MenuQuit => "Esci",
             Msg::MenuClose => "Chiudi il menu (anche Esc o un clic sull'HUD)",
             Msg::ConfigError => "Errore nella configurazione",

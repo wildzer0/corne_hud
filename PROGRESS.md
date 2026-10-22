@@ -36,6 +36,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - trascinamento dell'HUD su Windows dopo la correzione (vedi registro): clic tenuto fermo, clic rapidi, trascinamenti lunghi, anche su monitor con scala diversa;
    - aggancio ai bordi (anche con la taskbar in un lato diverso dal basso), menu → Posizione, ritorno sullo schermo all'avvio dopo aver scollegato un monitor;
    - combo, tap dance e key override: nel log deve comparire "Vial: N tap dance, N combo, N key override"; Shift tenuto deve mostrare ⌦ su ⌫; dopo una modifica in Vial e la chiusura di Vial l'HUD deve vedere le nuove voci;
+   - avvio con il sistema: spuntare dal menu, controllare in `regedit` il valore `Keyboard HUD` sotto `HKCU\...\Run`, riavviare la sessione; poi togliere la spunta;
    - icona dell'`.exe` in Esplora risorse e in Proprietà → Dettagli (versione). La CI deve trovare `rc.exe`: se manca, nel log di build compare l'avviso "risorse Windows non incluse".
 4. **File `LICENSE`** (GPL-2.0-or-later): manca ancora, anche se v0.1.0 è già pubblicata. In attesa di conferma dell'utente.
 5. **Prossime release**: aumentare `version` in `app/Cargo.toml`, poi `git tag vX.Y.Z && git push origin vX.Y.Z`. Il tag deve corrispondere alla versione, altrimenti la CI si ferma.
@@ -56,7 +57,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - [x] combo: menu → "Mostra le combo" (ricordato nello stato), etichetta con l'output fra i tasti;
    - [x] key override dal vivo: con i modificatori giusti il tasto mostra il sostituto in colore accento;
    - [x] ricerca: output delle combo (tutti i tasti evidenziati), azioni dei tap dance, key override.
-3. **Avvio automatico** (idea 6): voce nel menu; Windows con la chiave `Run` del registro, Linux con `~/.config/autostart/*.desktop`, macOS con un LaunchAgent.
+3. **Avvio automatico** (idea 6): ✅ fatto (`autostart.rs`), da provare su Windows e macOS. Voce di menu "Avvia con il sistema"; Windows con la chiave `Run` del registro, Linux con `~/.config/autostart/keyboard-hud.desktop`, macOS con un LaunchAgent. Verificato su Linux (WSLg/X11, con `XDG_CONFIG_HOME` nello scratchpad): la casella crea e rimuove il file.
 
 4. **Backup automatico della configurazione** (proposta dell'utente, 2026-10-22): l'HUD salva da solo un `.vil` quando la configurazione della tastiera cambia, senza export manuale da Vial.
    - quando: alla prima connessione e soprattutto **alla ripresa dopo la pausa per Vial** (Vial chiuso = modifiche finite); si salva solo se l'impronta del contenuto è diversa dall'ultimo backup;
@@ -97,6 +98,7 @@ Idee rimandate: etichette per applicazione (idea 1), esportazione PNG/SVG della 
 - Tap dance, combo e key override (`vial/dynamic.rs`) si leggono solo a ogni connessione: `keymap_version` non li copre, ma Vial li modifica solo mentre è aperto, cioè con l'HUD in pausa, e alla ripresa la sessione riparte. Un firmware senza `vial_dynamic_entry_op` dà un insieme vuoto, non un errore.
 - Key override sull'HUD: modificatori = `mods | oneshot_mods | oneshot_locked_mods`; il layer considerato è quello mostrato (QMK usa il layer da cui è stato letto il tasto). Le regole dei modificatori sono quelle di `key_override_matches_active_modifiers` di QMK.
 - Combo: si disegnano solo se tutti i tasti sono sul layer mostrato; con tasti adiacenti solo l'etichetta, con tasti lontani anche le linee. Il mock ha tre combo dimostrative (J+K, X+C, D+F), oltre all'override della `.vil`.
+- Avvio con il sistema: l'elemento è "attivo" solo se coincide esattamente con quello che questo eseguibile scriverebbe (percorso + opzioni `--x11`, `--vid`, `--pid`, `--verbose`); altrimenti è "da aggiornare" e la casella appare vuota. Lo stato si rilegge a ogni apertura del menu. Solo per l'utente corrente, mai voci di sistema.
 - Il menu contestuale è una finestra separata, non un popup dentro l'HUD (vedi registro, 2026-10-22).
 
 ## Ambiente di sviluppo
@@ -132,11 +134,13 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `firmware/mia/keymap.c`: sezione 9 (HUD). `vial.json`: `customKeycodes` + `HUD`.
 - `app/src/hid/`: `protocol.rs` (formato), `device.rs` (richieste), `transport.rs` (hidapi, udev), `worker.rs` (thread, riconnessione, pausa Vial), `mock.rs`.
 - `app/src/vial/`: `definition.rs`, `dynamic.rs` (tap dance, combo, key override), `keycode.rs`, `names.rs` (tabelle generate, `parse_keycode`), `legend.rs`, `vil.rs`.
-- `app/src/`: `kle.rs`, `model.rs`, `config.rs`, `screen.rs` (geometria dello schermo), `labels.rs`, `headsup.rs`, `search.rs`, `stats.rs`, `clock.rs`, `logging.rs`, `paths.rs`, `cli.rs`, `i18n.rs` (tutte le stringhe utente).
+- `app/src/`: `kle.rs`, `model.rs`, `config.rs`, `screen.rs` (geometria dello schermo), `autostart.rs` (avvio con il sistema), `labels.rs`, `headsup.rs`, `search.rs`, `stats.rs`, `clock.rs`, `logging.rs`, `paths.rs`, `cli.rs`, `i18n.rs` (tutte le stringhe utente).
 - `app/packaging/`: `icon/` (icona e script che la genera), `macos/Info.plist`.
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-22**: punto 6 (avvio con il sistema) e nel piano il punto 4, backup automatico del `.vil` (proposta dell'utente; verificato in vial-qmk che keymap grezzo, macro, voci dinamiche e impostazioni si leggono senza sblocco). 93 test. Il codice Windows del registro è controllato solo con clippy; quello macOS solo dalla CI.
 
 - **2026-10-22**: punto 4 del piano. Nuovo `vial/dynamic.rs` (strutture da 10 byte, regole dei key override come in QMK, lettura dal `.vil`), richieste in `protocol.rs`, `Device::dynamic()`, `Event::Layout` con `dynamic`, risposte del mock. UI: legenda dei tap dance, key override dal vivo, combo sull'HUD, ricerca estesa (`Hit::also` per i tasti delle combo). 88 test. Verificato con screenshot: combo sul layer BASE del mock, ricerca "ctrl+c" (prima la combo X+C, poi il tasto di NAV) e, forzando Shift per lo screenshot, ⌦ al posto di ⌫. Da provare sulla tastiera vera; la `.vil` dell'utente ha solo l'override Shift+⌫ = Canc.
 

@@ -101,12 +101,39 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
     Ok(o)
 }
 
+impl Options {
+    /// Options worth repeating when the app starts with the system.
+    pub fn autostart_args(&self) -> Vec<String> {
+        let mut a = Vec::new();
+        if self.x11 {
+            a.push("--x11".into());
+        }
+        if let Some(v) = self.vid {
+            a.extend(["--vid".into(), format!("{v:#06x}")]);
+        }
+        if let Some(p) = self.pid {
+            a.extend(["--pid".into(), format!("{p:#06x}")]);
+        }
+        if self.verbose {
+            a.push("--verbose".into());
+        }
+        a
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn p(args: &[&str]) -> Result<Options, String> {
         parse(args.iter().map(|s| s.to_string()))
+    }
+
+    #[test]
+    fn autostart_keeps_lasting_options_only() {
+        let o = p(&["--mock", "--x11", "--vid", "0x4653", "--layer", "2", "--search", "x"]).unwrap();
+        assert_eq!(o.autostart_args(), ["--x11", "--vid", "0x4653"]);
+        assert!(p(&[]).unwrap().autostart_args().is_empty());
     }
 
     #[test]

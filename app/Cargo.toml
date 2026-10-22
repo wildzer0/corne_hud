@@ -20,8 +20,8 @@ log = "0.4"
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
 [target.'cfg(windows)'.dependencies]
-# cursor and monitor geometry, to move the window by hand (ui::cursor_on_screen, screen.rs)
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }
+# cursor and monitor geometry (ui::cursor_on_screen, screen.rs), autostart registry entry (autostart.rs)
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_Registry", "Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]
 # icon and version information of the Windows executable (build.rs)

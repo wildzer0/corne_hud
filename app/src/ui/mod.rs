@@ -7,6 +7,7 @@ pub mod report;
 pub mod search_panel;
 pub mod theme;
 
+use crate::autostart;
 use crate::config::{Config, ConfigWatcher, Reload, StatsConfig, ThemeChoice, ViewMode, WindowState};
 use crate::headsup::HeadsUp;
 use crate::hid::protocol::{caps, HudInfo, HudState};
@@ -199,6 +200,8 @@ pub struct Startup {
     /// `--verbose` wins over the configured log level.
     pub verbose: bool,
     pub dev: DevOptions,
+    /// Command line options repeated by the autostart entry.
+    pub autostart_args: Vec<String>,
 }
 
 /// Development aids to reach a UI state without interaction (screenshots).
@@ -379,6 +382,9 @@ pub struct HudApp {
     headsup_on: bool,
     /// Combos drawn over the keys.
     show_combos: bool,
+    autostart_args: Vec<String>,
+    /// Autostart entry, read when the menu opens (error text if unreadable).
+    autostart: Result<autostart::State, String>,
     /// Heads-up mode: HUD_TOG pinned the HUD on screen.
     pinned: bool,
     /// Mouse passthrough currently requested from the window system.
@@ -439,6 +445,8 @@ impl HudApp {
             headsup: HeadsUp::default(),
             headsup_on,
             show_combos,
+            autostart_args: s.autostart_args,
+            autostart: Ok(autostart::State::Off),
             pinned: false,
             passthrough: false,
             drag: None,
@@ -801,7 +809,28 @@ impl HudApp {
     }
 
     /// Opens the menu at the pointer, `hud` being the HUD area in the window.
+    fn exe() -> std::io::Result<PathBuf> {
+        std::env::current_exe()
+    }
+
+    fn refresh_autostart(&mut self) {
+        self.autostart =
+            Self::exe().and_then(|exe| autostart::state(&exe, &self.autostart_args)).map_err(|e| e.to_string());
+    }
+
+    fn set_autostart(&mut self, on: bool) {
+        let result = Self::exe().and_then(|exe| autostart::set(on, &exe, &self.autostart_args));
+        let msg = match result {
+            Ok(()) => tr(self.lang, if on { Msg::AutostartOn } else { Msg::AutostartOff }).to_string(),
+            Err(e) => format!("{}: {e}", tr(self.lang, Msg::AutostartError)),
+        };
+        log::debug!("avvio con il sistema: {}", autostart::location());
+        self.notify(msg);
+        self.refresh_autostart();
+    }
+
     fn open_menu(&mut self, ctx: &egui::Context, hud: Rect, pointer: egui::Pos2) {
+        self.refresh_autostart();
         let anchor = ctx.input(|i| i.viewport().inner_rect).map(|inner| inner.min + pointer.to_vec2());
         log::debug!("menu aperto in {anchor:?}");
         self.menu = Some(MenuWindow {
@@ -984,6 +1013,16 @@ impl HudApp {
             if ui.checkbox(&mut paused, tr(lang, Msg::MenuPause)).changed() {
                 w.set_paused(paused);
             }
+        }
+        let (mut on, hint) = match &self.autostart {
+            Ok(autostart::State::On) => (true, tr(lang, Msg::AutostartHint).to_string()),
+            Ok(autostart::State::Off) => (false, tr(lang, Msg::AutostartHint).to_string()),
+            Ok(autostart::State::Stale) => (false, tr(lang, Msg::AutostartStale).to_string()),
+            Err(e) => (false, format!("{}: {e}", tr(lang, Msg::AutostartError))),
+        };
+        let hint = format!("{hint}\n{}", autostart::location());
+        if ui.checkbox(&mut on, tr(lang, Msg::MenuAutostart)).on_hover_text(hint).changed() {
+            self.set_autostart(on);
         }
         ui.separator();
         if ui.button(tr(lang, Msg::MenuQuit)).clicked() {

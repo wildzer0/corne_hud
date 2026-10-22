@@ -93,14 +93,17 @@ Il firmware funziona identico anche senza HUD collegato. Risponde solo alle rich
 | Spostare l'HUD | trascinalo con il mouse. Su Windows si aggancia ai bordi, agli angoli e al centro dello schermo |
 | Metterlo in un angolo, a metà di un bordo o al centro | menu → Posizione (griglia 3×3) |
 | Ingrandire / rimpicciolire (50–200%) | Ctrl + rotellina sull'HUD, oppure menu → Scala |
-| Menu (opacità, scala, vista, posizione, tema, heads-up, combo, heatmap, statistiche, ricerca, click-through, pausa, esci) | clic destro sull'HUD |
+| Menu (opacità, scala, vista, posizione, tema, heads-up, combo, heatmap, statistiche, ricerca, click-through, pausa, avvio con il sistema, esci) | clic destro sull'HUD |
 | Mostrare / nascondere | un tocco di **HUD_TOG**. Con l'heads-up attivo il tocco *fissa* l'HUD a schermo, e un altro tocco lo restituisce all'heads-up |
 | Click-through (i clic passano alle finestre sotto) | menu, oppure **doppio tocco** di HUD_TOG. Si disattiva solo con il doppio tocco |
 | Cercare un tasto | Ctrl+F o `/` con l'HUD in primo piano, oppure menu → Cerca. Frecce per scegliere, Invio/Esc per chiudere. Trova anche combo, tap dance e key override |
 | Vedere le combo | menu → Mostra le combo |
+| Avviare l'HUD all'accesso | menu → Avvia con il sistema (vedi sotto) |
 | Sfogliare i layer (solo offline) | rotellina o tasti 0–9 |
 
 Il menu si apre in una piccola finestra separata accanto al punto del clic, così resta leggibile anche con l'HUD rimpicciolito o in vista compatta. Si chiude con ✕, con Esc, con un clic sull'HUD o con un clic altrove. Su Wayland è il compositor a decidere dove compare.
+
+**Avvio con il sistema.** Vale solo per il tuo utente e non chiede permessi di amministratore: su Windows è un valore in `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`, su Linux il file `~/.config/autostart/keyboard-hud.desktop`, su macOS `~/Library/LaunchAgents/io.github.keyboard-hud.plist`. Registra il percorso dell'eseguibile e le opzioni `--x11`, `--vid`, `--pid` e `--verbose` con cui l'hai avviato. Se sposti l'eseguibile, la casella risulta vuota e il tooltip lo segnala: spuntala di nuovo per aggiornare il percorso. Con la modalità portable su una chiavetta, l'avvio funziona solo se la chiavetta è collegata.
 
 Il click-through si attiva solo se la tastiera collegata ha il tasto HUD_TOG, così c'è sempre un modo per disattivarlo. Se la tastiera si scollega, si spegne da solo.
 

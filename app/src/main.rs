@@ -2,6 +2,7 @@
 
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod autostart;
 mod cli;
 mod clock;
 mod config;
@@ -148,6 +149,7 @@ fn run(opts: Options) -> ExitCode {
         "Keyboard HUD",
         native,
         Box::new(move |cc| {
+            let autostart_args = opts.autostart_args();
             ui::install_fonts(&cc.egui_ctx);
             let mode = if opts.offline {
                 Mode::Offline
@@ -177,6 +179,7 @@ fn run(opts: Options) -> ExitCode {
                 window,
                 window_path,
                 verbose: opts.verbose,
+                autostart_args,
             };
             Ok(Box::new(HudApp::new(&cc.egui_ctx, startup)))
         }),
