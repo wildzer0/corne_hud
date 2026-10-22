@@ -10,9 +10,9 @@ pub mod theme;
 use crate::autostart;
 use crate::backup;
 use crate::changes;
-use crate::config::{Config, ConfigWatcher, Reload, StatsConfig, ThemeChoice, ViewMode, WindowState};
+use crate::config::{Config, ConfigWatcher, Reload, ShownIn, StatsConfig, ThemeChoice, ViewMode, WindowState};
 use crate::headsup::{self, HeadsUp};
-use crate::hid::protocol::{caps, HudInfo, HudState};
+use crate::hid::protocol::{caps, flags, HudInfo, HudState, OsKind};
 use crate::hid::worker::{Event, PauseReason, Status, Worker};
 use crate::i18n::{tr, Lang, Msg};
 use crate::kle::{KeyRole, KleKey};
@@ -153,6 +153,8 @@ const FADE: Duration = Duration::from_millis(200);
 /// Two HUD_TOG taps within this time are a double tap.
 const DOUBLE_TAP: Duration = Duration::from_millis(300);
 const NOTICE_TIME: Duration = Duration::from_secs(4);
+/// How long a change stays in the mini indicator.
+const FLASH_TIME: Duration = Duration::from_secs(2);
 const SAVE_DELAY: Duration = Duration::from_secs(1);
 
 /// DejaVu Sans as a fallback font: it has the compact key symbols
@@ -380,6 +382,8 @@ pub struct HudApp {
     fade: PressFade,
     hud_toggle: HudToggle,
     notice: Option<(String, Instant)>,
+    /// Change shown for a moment in the mini indicator.
+    flash: Option<(String, Instant)>,
     screenshot: Option<Screenshot>,
     started: Instant,
 
@@ -448,6 +452,7 @@ impl HudApp {
             fade: PressFade::default(),
             hud_toggle: HudToggle::default(),
             notice: None,
+            flash: None,
             screenshot: s.screenshot,
             started: Instant::now(),
             labels,
@@ -513,6 +518,38 @@ impl HudApp {
         self.notice = Some((text, Instant::now()));
     }
 
+    /// A change worth a glance while the HUD is hidden: it goes in the mini indicator.
+    fn flash(&mut self, text: String) {
+        self.flash = Some((text, Instant::now()));
+    }
+
+    /// Layout or OS changed from one state to the next.
+    fn flash_changes(&mut self, old: &HudState, new: &HudState) {
+        let lang = self.lang;
+        if old.flag(flags::COLEMAK) != new.flag(flags::COLEMAK) {
+            self.flash(tr(lang, if new.flag(flags::COLEMAK) { Msg::Colemak } else { Msg::Qwerty }).to_string());
+        }
+        if (old.os_mode, old.active_os) != (new.os_mode, new.active_os) {
+            let how = tr(lang, if new.os_mode == OsKind::Auto { Msg::OsAuto } else { Msg::OsForced });
+            self.flash(format!("{} · {how}", header::os_name(new.active_os)));
+        }
+    }
+
+    /// Short reason for the missing live state, for the mini indicator.
+    fn connection_problem(&self) -> Option<&'static str> {
+        let msg = match &self.status {
+            Some(Status::Connected { .. }) => return None,
+            None | Some(Status::Searching) => Msg::BadgeNoKeyboard,
+            Some(Status::PermissionDenied(_)) => Msg::BadgePermission,
+            Some(Status::NoHudFirmware { .. }) => Msg::BadgeNoHud,
+            Some(Status::Paused(PauseReason::Vial)) => Msg::BadgePausedVial,
+            Some(Status::Paused(PauseReason::Foreign)) => Msg::BadgePausedForeign,
+            Some(Status::Paused(PauseReason::Manual)) => Msg::PausedManual,
+            Some(Status::Error(_)) => Msg::BadgeError,
+        };
+        Some(tr(self.lang, msg))
+    }
+
     fn worker(&self) -> Option<&Worker> {
         match &self.mode {
             Mode::Live { worker, .. } => Some(worker),
@@ -569,6 +606,9 @@ impl HudApp {
                     self.fade.update(&s.matrix, now);
                     if let TapAction::Double = self.hud_toggle.on_count(s.hud_toggle_count, now) {
                         self.set_click_through(ctx, !self.click_through);
+                    }
+                    if let Some(old) = self.state {
+                        self.flash_changes(&old, &s);
                     }
                     self.state = Some(s);
                 }
@@ -716,6 +756,11 @@ impl HudApp {
         root_cmd(ctx, ViewportCommand::Visible(visible));
         self.apply_poll_rate();
         log::info!("{}", if visible { "HUD visibile" } else { tr(self.lang, Msg::HudHidden) });
+        if visible {
+            self.flash = None;
+        } else {
+            self.flash(tr(self.lang, Msg::HudHidden).to_string());
+        }
     }
 
     fn apply_poll_rate(&self) {
@@ -1511,13 +1556,17 @@ impl eframe::App for HudApp {
             self.open_menu(&ctx, full, full.center() + Vec2::new(-10.0, -10.0));
         }
         self.show_menu(&ctx);
-        // the indicator window lives as long as there is a keyboard, empty when not
-        // needed: created at the right moment it could take the focus while typing
-        // (and in the very first frames it would not be created at all)
-        if let Some(s) =
-            live_state.filter(|_| self.config.indicator.enabled && self.started.elapsed() > Duration::from_secs(1))
+        // the indicator window lives as long as the app looks for a keyboard, empty
+        // when not needed: created at the right moment it could take the focus while
+        // typing (and in the very first frames it would not be created at all)
+        if matches!(self.mode, Mode::Live { .. })
+            && self.config.indicator.enabled
+            && self.started.elapsed() > Duration::from_secs(1)
         {
-            let shown = (!self.visible || faded) && header::indicator_needed(&layers, &s);
+            let flash = self.flash.as_ref().filter(|(_, t)| t.elapsed() < FLASH_TIME);
+            if let Some((_, t)) = flash {
+                ctx.request_repaint_after(FLASH_TIME.saturating_sub(t.elapsed()));
+            }
             let (layer_names, layer_colors) = (self.layer_names.clone(), self.layer_colors.clone());
             let names = |l: u8| layer_names.get(l as usize).cloned().unwrap_or_else(|| format!("L{l}"));
             let colors = |l: u8| layer_colors.get(l as usize).copied().flatten();
@@ -1526,9 +1575,15 @@ impl eframe::App for HudApp {
                 layers: &layers,
                 layer_name: &names,
                 layer_color: &colors,
-                state: &s,
+                state: live_state.as_ref(),
+                connection: self.connection_problem(),
+                flash: flash.map(|(s, _)| s.as_str()),
+                held_mods: self.headsup_on
+                    && self.config.headsup.modifiers == ShownIn::Indicator
+                    && self.headsup.mods_held_long(),
                 time: self.started.elapsed().as_secs_f64(),
             };
+            let shown = (!self.visible || faded) && header::indicator_needed(&view);
             self.show_indicator(&ctx, shown.then_some(&view), &palette);
         }
         let names = self.layer_names.clone();

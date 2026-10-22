@@ -105,6 +105,12 @@ pub enum Msg {
     LabelErrors,
     Pinned,
     Unpinned,
+    BadgeNoKeyboard,
+    BadgePermission,
+    BadgeNoHud,
+    BadgePausedVial,
+    BadgePausedForeign,
+    BadgeError,
 }
 
 pub fn tr(lang: Lang, msg: Msg) -> &'static str {
@@ -213,6 +219,12 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
             Msg::LabelErrors => "Etichette non valide",
             Msg::Pinned => "HUD fissato (tocca HUD_TOG per tornare all'heads-up)",
             Msg::Unpinned => "Heads-up",
+            Msg::BadgeNoKeyboard => "Tastiera non trovata",
+            Msg::BadgePermission => "Tastiera: permessi mancanti",
+            Msg::BadgeNoHud => "Firmware senza HUD",
+            Msg::BadgePausedVial => "In pausa · Vial",
+            Msg::BadgePausedForeign => "In pausa · altro programma",
+            Msg::BadgeError => "Errore della tastiera",
         },
     }
 }

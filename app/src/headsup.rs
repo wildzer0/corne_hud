@@ -13,6 +13,8 @@ const FADE_OUT: Duration = Duration::from_millis(300);
 #[derive(Debug)]
 pub struct HeadsUp {
     mods_since: Option<Instant>,
+    /// A modifier has been held past the delay.
+    mods_long: bool,
     last_wanted: Option<Instant>,
     /// 0 = hidden, 1 = fully shown.
     level: f32,
@@ -22,7 +24,7 @@ pub struct HeadsUp {
 impl Default for HeadsUp {
     fn default() -> Self {
         // start visible: the first states decide quickly
-        HeadsUp { mods_since: None, last_wanted: None, level: 1.0, last_update: None }
+        HeadsUp { mods_since: None, mods_long: false, last_wanted: None, level: 1.0, last_update: None }
     }
 }
 
@@ -57,7 +59,13 @@ impl HeadsUp {
             self.mods_since = None;
             false
         };
-        above_default || one_shot || mods
+        self.mods_long = mods;
+        above_default || one_shot || (mods && settings.modifiers == ShownIn::Hud)
+    }
+
+    /// A modifier is held past the delay (for the mini indicator).
+    pub fn mods_held_long(&self) -> bool {
+        self.mods_long
     }
 
     /// Advances the fade. `force` keeps the HUD fully shown (no live state,
@@ -138,6 +146,18 @@ mod tests {
         assert!(h.wants(&without_indicator_states(&tg, &locked, &s), &s, Instant::now()));
         let s = Settings { locked_layer: ShownIn::Indicator, ..s };
         assert!(!h.wants(&without_indicator_states(&tg, &locked, &s), &s, Instant::now()));
+    }
+
+    #[test]
+    fn held_modifiers_left_to_the_indicator() {
+        let s = Settings { modifiers: ShownIn::Indicator, ..settings() };
+        let t0 = Instant::now();
+        let mut h = HeadsUp::default();
+        let ctrl = HudState { default_layer_state: 1, mods: 0x01, ..Default::default() };
+        assert!(!h.wants(&ctrl, &s, t0));
+        assert!(!h.mods_held_long());
+        assert!(!h.wants(&ctrl, &s, t0 + Duration::from_millis(450)));
+        assert!(h.mods_held_long());
     }
 
     #[test]

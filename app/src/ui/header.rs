@@ -120,7 +120,7 @@ fn mod_label(m: Modifier, os: OsKind) -> &'static str {
     }
 }
 
-fn os_name(os: OsKind) -> &'static str {
+pub fn os_name(os: OsKind) -> &'static str {
     match os {
         OsKind::Windows => "Windows",
         OsKind::MacOs => "macOS",
@@ -212,20 +212,43 @@ pub struct IndicatorView<'a> {
     pub layers: &'a [(u8, LayerHold)],
     pub layer_name: &'a dyn Fn(u8) -> String,
     pub layer_color: &'a dyn Fn(u8) -> Option<Color32>,
-    pub state: &'a HudState,
+    /// None while the keyboard is not connected.
+    pub state: Option<&'a HudState>,
+    /// Why there is no live state (paused, keyboard not found).
+    pub connection: Option<&'a str>,
+    /// A change just happened (layout, OS, HUD hidden): shown for a moment.
+    pub flash: Option<&'a str>,
+    /// Heads-up leaves the modifiers held for a while to the indicator.
+    pub held_mods: bool,
     pub time: f64,
 }
 
+/// Does this modifier level go in the mini indicator?
+fn indicator_mod(level: ModLevel, held_mods: bool) -> bool {
+    match level {
+        ModLevel::OneShot | ModLevel::OneShotLocked => true,
+        ModLevel::Held => held_mods,
+        ModLevel::Off | ModLevel::Weak => false,
+    }
+}
+
 /// Is there anything for the mini indicator to show?
-pub fn indicator_needed(layers: &[(u8, LayerHold)], s: &HudState) -> bool {
-    layers.iter().any(|(_, h)| *h != LayerHold::Held)
-        || MODIFIERS.iter().any(|&m| matches!(mod_level(s, m), ModLevel::OneShot | ModLevel::OneShotLocked))
-        || s.flag(flags::CAPS_WORD)
-        || s.flag(flags::CAPS_LOCK)
+pub fn indicator_needed(view: &IndicatorView) -> bool {
+    view.connection.is_some()
+        || view.flash.is_some()
+        || view.layers.iter().any(|(_, h)| *h != LayerHold::Held)
+        || view.state.is_some_and(|s| {
+            MODIFIERS.iter().any(|&m| indicator_mod(mod_level(s, m), view.held_mods))
+                || s.flag(flags::CAPS_WORD)
+                || s.flag(flags::CAPS_LOCK)
+        })
 }
 
 fn indicator_chips(chips: &mut Chips, view: &IndicatorView, palette: &Palette) -> bool {
     let mut animating = false;
+    if let Some(text) = view.connection {
+        chips.add(text, ChipStyle::Soft(palette.text_dim));
+    }
     for &(l, how) in view.layers.iter().filter(|(_, h)| *h != LayerHold::Held) {
         let c = (view.layer_color)(l).unwrap_or(palette.neutral_layer);
         match how {
@@ -236,24 +259,31 @@ fn indicator_chips(chips: &mut Chips, view: &IndicatorView, palette: &Palette) -
             _ => chips.add_with(&(view.layer_name)(l), ChipStyle::Filled(c), true),
         }
     }
-    let s = view.state;
-    for m in MODIFIERS {
-        match mod_level(s, m) {
-            ModLevel::OneShot => {
-                chips.add(mod_label(m, s.active_os), ChipStyle::Pulse(palette.accent));
-                animating = true;
+    if let Some(s) = view.state {
+        for m in MODIFIERS {
+            match mod_level(s, m) {
+                ModLevel::OneShot => {
+                    chips.add(mod_label(m, s.active_os), ChipStyle::Pulse(palette.accent));
+                    animating = true;
+                }
+                ModLevel::OneShotLocked => {
+                    chips.add_with(mod_label(m, s.active_os), ChipStyle::Filled(palette.accent), true)
+                }
+                ModLevel::Held if view.held_mods => {
+                    chips.add(mod_label(m, s.active_os), ChipStyle::Filled(palette.accent))
+                }
+                _ => {}
             }
-            ModLevel::OneShotLocked => {
-                chips.add_with(mod_label(m, s.active_os), ChipStyle::Filled(palette.accent), true)
-            }
-            _ => {}
+        }
+        if s.flag(flags::CAPS_WORD) {
+            chips.add(tr(view.lang, Msg::CapsWord), ChipStyle::Filled(palette.caps_word));
+        }
+        if s.flag(flags::CAPS_LOCK) {
+            chips.add(tr(view.lang, Msg::CapsLock), ChipStyle::Filled(palette.text));
         }
     }
-    if s.flag(flags::CAPS_WORD) {
-        chips.add(tr(view.lang, Msg::CapsWord), ChipStyle::Filled(palette.caps_word));
-    }
-    if s.flag(flags::CAPS_LOCK) {
-        chips.add(tr(view.lang, Msg::CapsLock), ChipStyle::Filled(palette.text));
+    if let Some(text) = view.flash {
+        chips.add(text, ChipStyle::Soft(palette.accent));
     }
     animating
 }
@@ -287,16 +317,35 @@ pub fn draw_indicator(painter: &Painter, rect: Rect, align: u8, view: &Indicator
 mod tests {
     use super::*;
 
+    fn needed(layers: &[(u8, LayerHold)], s: Option<&HudState>, held_mods: bool) -> bool {
+        let name = |l: u8| format!("L{l}");
+        let color = |_: u8| None;
+        let view = IndicatorView {
+            lang: Lang::It,
+            layers,
+            layer_name: &name,
+            layer_color: &color,
+            state: s,
+            connection: None,
+            flash: None,
+            held_mods,
+            time: 0.0,
+        };
+        indicator_needed(&view)
+    }
+
     #[test]
     fn indicator_only_for_lasting_states() {
         let s = HudState::default();
-        assert!(!indicator_needed(&[], &s));
-        assert!(!indicator_needed(&[(1, LayerHold::Held)], &s));
-        assert!(indicator_needed(&[(4, LayerHold::Locked)], &s));
-        assert!(indicator_needed(&[(5, LayerHold::OneShot)], &s));
-        assert!(indicator_needed(&[], &HudState { flags: flags::CAPS_WORD, ..s }));
-        assert!(indicator_needed(&[], &HudState { oneshot_locked_mods: 0x02, ..s }));
-        // a modifier simply held is not worth an indicator
-        assert!(!indicator_needed(&[], &HudState { mods: 0x02, ..s }));
+        assert!(!needed(&[], Some(&s), false));
+        assert!(!needed(&[(1, LayerHold::Held)], Some(&s), false));
+        assert!(needed(&[(4, LayerHold::Locked)], Some(&s), false));
+        assert!(needed(&[(5, LayerHold::OneShot)], Some(&s), false));
+        assert!(needed(&[], Some(&HudState { flags: flags::CAPS_WORD, ..s }), false));
+        assert!(needed(&[], Some(&HudState { oneshot_locked_mods: 0x02, ..s }), false));
+        // a modifier simply held is not worth an indicator, unless heads-up leaves it there
+        assert!(!needed(&[], Some(&HudState { mods: 0x02, ..s }), false));
+        assert!(needed(&[], Some(&HudState { mods: 0x02, ..s }), true));
+        assert!(!needed(&[], None, true));
     }
 }

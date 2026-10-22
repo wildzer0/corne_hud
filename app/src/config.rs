@@ -116,6 +116,8 @@ pub struct HeadsUp {
     pub locked_layer: ShownIn,
     /// What a pending one-shot (OSL, one-shot mods) brings up.
     pub oneshot: ShownIn,
+    /// What a modifier held past `modifier_delay_ms` brings up.
+    pub modifiers: ShownIn,
 }
 
 impl Default for HeadsUp {
@@ -127,6 +129,7 @@ impl Default for HeadsUp {
             hidden_opacity: 0.0,
             locked_layer: ShownIn::Hud,
             oneshot: ShownIn::Hud,
+            modifiers: ShownIn::Hud,
         }
     }
 }
@@ -422,6 +425,7 @@ mod tests {
         assert!(c.headsup.enabled);
         assert_eq!(c.headsup.locked_layer, ShownIn::Hud);
         assert_eq!(c.headsup.oneshot, ShownIn::Hud);
+        assert_eq!(c.headsup.modifiers, ShownIn::Hud);
         assert_eq!(c.indicator.position, ScreenPlace::TopRight);
         assert_eq!(c.headsup.modifier_delay_ms, 400);
         assert!(c.labels.iter().any(|l| l.label == "Step over" && l.keycode.as_deref() == Some("KC_F10")));

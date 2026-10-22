@@ -39,7 +39,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - combo, tap dance e key override: nel log deve comparire "Vial: N tap dance, N combo, N key override"; Shift tenuto deve mostrare ⌦ su ⌫; dopo una modifica in Vial e la chiusura di Vial l'HUD deve vedere le nuove voci;
    - avvio con il sistema: spuntare dal menu, controllare in `regedit` il valore `Keyboard HUD` sotto `HKCU\...\Run`, riavviare la sessione; poi togliere la spunta;
    - icona nella tray su Windows (area di notifica): clic sinistro, menu, spunte di pausa e avvio automatico; su macOS nella barra dei menu;
-   - mini indicatore su Windows: nessun furto di focus all'avvio o dopo, click-through, aggiornamento anche con l'HUD nascosto da HUD_TOG (su X11 i fotogrammi continuano, su Windows da verificare);
+   - mini indicatore su Windows: nessun furto di focus all'avvio o dopo (la finestra ora esiste anche senza tastiera), chip "In pausa · Vial" aprendo Vial con l'HUD nascosto, avvisi di `CMK_TOG` e del cambio di OS, click-through, aggiornamento anche con l'HUD nascosto da HUD_TOG (su X11 i fotogrammi continuano, su Windows da verificare);
    - icona dell'`.exe` in Esplora risorse e in Proprietà → Dettagli (versione). La CI deve trovare `rc.exe`: se manca, nel log di build compare l'avviso "risorse Windows non incluse".
 4. **File `LICENSE`** (GPL-2.0-or-later): manca ancora, anche se v0.1.0 è già pubblicata. In attesa di conferma dell'utente.
 5. **Prossime release**: aumentare `version` in `app/Cargo.toml`, poi `git tag vX.Y.Z && git push origin vX.Y.Z`. Il tag deve corrispondere alla versione, altrimenti la CI si ferma.
@@ -76,7 +76,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
 
 5. **Dopo v0.2.0** (scelti dall'utente il 2026-10-22, in quest'ordine):
    1. ✅ **etichette per applicazione** (`foreground.rs`, `Labels::set_app`): `app = "code"` o una lista; confronto senza `.exe` e maiuscole; a parità di livello vince l'etichetta dell'app. Windows `GetForegroundWindow` + nome del processo, X11 `_NET_ACTIVE_WINDOW`/`_NET_WM_PID`/`/proc/<pid>/comm`, macOS `NSWorkspace` (verificato con `cargo check` in un crate di prova, perché l'app intera non compila per macOS da Linux), Wayland nessuno. Provato in WSLg/X11 con due istanze dell'HUD;
-   2. ✅ **mini indicatore** (`header::draw_indicator`, viewport `hud-indicator`, `[indicator]`, `[headsup] locked_layer` e `oneshot`). La finestra esiste sempre (trasparente, click-through) e disegna solo quando serve: crearla al momento ruberebbe il focus a chi scrive, e `with_active(false)` su X11 impedisce del tutto la creazione;
+   2. ✅ **mini indicatore** (`header::draw_indicator`, viewport `hud-indicator`, `[indicator]`, `[headsup] locked_layer`, `oneshot` e `modifiers`). Mostra anche lo stato della connessione quando manca la tastiera e, per 2 s, i cambi di layout, di OS e "HUD nascosto" (`HudApp::flash`). La finestra esiste sempre (trasparente, click-through) e disegna solo quando serve: crearla al momento ruberebbe il focus a chi scrive, e `with_active(false)` su X11 impedisce del tutto la creazione;
    3. ✅ **icona nella tray** (`tray.rs`, `[appearance] tray`): clic sinistro mostra/nasconde, menu con mostra/nascondi, pausa, backup, statistiche, avvio con il sistema, esci. Provata su Linux premendo le voci via D-Bus (`busctl ... com.canonical.dbusmenu Event`); macOS controllato con `cargo check` nel crate di prova;
    4. ✅ **statistiche più ricche** (mani, dita e layer c'erano già): righe e fatica media (`stats::effort`, `row_of`), tasti più usati, attività giornaliera (`Stats::daily`), suggerimenti di scambio sui layer superiori (destinazione solo home row di indice/medio o pollice principale; mai tasti layer, `KC_NO` o trasparenti). Uso delle combo scartato: dagli stati campionati non si distingue una combo da due tasti in rapida successione.
 
@@ -155,6 +155,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-22**: mini indicatore esteso su richiesta dell'utente. `[headsup] oneshot` e `modifiers` (`hud`/`indicator`, come `locked_layer`; filtro in `headsup::without_indicator_states`); chip della connessione (non trovata, in pausa, permessi, errore) con l'HUD nascosto; avvisi di 2 s per QWERTY/Colemak-DH, OS e HUD nascosto. Verificato con `--mock` e log temporanei (eframe non fa screenshot dei viewport immediati): one-shot ACC e Ctrl tenuto solo nel badge, avvisi Colemak e OS con mock modificato, "Tastiera non trovata" con `--vid` inesistente e HUD nascosto.
 
 - **2026-10-22**: release **v0.3.0** pubblicata (tag su `bebf08f`, CI verde prima del tag) con tutti gli asset. L'eseguibile Linux passa da 8,1 a 10,0 MB per `ksni`/zbus (icona nella tray via D-Bus).
 

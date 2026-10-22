@@ -71,11 +71,16 @@ locked_layer = "hud"
 # Lo stesso per un one-shot in attesa (OSL, one-shot mods): con "indicator"
 # l'HUD resta nascosto e il badge mostra il layer o il modificatore in attesa.
 oneshot = "hud"
+# E per un modificatore tenuto oltre modifier_delay_ms: con "indicator" il
+# badge mostra solo "Ctrl", "Shift"... invece dell'HUD intero.
+modifiers = "hud"
 
 [indicator]
 # Mini indicatore: con l'HUD nascosto mostra in un angolo dello schermo solo
 # gli stati che restano dopo aver rilasciato i tasti: layer bloccati, one-shot
-# in attesa, modificatori bloccati, Caps Lock e Caps Word.
+# in attesa, modificatori bloccati, Caps Lock e Caps Word. Dice anche perché
+# manca la tastiera (non trovata, in pausa per Vial) e, per due secondi, cosa è
+# appena cambiato: QWERTY/Colemak-DH, OS, HUD nascosto da HUD_TOG.
 enabled = true
 # top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right
 position = "top-right"
