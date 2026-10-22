@@ -48,7 +48,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - [x] l'HUD torna dentro lo schermo dopo un ridimensionamento e all'avvio (monitor scollegato);
    - [x] icona del progetto: finestra (tutti i sistemi), `.exe` (risorsa Windows), `.app` (macOS);
    - [x] metadati di versione nell'`.exe`; sezione "Windows: SmartScreen" nel README;
-   - [ ] **firma del codice per Windows: in attesa di una scelta dell'utente** (SignPath Foundation gratuita per progetti open source, che però richiede il file `LICENSE`; oppure Azure Artifact Signing o un certificato OV a pagamento).
+   - [ ] firma del codice per Windows: **rimandata dall'utente** (2026-10-22) (SignPath Foundation gratuita per progetti open source, che però richiede il file `LICENSE`; oppure Azure Artifact Signing o un certificato OV a pagamento).
 2. **Combo, tap dance e key override di Vial** (idea 4): letti via Raw HID con il protocollo Vial (`vial_dynamic_entry_op`), mostrati nella ricerca e sull'HUD.
 3. **Avvio automatico** (idea 6): voce nel menu; Windows con la chiave `Run` del registro, Linux con `~/.config/autostart/*.desktop`, macOS con un LaunchAgent.
 
