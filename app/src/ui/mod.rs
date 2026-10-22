@@ -390,6 +390,7 @@ pub struct HudApp {
     show_combos: bool,
     /// Foreground application, for per-application labels.
     foreground: crate::foreground::Foreground,
+    tray: Option<crate::tray::Tray>,
     autostart_args: Vec<String>,
     /// Autostart entry, read when the menu opens (error text if unreadable).
     autostart: Result<autostart::State, String>,
@@ -454,6 +455,7 @@ impl HudApp {
             headsup_on,
             show_combos,
             foreground: crate::foreground::Foreground::new(),
+            tray: None,
             autostart_args: s.autostart_args,
             autostart: Ok(autostart::State::Off),
             pinned: false,
@@ -487,6 +489,11 @@ impl HudApp {
             app.notify(format!("{}: {e}", tr(app.lang, Msg::ConfigError)));
         }
         app.apply_backup();
+        app.refresh_autostart();
+        // no tray icon for unattended screenshots
+        if app.screenshot.is_none() {
+            app.apply_tray(ctx);
+        }
         ctx.options_mut(|o| o.zoom_with_keyboard = false);
         app.apply_poll_rate();
         app
@@ -610,6 +617,66 @@ impl HudApp {
         }
     }
 
+    /// Creates or removes the tray icon to match the configuration.
+    fn apply_tray(&mut self, ctx: &egui::Context) {
+        match (self.config.appearance.tray, self.tray.is_some()) {
+            (true, false) => match crate::tray::Tray::new(ctx, self.lang) {
+                Ok(t) => self.tray = Some(t),
+                Err(e) => log::warn!("icona nella tray non disponibile: {e}"),
+            },
+            (false, true) => self.tray = None,
+            _ => {}
+        }
+    }
+
+    /// Is the HUD on screen (not hidden, not faded out by heads-up)?
+    fn on_screen(&self) -> bool {
+        self.visible && (!self.headsup_on || self.pinned || self.headsup.level() > 0.01)
+    }
+
+    fn handle_tray(&mut self, ctx: &egui::Context) {
+        let Some(tray) = &self.tray else { return };
+        for action in tray.poll() {
+            match action {
+                crate::tray::Action::ToggleHud => {
+                    if self.on_screen() {
+                        self.pinned = false;
+                        self.set_visible(ctx, false);
+                    } else {
+                        // with heads-up it would fade out at once: keep it on screen
+                        self.pinned = self.headsup_on;
+                        self.set_visible(ctx, true);
+                    }
+                }
+                crate::tray::Action::TogglePause => {
+                    if let Some(w) = self.worker() {
+                        w.set_paused(!w.is_paused());
+                    }
+                }
+                crate::tray::Action::ToggleAutostart => {
+                    self.refresh_autostart();
+                    let on = matches!(self.autostart, Ok(autostart::State::On));
+                    self.set_autostart(!on);
+                }
+                crate::tray::Action::Backups => {
+                    if let Err(e) = backup::open_folder(&self.backup_dir()) {
+                        self.notify(format!("{}: {e}", self.backup_dir().display()));
+                    }
+                }
+                crate::tray::Action::Stats => {
+                    self.report.open = true;
+                    ctx.request_repaint();
+                }
+                crate::tray::Action::Quit => root_cmd(ctx, ViewportCommand::Close),
+            }
+        }
+        let (visible, paused) = (self.on_screen(), self.worker().is_some_and(Worker::is_paused));
+        let autostart = matches!(self.autostart, Ok(autostart::State::On));
+        if let Some(t) = &mut self.tray {
+            t.sync(visible, paused, autostart);
+        }
+    }
+
     /// Writes what changed into the history next to the backups.
     fn backup_saved(
         &mut self,
@@ -701,6 +768,9 @@ impl HudApp {
         self.config = config;
         self.apply_poll_rate();
         self.apply_backup();
+        if self.screenshot.is_none() {
+            self.apply_tray(ctx);
+        }
         if resize {
             self.resize(ctx);
         }
@@ -1157,6 +1227,7 @@ impl eframe::App for HudApp {
             self.search.open();
             root_cmd(ctx, ViewportCommand::Focus);
         }
+        self.handle_tray(ctx);
         // per-application labels
         if self.labels.has_app_labels() {
             let app = self.foreground.poll().map(str::to_owned);

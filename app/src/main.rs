@@ -20,6 +20,7 @@ mod paths;
 mod screen;
 mod search;
 mod stats;
+mod tray;
 mod ui;
 mod vial;
 

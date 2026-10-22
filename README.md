@@ -101,9 +101,12 @@ Il firmware funziona identico anche senza HUD collegato. Risponde solo alle rich
 | Cercare un tasto | Ctrl+F o `/` con l'HUD in primo piano, oppure menu → Cerca. Frecce per scegliere, Invio/Esc per chiudere. Trova anche combo, tap dance e key override |
 | Vedere le combo | menu → Mostra le combo |
 | Avviare l'HUD all'accesso | menu → Avvia con il sistema (vedi sotto) |
+| Icona nella tray | clic sinistro: mostra/nasconde l'HUD; clic destro: menu con pausa, backup, statistiche, avvio con il sistema, esci |
 | Sfogliare i layer (solo offline) | rotellina o tasti 0–9 |
 
 Il menu si apre in una piccola finestra separata accanto al punto del clic, così resta leggibile anche con l'HUD rimpicciolito o in vista compatta. Si chiude con ✕, con Esc, con un clic sull'HUD o con un clic altrove. Su Wayland è il compositor a decidere dove compare.
+
+**Icona nella tray.** Comoda soprattutto con l'HUD nascosto e su macOS, dove l'app non ha icona nel Dock. Su Linux passa da D-Bus (StatusNotifierItem), senza GTK: KDE, Xfce e la maggior parte dei pannelli la mostrano, GNOME solo con l'estensione *AppIndicator*. Si toglie con `tray = false` in `[appearance]`.
 
 **Avvio con il sistema.** Vale solo per il tuo utente e non chiede permessi di amministratore: su Windows è un valore in `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`, su Linux il file `~/.config/autostart/keyboard-hud.desktop`, su macOS `~/Library/LaunchAgents/io.github.keyboard-hud.plist`. Registra il percorso dell'eseguibile e le opzioni `--x11`, `--vid`, `--pid` e `--verbose` con cui l'hai avviato. Se sposti l'eseguibile, la casella risulta vuota e il tooltip lo segnala: spuntala di nuovo per aggiornare il percorso. Con la modalità portable su una chiavetta, l'avvio funziona solo se la chiavetta è collegata.
 
@@ -183,7 +186,7 @@ Copia [`keyboard-hud.example.toml`](keyboard-hud.example.toml) accanto all'esegu
 | Sezione | Cosa regola |
 |---|---|
 | `[device]` | `vid` / `pid` per scegliere la tastiera (default: la prima che risponde al protocollo HUD) |
-| `[appearance]` | opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale, distanza di aggancio ai bordi (`snap_distance`, 16) e margine dai bordi (`screen_margin`, 8) |
+| `[appearance]` | icona nella tray (`tray`), opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale, distanza di aggancio ai bordi (`snap_distance`, 16) e margine dai bordi (`screen_margin`, 8) |
 | `[headsup]` | attivo, ritardo dei modificatori (400 ms), ritardo di scomparsa (800 ms), opacità da nascosto, cosa mostra un layer bloccato (`locked_layer`: `hud` o `indicator`) |
 | `[indicator]` | mini indicatore attivo, angolo dello schermo (`position`, default `top-right`) |
 | `[[layers]]` | nome e colore di ogni layer, in ordine |

@@ -25,6 +25,11 @@ mode = "full"       # "full" (tastiera completa) o "compact" (striscia piccola)
 snap_distance = 16
 # Spazio tra l'HUD e i bordi, per l'aggancio e per menu → Posizione.
 screen_margin = 8
+# Icona nella tray (area di notifica / barra dei menu) con mostra/nascondi,
+# pausa, backup, statistiche, avvio con il sistema, esci. Su Linux usa D-Bus
+# (StatusNotifierItem): KDE e la maggior parte dei pannelli la mostrano, GNOME
+# richiede l'estensione "AppIndicator".
+tray = true
 
 # Nomi e colori dei layer, nell'ordine del firmware (0, 1, 2, ...).
 # color: "#RRGGBB", oppure "" per un layer neutro.

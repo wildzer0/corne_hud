@@ -45,6 +45,8 @@ pub struct Appearance {
     pub snap_distance: f32,
     /// Gap between the HUD and the screen edges, for snapping and quick positions.
     pub screen_margin: f32,
+    /// Icon in the system tray.
+    pub tray: bool,
 }
 
 impl Default for Appearance {
@@ -58,6 +60,7 @@ impl Default for Appearance {
             y: None,
             snap_distance: 16.0,
             screen_margin: 8.0,
+            tray: true,
         }
     }
 }

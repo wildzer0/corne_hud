@@ -38,6 +38,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - backup: alla prima connessione deve nascere `backups/corne-v4_<data>.vil` con "Primo backup" in `CHANGELOG.md`; cambiare un tasto in Vial e chiuderlo deve produrre un nuovo backup con la riga giusta; **ricaricare un backup in Vial** (*File → Load saved layout*) e controllare che tutto torni (keymap, encoder, macro, combo, impostazioni); provare anche con la web app (pausa "un altro programma usa la tastiera");
    - combo, tap dance e key override: nel log deve comparire "Vial: N tap dance, N combo, N key override"; Shift tenuto deve mostrare ⌦ su ⌫; dopo una modifica in Vial e la chiusura di Vial l'HUD deve vedere le nuove voci;
    - avvio con il sistema: spuntare dal menu, controllare in `regedit` il valore `Keyboard HUD` sotto `HKCU\...\Run`, riavviare la sessione; poi togliere la spunta;
+   - icona nella tray su Windows (area di notifica): clic sinistro, menu, spunte di pausa e avvio automatico; su macOS nella barra dei menu;
    - mini indicatore su Windows: nessun furto di focus all'avvio o dopo, click-through, aggiornamento anche con l'HUD nascosto da HUD_TOG (su X11 i fotogrammi continuano, su Windows da verificare);
    - icona dell'`.exe` in Esplora risorse e in Proprietà → Dettagli (versione). La CI deve trovare `rc.exe`: se manca, nel log di build compare l'avviso "risorse Windows non incluse".
 4. **File `LICENSE`** (GPL-2.0-or-later): manca ancora, anche se v0.1.0 è già pubblicata. In attesa di conferma dell'utente.
@@ -76,7 +77,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
 5. **Dopo v0.2.0** (scelti dall'utente il 2026-10-22, in quest'ordine):
    1. ✅ **etichette per applicazione** (`foreground.rs`, `Labels::set_app`): `app = "code"` o una lista; confronto senza `.exe` e maiuscole; a parità di livello vince l'etichetta dell'app. Windows `GetForegroundWindow` + nome del processo, X11 `_NET_ACTIVE_WINDOW`/`_NET_WM_PID`/`/proc/<pid>/comm`, macOS `NSWorkspace` (verificato con `cargo check` in un crate di prova, perché l'app intera non compila per macOS da Linux), Wayland nessuno. Provato in WSLg/X11 con due istanze dell'HUD;
    2. ✅ **mini indicatore** (`header::draw_indicator`, viewport `hud-indicator`, `[indicator]`, `[headsup] locked_layer`). La finestra esiste sempre (trasparente, click-through) e disegna solo quando serve: crearla al momento ruberebbe il focus a chi scrive, e `with_active(false)` su X11 impedisce del tutto la creazione;
-   3. **icona nella tray**: pausa, mostra/nascondi, cartella dei backup, avvio con il sistema, esci;
+   3. ✅ **icona nella tray** (`tray.rs`, `[appearance] tray`): clic sinistro mostra/nasconde, menu con mostra/nascondi, pausa, backup, statistiche, avvio con il sistema, esci. Provata su Linux premendo le voci via D-Bus (`busctl ... com.canonical.dbusmenu Event`); macOS controllato con `cargo check` nel crate di prova;
    4. **statistiche più ricche**: bilanciamento tra le mani, carico per dito, uso di layer e combo, suggerimenti (sempre senza testo, sequenze o tempi).
 
 Idee rimandate: modalità allenamento, esportazione PNG/SVG della keymap, finestra "Storico" per confrontare backup qualsiasi, interfaccia in inglese, WPM. Sconsigliate: ripristino dei backup dall'HUD (scrive sulla tastiera), analisi dei mod-tap (servono i tempi).
@@ -103,7 +104,7 @@ Idee rimandate: modalità allenamento, esportazione PNG/SVG della keymap, finest
 - Mappa delle dita ricavata dalla matrice Corne: colonne 0–1 mignolo, 2 anulare, 3 medio, 4–6 indice, ultima riga di ogni metà pollici.
 - Finestra senza barra delle applicazioni (`with_taskbar(false)`); Esc non chiude l'app; si esce dal menu contestuale.
 - Il worker inoltra lo stato solo quando cambia, così a tastiera ferma l'HUD non ridisegna.
-- Niente icona nella tray: la feature `tray` è stata tolta perché era vuota.
+- Icona nella tray con `tray-icon` (v0.2.x): su Linux feature `ksni` (D-Bus, Rust puro, nessuna libreria di sistema in più: verificato con `ldd`), su Windows/macOS API native. I gestori di eventi di `tray-icon`/`muda` si impostano una volta sola per processo: alimentano una coda globale (`tray::QUEUE`) e svegliano la UI. "Mostra l'HUD" con heads-up attivo lo fissa (`pinned`), altrimenti sparirebbe subito.
 - Su Windows l'HUD sposta la propria finestra da solo (`GetCursorPos` + `OuterPosition`), invece di usare `StartDrag` di winit (vedi registro).
 - Aggancio e posizioni rapide lavorano sulla finestra esterna (`outer_rect`) in punti egui. Su Windows l'area di lavoro è esatta (`GetMonitorInfo`), altrove è stimata da `monitor_size` supponendo monitor affiancati della stessa misura. Su Wayland la posizione non è nota: la griglia "Posizione" è disattivata.
 - L'aggancio esiste solo dove l'HUD trascina da sé (Windows); con `StartDrag` (Linux, macOS) lo spostamento lo gestisce il sistema.
@@ -155,7 +156,7 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 
 ## Registro delle sessioni
 
-- **2026-10-22**: release **v0.2.0** pubblicata con tutti gli asset (CI di `e36a328` verde prima del tag, controllata via API GitHub con `curl`). Punto 5.1: etichette per applicazione. Punto 5.2: mini indicatore, verificato in X11 (posizione in alto a destra, chip "DEBUG" col lucchetto in uno screenshot incorporato, fotogrammi anche con l'HUD nascosto).
+- **2026-10-22**: release **v0.2.0** pubblicata con tutti gli asset (CI di `e36a328` verde prima del tag, controllata via API GitHub con `curl`). Punto 5.1: etichette per applicazione. Punto 5.3: icona nella tray, verificata su Linux via D-Bus. Punto 5.2: mini indicatore, verificato in X11 (posizione in alto a destra, chip "DEBUG" col lucchetto in uno screenshot incorporato, fotogrammi anche con l'HUD nascosto).
 
 - **2026-10-22**: punto 4 completo, in tre commit. (1) Pausa sul traffico altrui (web app di Vial). (2) Backup automatico del `.vil`: letture `Device::dump` (keymap grezzo, encoder, macro decodificate dal buffer, voci dinamiche con gli slot vuoti, alt repeat, impostazioni QMK), `backup.rs` per file e potatura, trigger nel worker (connessione, cambio keymap, ogni 2 minuti a tastiera ferma). Formato verificato sui sorgenti di vial-gui (macro `["text"|"tap"|"down"|"up"|"delay", ...]`, keycode numerici accettati). (3) `CHANGELOG.md` leggibile. 104 test; prova completa con il mock (abilitando i backup solo per la prova): primo backup e poi tre modifiche descritte correttamente. **Da verificare con Vial vero il ricaricamento di un backup.**
 

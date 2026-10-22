@@ -18,6 +18,8 @@ lzma-rs = "0.3"
 directories = "6"
 log = "0.4"
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+# tray icon; on Linux through D-Bus (StatusNotifierItem), without GTK (tray.rs)
+tray-icon = { version = "0.26", default-features = false, features = ["ksni"] }
 
 [target.'cfg(windows)'.dependencies]
 # cursor and monitor geometry (ui::cursor_on_screen, screen.rs), autostart registry entry (autostart.rs)
