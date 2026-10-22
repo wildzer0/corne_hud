@@ -1,6 +1,7 @@
 //! Custom key labels from the config (e.g. "Step over" for F10 on DEBUG).
 
 use crate::config::LabelConfig;
+use crate::tr_format;
 use crate::vial::legend::{Legend, Text};
 use crate::vial::names::parse_keycode;
 use std::collections::HashMap;
@@ -64,12 +65,12 @@ impl Labels {
         for (i, e) in entries.iter().enumerate() {
             let n = i + 1;
             if e.label.trim().is_empty() {
-                errors.push(format!("etichetta {n}: 'label' vuoto"));
+                errors.push(tr_format!("etichetta {n}: 'label' vuoto", "label {n}: empty 'label'"));
                 continue;
             }
             let apps: Vec<String> = e.app.as_ref().map(|a| a.names()).unwrap_or_default();
             if e.app.is_some() && apps.iter().all(|a| a.trim().is_empty()) {
-                errors.push(format!("etichetta {n} ({}): 'app' vuoto", e.label));
+                errors.push(tr_format!("etichetta {n} ({}): 'app' vuoto", "label {n} ({}): empty 'app'", e.label));
                 continue;
             }
             let label = Label { text: e.label.clone(), description: e.description.clone() };
@@ -81,13 +82,18 @@ impl Labels {
                         None => labels.by_code.insert(&apps, code, label),
                     },
                     None => {
-                        errors.push(format!("etichetta {n} ({}): keycode '{name}' non riconosciuto", e.label));
+                        errors.push(tr_format!(
+                            "etichetta {n} ({}): keycode '{name}' non riconosciuto",
+                            "label {n} ({}): unknown keycode '{name}'",
+                            e.label
+                        ));
                         continue;
                     }
                 },
                 _ => {
-                    errors.push(format!(
+                    errors.push(tr_format!(
                         "etichetta {n} ({}): indica 'keycode' oppure 'row' e 'col' (con 'layer' facoltativo)",
+                        "label {n} ({}): give 'keycode', or 'row' and 'col' ('layer' is optional)",
                         e.label
                     ));
                     continue;

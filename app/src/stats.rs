@@ -2,7 +2,9 @@
 //! and physical key position. No text, no sequences, no timing between keys.
 
 use crate::clock;
+use crate::i18n::pick;
 use crate::model::Keymap;
+use crate::tr_format;
 use crate::vial::keycode::{decode, qmk_name, Keycode, KC_NO, KC_TRNS};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -149,11 +151,11 @@ pub const FINGERS: [Finger; 5] = [Finger::Pinky, Finger::Ring, Finger::Middle, F
 impl Finger {
     pub fn name(self) -> &'static str {
         match self {
-            Finger::Pinky => "mignolo",
-            Finger::Ring => "anulare",
-            Finger::Middle => "medio",
-            Finger::Index => "indice",
-            Finger::Thumb => "pollice",
+            Finger::Pinky => pick("mignolo", "pinky"),
+            Finger::Ring => pick("anulare", "ring"),
+            Finger::Middle => pick("medio", "middle"),
+            Finger::Index => pick("indice", "index"),
+            Finger::Thumb => pick("pollice", "thumb"),
         }
     }
 }
@@ -192,9 +194,9 @@ impl Row {
     pub fn name(self) -> &'static str {
         match self {
             Row::Home => "home row",
-            Row::Top => "riga alta",
-            Row::Bottom => "riga bassa",
-            Row::Thumb => "pollici",
+            Row::Top => pick("riga alta", "top row"),
+            Row::Bottom => pick("riga bassa", "bottom row"),
+            Row::Thumb => pick("pollici", "thumbs"),
         }
     }
 }
@@ -392,13 +394,15 @@ pub fn csv(
 ) -> String {
     let recent = stats.totals(Some(today - days as i64 + 1));
     let all = stats.totals(None);
-    let mut out =
-        format!("layer,nome_layer,riga,colonna,mano,dito,keycode,pressioni_totali,pressioni_ultimi_{days}_giorni\n");
+    let mut out = tr_format!(
+        "layer,nome_layer,riga,colonna,mano,dito,keycode,pressioni_totali,pressioni_ultimi_{days}_giorni\n",
+        "layer,layer_name,row,column,hand,finger,keycode,total_presses,presses_last_{days}_days\n"
+    );
     for layer in 0..keymap.layers() {
         let name = layer_names.get(layer as usize).cloned().unwrap_or_default();
         for &(row, col) in positions {
             let (hand, finger) = finger_of(row, col, keymap.rows());
-            let hand = if hand == Hand::Left { "sinistra" } else { "destra" };
+            let hand = if hand == Hand::Left { pick("sinistra", "left") } else { pick("destra", "right") };
             let pos = (layer, row, col);
             out.push_str(&format!(
                 "{layer},{name},{row},{col},{hand},{},\"{}\",{},{}\n",

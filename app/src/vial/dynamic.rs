@@ -7,6 +7,7 @@
 
 use super::dump::MacroAction;
 use super::names::vial_code;
+use crate::i18n::pick;
 use serde_json::Value;
 
 /// Size of one entry on the wire.
@@ -70,10 +71,10 @@ pub enum TapAction {
 impl TapAction {
     pub fn describe(self) -> &'static str {
         match self {
-            TapAction::Tap => "tocca",
-            TapAction::Hold => "tieni",
-            TapAction::DoubleTap => "doppio tocco",
-            TapAction::TapHold => "tocca e tieni",
+            TapAction::Tap => pick("tocca", "tap"),
+            TapAction::Hold => pick("tieni", "hold"),
+            TapAction::DoubleTap => pick("doppio tocco", "double tap"),
+            TapAction::TapHold => pick("tocca e tieni", "tap and hold"),
         }
     }
 }

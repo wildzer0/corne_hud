@@ -5,6 +5,8 @@ use super::dump::MacroAction;
 use super::dynamic::TapDance;
 use super::keycode::{decode, qmk_name, Keycode, LayerOp, Mods5};
 use super::names;
+use crate::i18n::pick;
+use crate::tr_format;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LegendKind {
@@ -185,12 +187,14 @@ fn basic_symbol(kc: u8) -> Text {
 fn layer_legend(op: LayerOp, layer: u8, ctx: &LegendContext) -> (String, String) {
     let name = ctx.layer_name(layer);
     let (short, what) = match op {
-        LayerOp::Momentary | LayerOp::TriLayerLower | LayerOp::TriLayerUpper => (name.clone(), "tieni premuto"),
-        LayerOp::Toggle => (format!("⇄ {name}"), "attiva/disattiva"),
+        LayerOp::Momentary | LayerOp::TriLayerLower | LayerOp::TriLayerUpper => {
+            (name.clone(), pick("tieni premuto", "hold"))
+        }
+        LayerOp::Toggle => (format!("⇄ {name}"), pick("attiva/disattiva", "toggle")),
         LayerOp::OneShot => (format!("1×{name}"), "one-shot"),
-        LayerOp::To => (format!("→{name}"), "passa al layer"),
-        LayerOp::DefaultLayer | LayerOp::PersistentDefault => (format!("⌂{name}"), "layer di base"),
-        LayerOp::TapToggle => (format!("TT {name}"), "tieni o tocca"),
+        LayerOp::To => (format!("→{name}"), pick("passa al layer", "switch to the layer")),
+        LayerOp::DefaultLayer | LayerOp::PersistentDefault => (format!("⌂{name}"), pick("layer di base", "base layer")),
+        LayerOp::TapToggle => (format!("TT {name}"), pick("tieni o tocca", "hold or tap")),
     };
     (short, format!("{}: layer {layer} {name} ({what})", op.prefix()))
 }
@@ -252,7 +256,7 @@ fn macro_legend(n: u8, ctx: &LegendContext) -> Legend {
             MacroAction::Text(t) => {
                 symbol.push_str(t);
                 text.push_str(t);
-                lines.push(format!("scrive «{t}»"));
+                lines.push(tr_format!("scrive «{t}»", "types “{t}”"));
             }
             MacroAction::Tap(codes) => {
                 for &c in codes {
@@ -260,7 +264,7 @@ fn macro_legend(n: u8, ctx: &LegendContext) -> Legend {
                     symbol.push_str(&k.symbol);
                     text.push_str(&k.text);
                 }
-                lines.push(format!("tocca {}", names(codes, " ")));
+                lines.push(tr_format!("tocca {}", "taps {}", names(codes, " ")));
             }
             MacroAction::Down(codes) => {
                 for &c in codes {
@@ -268,10 +272,10 @@ fn macro_legend(n: u8, ctx: &LegendContext) -> Legend {
                     symbol.push_str(&format!("{}+", k.symbol));
                     text.push_str(&format!("{}+", k.text));
                 }
-                lines.push(format!("preme {}", names(codes, " ")));
+                lines.push(tr_format!("preme {}", "presses {}", names(codes, " ")));
             }
-            MacroAction::Up(codes) => lines.push(format!("rilascia {}", names(codes, " "))),
-            MacroAction::Delay(ms) => lines.push(format!("attende {ms} ms")),
+            MacroAction::Up(codes) => lines.push(tr_format!("rilascia {}", "releases {}", names(codes, " "))),
+            MacroAction::Delay(ms) => lines.push(tr_format!("attende {ms} ms", "waits {ms} ms")),
         }
     }
     let short = |s: &str| {
@@ -322,14 +326,21 @@ pub fn legend(code: u16, ctx: &LegendContext) -> Legend {
         Keycode::ModTap { mods, kc } => Legend {
             tap: basic_symbol(kc),
             hold: Some(Text::plain(mods.display())),
-            tooltip: format!("{}: tocca {}, tieni {}", qmk_name(code), basic_symbol(kc).text, mods.display()),
+            tooltip: tr_format!(
+                "{}: tocca {}, tieni {}",
+                "{}: tap {}, hold {}",
+                qmk_name(code),
+                basic_symbol(kc).text,
+                mods.display()
+            ),
             kind: LegendKind::Normal,
         },
         Keycode::LayerTap { layer, kc } => Legend {
             tap: basic_symbol(kc),
             hold: Some(Text::plain(ctx.layer_name(layer))),
-            tooltip: format!(
+            tooltip: tr_format!(
                 "{}: tocca {}, tieni layer {}",
+                "{}: tap {}, hold layer {}",
                 qmk_name(code),
                 basic_symbol(kc).text,
                 ctx.layer_name(layer)
@@ -359,11 +370,14 @@ pub fn legend(code: u16, ctx: &LegendContext) -> Legend {
             None => Legend {
                 tap: Text::plain(format!("USER{n:02}")),
                 hold: None,
-                tooltip: format!("Tasto personalizzato {n}"),
+                tooltip: tr_format!("Tasto personalizzato {n}", "Custom key {n}"),
                 kind: LegendKind::Custom,
             },
         },
-        Keycode::Unknown(c) => normal(Text::plain(format!("{c:04X}")), format!("Keycode sconosciuto {c:#06x}")),
+        Keycode::Unknown(c) => normal(
+            Text::plain(format!("{c:04X}")),
+            tr_format!("Keycode sconosciuto {c:#06x}", "Unknown keycode {c:#06x}"),
+        ),
     }
 }
 

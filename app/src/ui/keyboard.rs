@@ -1,9 +1,11 @@
 //! Keyboard rendering: KLE geometry (with rotations) and legends.
 
 use super::theme::{mix, text_on, Palette};
+use crate::i18n::pick;
 use crate::kle::{KeyRole, KleKey};
 use crate::labels::Labels;
 use crate::model::Keymap;
+use crate::tr_format;
 use crate::vial::dynamic::Combo;
 use crate::vial::keycode::KC_TRNS;
 use crate::vial::legend::{legend, LegendContext, LegendKind, Text};
@@ -274,10 +276,11 @@ pub fn draw(
         }
 
         if hover.is_some_and(|p| contains(&poly, p)) {
-            let source = if transparent { " (trasparente)" } else { "" };
-            let mut tip = format!("{}{source}\nriga {row}, colonna {col}", leg.tooltip);
+            let source = if transparent { pick(" (trasparente)", " (transparent)") } else { "" };
+            let mut tip =
+                tr_format!("{}{source}\nriga {row}, colonna {col}", "{}{source}\nrow {row}, column {col}", leg.tooltip);
             if let Some((_, n)) = heat {
-                tip.push_str(&format!("\n{n} pressioni"));
+                tip.push_str(&tr_format!("\n{n} pressioni", "\n{n} presses"));
             }
             tooltip = Some(tip);
         }
@@ -335,7 +338,8 @@ fn draw_combos(
         painter.galley(badge.center() - galley.size() / 2.0, galley, text_on(palette.accent));
         if hover.is_some_and(|p| badge.contains(p)) {
             let names: Vec<String> = keys.iter().map(|(c, _)| legend(*c, view.legends).tap.text).collect();
-            tooltip = Some(format!("Combo: {} insieme → {}", names.join(" + "), out.tooltip));
+            tooltip =
+                Some(tr_format!("Combo: {} insieme → {}", "Combo: {} together → {}", names.join(" + "), out.tooltip));
         }
     }
     tooltip

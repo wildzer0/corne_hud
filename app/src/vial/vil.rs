@@ -7,6 +7,7 @@
 use super::dynamic::Dynamic;
 use super::names::vial_code;
 use crate::model::Keymap;
+use crate::tr_format;
 use serde_json::Value;
 use std::fmt;
 
@@ -30,8 +31,10 @@ pub enum VilError {
 impl fmt::Display for VilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            VilError::Json(e) => write!(f, "file .vil non valido: {e}"),
-            VilError::Invalid(msg) => write!(f, "file .vil non valido: {msg}"),
+            VilError::Json(e) => write!(f, "{}", tr_format!("file .vil non valido: {e}", "invalid .vil file: {e}")),
+            VilError::Invalid(msg) => {
+                write!(f, "{}", tr_format!("file .vil non valido: {msg}", "invalid .vil file: {msg}"))
+            }
         }
     }
 }

@@ -1,6 +1,8 @@
 //! Wire format of the HUD protocol (see `docs/PROTOCOL.md`) and of the
 //! VIA/Vial commands used by the app. Pure functions, no I/O.
 
+use crate::i18n::pick;
+use crate::tr_format;
 use crate::vial::dynamic::ENTRY_SIZE;
 
 pub const REPORT_SIZE: usize = 32;
@@ -64,11 +66,25 @@ pub enum ProtocolError {
 impl std::fmt::Display for ProtocolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProtocolError::Unsupported => write!(f, "il firmware non supporta il protocollo HUD"),
-            ProtocolError::Busy => write!(f, "tastiera occupata (sblocco Vial in corso)"),
-            ProtocolError::Status(s) => write!(f, "errore del firmware (stato {s})"),
-            ProtocolError::Mismatch => write!(f, "risposta inattesa"),
-            ProtocolError::Invalid(what) => write!(f, "risposta non valida: {what}"),
+            ProtocolError::Unsupported => write!(
+                f,
+                "{}",
+                pick("il firmware non supporta il protocollo HUD", "the firmware does not support the HUD protocol")
+            ),
+            ProtocolError::Busy => {
+                write!(
+                    f,
+                    "{}",
+                    pick("tastiera occupata (sblocco Vial in corso)", "keyboard busy (Vial unlock in progress)")
+                )
+            }
+            ProtocolError::Status(s) => {
+                write!(f, "{}", tr_format!("errore del firmware (stato {s})", "firmware error (status {s})"))
+            }
+            ProtocolError::Mismatch => write!(f, "{}", pick("risposta inattesa", "unexpected answer")),
+            ProtocolError::Invalid(what) => {
+                write!(f, "{}", tr_format!("risposta non valida: {what}", "invalid answer: {what}"))
+            }
         }
     }
 }

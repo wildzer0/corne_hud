@@ -3,6 +3,7 @@
 //! keyboard; in offline mode from disk.
 
 use crate::kle::{self, KleError, KleKey};
+use crate::tr_format;
 use serde::Deserialize;
 use serde_json::Value;
 use std::fmt;
@@ -41,10 +42,16 @@ pub enum DefinitionError {
 impl fmt::Display for DefinitionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DefinitionError::Json(e) => write!(f, "JSON non valido: {e}"),
-            DefinitionError::Xz(e) => write!(f, "decompressione xz fallita: {e}"),
-            DefinitionError::Missing(field) => write!(f, "campo mancante: {field}"),
-            DefinitionError::Invalid(field) => write!(f, "valore non valido: {field}"),
+            DefinitionError::Json(e) => write!(f, "{}", tr_format!("JSON non valido: {e}", "invalid JSON: {e}")),
+            DefinitionError::Xz(e) => {
+                write!(f, "{}", tr_format!("decompressione xz fallita: {e}", "xz decompression failed: {e}"))
+            }
+            DefinitionError::Missing(field) => {
+                write!(f, "{}", tr_format!("campo mancante: {field}", "missing field: {field}"))
+            }
+            DefinitionError::Invalid(field) => {
+                write!(f, "{}", tr_format!("valore non valido: {field}", "invalid value: {field}"))
+            }
             DefinitionError::Kle(e) => write!(f, "layout KLE: {e}"),
         }
     }

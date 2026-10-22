@@ -3,8 +3,10 @@
 
 use super::protocol::{self as p, HudCommand, HudInfo, HudState, ProtocolError, Report};
 use super::transport::{Transport, TransportError};
+use crate::i18n::pick;
 use crate::kle::KeyRole;
 use crate::model::Keymap;
+use crate::tr_format;
 use crate::vial::definition::Definition;
 use crate::vial::definition::DefinitionError;
 use crate::vial::dump::{decode_macros, qmk_setting_width, AltRepeat, Dump};
@@ -29,8 +31,8 @@ impl fmt::Display for DeviceError {
         match self {
             DeviceError::Transport(e) => e.fmt(f),
             DeviceError::Protocol(e) => e.fmt(f),
-            DeviceError::Timeout => write!(f, "la tastiera non risponde"),
-            DeviceError::Definition(e) => write!(f, "definizione Vial: {e}"),
+            DeviceError::Timeout => write!(f, "{}", pick("la tastiera non risponde", "the keyboard does not answer")),
+            DeviceError::Definition(e) => write!(f, "{}", tr_format!("definizione Vial: {e}", "Vial definition: {e}")),
         }
     }
 }

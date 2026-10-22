@@ -2,6 +2,7 @@
 //! code also runs against the simulated keyboard (`--mock`).
 
 use super::protocol::{Report, REPORT_SIZE};
+use crate::tr_format;
 use hidapi::{HidApi, HidDevice};
 use std::ffi::CString;
 use std::fmt;
@@ -20,8 +21,10 @@ pub enum TransportError {
 impl fmt::Display for TransportError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TransportError::PermissionDenied(path) => write!(f, "permesso negato su {path}"),
-            TransportError::Io(e) => write!(f, "errore HID: {e}"),
+            TransportError::PermissionDenied(path) => {
+                write!(f, "{}", tr_format!("permesso negato su {path}", "permission denied on {path}"))
+            }
+            TransportError::Io(e) => write!(f, "{}", tr_format!("errore HID: {e}", "HID error: {e}")),
         }
     }
 }

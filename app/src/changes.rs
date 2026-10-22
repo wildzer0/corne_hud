@@ -1,6 +1,8 @@
 //! What changed between two backups (`.vil` contents), in words: one line
 //! per change, e.g. "NAV · tasto B (riga 2, colonna 5): Redo → Ctrl+Y".
 
+use crate::i18n::pick;
+use crate::tr_format;
 use crate::vial::definition::CustomKeycode;
 use crate::vial::dynamic::{Combo, KeyOverride, TapDance};
 use crate::vial::keycode::{Mods5, KC_NO, KC_TRNS};
@@ -37,7 +39,7 @@ fn setting_name(id: u64) -> String {
         25 => "quick tap term",
         26 => "chordal hold",
         27 => "flow tap term",
-        _ => return format!("impostazione QMK {id}"),
+        _ => return tr_format!("impostazione QMK {id}", "QMK setting {id}"),
     };
     name.to_string()
 }
@@ -107,11 +109,11 @@ impl Context<'_> {
 
     fn layers(&self, mask: u16) -> String {
         if mask == 0xFFFF {
-            return "tutti i layer".into();
+            return pick("tutti i layer", "all layers").into();
         }
         let names: Vec<String> = (0..16).filter(|l| mask & (1 << l) != 0).map(|l| self.layer(l)).collect();
         if names.is_empty() {
-            "nessun layer".into()
+            pick("nessun layer", "no layer").into()
         } else {
             names.join(", ")
         }
@@ -121,13 +123,13 @@ impl Context<'_> {
 /// A keycode in words, e.g. "Tab (tieni Ctrl)", "trasparente".
 fn key(c: u16, ctx: &LegendContext) -> String {
     match c {
-        KC_NO => "nessuno".into(),
-        KC_TRNS => "trasparente".into(),
+        KC_NO => pick("nessuno", "none").into(),
+        KC_TRNS => pick("trasparente", "transparent").into(),
         _ => {
             let l = legend(c, ctx);
             let tap = if l.tap.text.is_empty() { l.tooltip.clone() } else { l.tap.text.clone() };
             match l.hold {
-                Some(h) => format!("{tap} (tieni {})", h.text),
+                Some(h) => tr_format!("{tap} (tieni {})", "{tap} (hold {})", h.text),
                 None => tap,
             }
         }
@@ -136,11 +138,11 @@ fn key(c: u16, ctx: &LegendContext) -> String {
 
 fn combo_text(c: &Combo, ctx: &LegendContext) -> String {
     let keys: Vec<String> = c.inputs().map(|k| key(k, ctx)).collect();
-    format!("{} insieme → {}", keys.join(" + "), key(c.output, ctx))
+    tr_format!("{} insieme → {}", "{} together → {}", keys.join(" + "), key(c.output, ctx))
 }
 
 fn override_text(o: &KeyOverride, ctx: &LegendContext, names: &Context) -> String {
-    let off = if o.is_active() { "" } else { " (disattivato)" };
+    let off = if o.is_active() { "" } else { pick(" (disattivato)", " (off)") };
     format!(
         "{} + {} → {} ({}){off}",
         Mods5(o.mods5()).display(),
@@ -174,15 +176,15 @@ fn macro_text(m: &Value, ctx: &LegendContext) -> String {
             Some(match tag {
                 "text" => format!("\"{}\"", rest.first()?.as_str()?),
                 "tap" => keys(),
-                "down" => format!("giù {}", keys()),
-                "up" => format!("su {}", keys()),
-                "delay" => format!("pausa {} ms", rest.first()?.as_u64()?),
+                "down" => tr_format!("giù {}", "down {}", keys()),
+                "up" => tr_format!("su {}", "up {}", keys()),
+                "delay" => tr_format!("pausa {} ms", "wait {} ms", rest.first()?.as_u64()?),
                 other => other.to_string(),
             })
         })
         .collect();
     if steps.is_empty() {
-        "vuota".into()
+        pick("vuota", "empty").into()
     } else {
         steps.join(", ")
     }
@@ -195,7 +197,10 @@ pub fn summary(cur: &Value) -> String {
     let tds = tap_dances(cur).iter().filter(|t| !t.is_empty()).count();
     let kos = key_overrides(cur).iter().filter(|o| o.is_active()).count();
     let macros = list(cur, "macro").iter().filter(|m| m.as_array().is_some_and(|a| !a.is_empty())).count();
-    format!("Primo backup: {layers} layer, {combos} combo, {tds} tap dance, {kos} key override, {macros} macro")
+    tr_format!(
+        "Primo backup: {layers} layer, {combos} combo, {tds} tap dance, {kos} key override, {macros} macro",
+        "First backup: {layers} layers, {combos} combos, {tds} tap dances, {kos} key overrides, {macros} macros"
+    )
 }
 
 /// Changes from `prev` to `cur`, one line each, in a stable order.
@@ -210,7 +215,7 @@ pub fn describe(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
     // keymap
     let (lp, lc) = (list(prev, "layout"), list(cur, "layout"));
     if lp.len() != lc.len() {
-        out.push(format!("Numero di layer: {} → {}", lp.len(), lc.len()));
+        out.push(tr_format!("Numero di layer: {} → {}", "Number of layers: {} → {}", lp.len(), lc.len()));
     }
     let cell = |layout: &[Value], l: usize, r: usize, c: usize| layout.get(l)?.get(r)?.get(c).cloned();
     for (l, rows) in lc.iter().enumerate() {
@@ -227,8 +232,12 @@ pub fn describe(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
                 // where: the key as printed on the base layer
                 let base = cell(lc, 0, r, c).map_or(0, |v| code(&v));
                 let place = match base {
-                    KC_NO | KC_TRNS => format!("riga {r}, colonna {c}"),
-                    _ => format!("tasto {} (riga {r}, colonna {c})", key(base, &ctx_cur)),
+                    KC_NO | KC_TRNS => tr_format!("riga {r}, colonna {c}", "row {r}, column {c}"),
+                    _ => tr_format!(
+                        "tasto {} (riga {r}, colonna {c})",
+                        "key {} (row {r}, column {c})",
+                        key(base, &ctx_cur)
+                    ),
                 };
                 out.push(format!("{} · {place}: {} → {}", names.layer(l), key(a, &ctx_prev), key(b, &ctx_cur)));
             }
@@ -240,11 +249,12 @@ pub fn describe(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
     for (l, encs) in ec.iter().enumerate() {
         for (i, dirs) in encs.as_array().map(Vec::as_slice).unwrap_or(&[]).iter().enumerate() {
             let Some(before) = ep.get(l).and_then(|e| e.get(i)) else { continue };
-            for (d, label) in [(0, "antiorario"), (1, "orario")] {
+            for (d, label) in [(0, pick("antiorario", "counterclockwise")), (1, pick("orario", "clockwise"))] {
                 let (a, b) = (before.get(d).map_or(0, code), dirs.get(d).map_or(0, code));
                 if a != b {
-                    out.push(format!(
+                    out.push(tr_format!(
                         "{} · encoder {i}, senso {label}: {} → {}",
+                        "{} · encoder {i}, {label}: {} → {}",
                         names.layer(l),
                         key(a, &ctx_prev),
                         key(b, &ctx_cur)
@@ -259,10 +269,11 @@ pub fn describe(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
     for i in 0..cp.len().max(cc.len()) {
         let (a, b) = (cp.get(i).copied().unwrap_or_default(), cc.get(i).copied().unwrap_or_default());
         match (a.is_active(), b.is_active()) {
-            (false, true) => out.push(format!("Combo aggiunta: {}", combo_text(&b, &ctx_cur))),
-            (true, false) => out.push(format!("Combo rimossa: {}", combo_text(&a, &ctx_prev))),
-            (true, true) if a != b => out.push(format!(
+            (false, true) => out.push(tr_format!("Combo aggiunta: {}", "Combo added: {}", combo_text(&b, &ctx_cur))),
+            (true, false) => out.push(tr_format!("Combo rimossa: {}", "Combo removed: {}", combo_text(&a, &ctx_prev))),
+            (true, true) if a != b => out.push(tr_format!(
                 "Combo modificata: {} diventa {}",
+                "Combo changed: {} becomes {}",
                 combo_text(&a, &ctx_prev),
                 combo_text(&b, &ctx_cur)
             )),
@@ -272,8 +283,16 @@ pub fn describe(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
     for i in 0..td_prev.len().max(td_cur.len()) {
         let (a, b) = (td_prev.get(i).copied().unwrap_or_default(), td_cur.get(i).copied().unwrap_or_default());
         match (a.is_empty(), b.is_empty()) {
-            (true, false) => out.push(format!("Tap dance {i} aggiunto: {}", tap_dance_text(&b, &ctx_cur))),
-            (false, true) => out.push(format!("Tap dance {i} rimosso: {}", tap_dance_text(&a, &ctx_prev))),
+            (true, false) => out.push(tr_format!(
+                "Tap dance {i} aggiunto: {}",
+                "Tap dance {i} added: {}",
+                tap_dance_text(&b, &ctx_cur)
+            )),
+            (false, true) => out.push(tr_format!(
+                "Tap dance {i} rimosso: {}",
+                "Tap dance {i} removed: {}",
+                tap_dance_text(&a, &ctx_prev)
+            )),
             (false, false) if a != b => {
                 let mut what = Vec::new();
                 for ((action, x), (_, y)) in a.actions().into_iter().zip(b.actions()) {
@@ -294,17 +313,31 @@ pub fn describe(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
         let (a, b) = (kp.get(i).copied().unwrap_or_default(), kc.get(i).copied().unwrap_or_default());
         let used = |o: &KeyOverride| o.trigger != 0 || o.replacement != 0;
         match (used(&a), used(&b)) {
-            (false, true) => out.push(format!("Key override aggiunto: {}", override_text(&b, &ctx_cur, names))),
-            (true, false) => out.push(format!("Key override rimosso: {}", override_text(&a, &ctx_prev, names))),
+            (false, true) => out.push(tr_format!(
+                "Key override aggiunto: {}",
+                "Key override added: {}",
+                override_text(&b, &ctx_cur, names)
+            )),
+            (true, false) => out.push(tr_format!(
+                "Key override rimosso: {}",
+                "Key override removed: {}",
+                override_text(&a, &ctx_prev, names)
+            )),
             (true, true) if KeyOverride { options: a.options ^ 0x80, ..a } == b => {
-                let what = if b.is_active() { "riattivato" } else { "disattivato" };
-                out.push(format!(
+                let what = if b.is_active() {
+                    pick("riattivato", "turned on again")
+                } else {
+                    pick("disattivato", "turned off")
+                };
+                out.push(tr_format!(
                     "Key override {what}: {}",
-                    override_text(&b, &ctx_cur, names).replace(" (disattivato)", "")
+                    "Key override {what}: {}",
+                    override_text(&b, &ctx_cur, names).replace(pick(" (disattivato)", " (off)"), "")
                 ));
             }
-            (true, true) if a != b => out.push(format!(
+            (true, true) if a != b => out.push(tr_format!(
                 "Key override modificato: {} diventa {}",
+                "Key override changed: {} becomes {}",
                 override_text(&a, &ctx_prev, names),
                 override_text(&b, &ctx_cur, names)
             )),
@@ -326,7 +359,7 @@ pub fn describe(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
     let (ap, ac) = (list(prev, "alt_repeat_key"), list(cur, "alt_repeat_key"));
     for i in 0..ap.len().max(ac.len()) {
         if ap.get(i) != ac.get(i) {
-            out.push(format!("Alt repeat key {i} modificato"));
+            out.push(tr_format!("Alt repeat key {i} modificato", "Alt repeat key {i} changed"));
         }
     }
 
@@ -348,7 +381,7 @@ pub fn describe(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
     }
 
     if prev.get("layout_options") != cur.get("layout_options") {
-        out.push("Opzioni di layout cambiate".into());
+        out.push(pick("Opzioni di layout cambiate", "Layout options changed").into());
     }
     out
 }

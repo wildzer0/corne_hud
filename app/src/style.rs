@@ -4,7 +4,9 @@
 //! dark and light: it has colors for both and follows the theme.
 
 use crate::config::parse_color;
+use crate::i18n::pick;
 use crate::paths;
+use crate::tr_format;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -105,10 +107,16 @@ impl Style {
         for (section, colors) in [("dark", &s.dark), ("light", &s.light)] {
             for (name, value) in colors {
                 if !COLOR_NAMES.contains(&name.as_str()) {
-                    return Err(format!("[{section}] {name}: colore sconosciuto"));
+                    return Err(tr_format!(
+                        "[{section}] {name}: colore sconosciuto",
+                        "[{section}] {name}: unknown color"
+                    ));
                 }
                 if parse_color(value).is_none() {
-                    return Err(format!("[{section}] {name} = \"{value}\": serve \"#RRGGBB\""));
+                    return Err(tr_format!(
+                        "[{section}] {name} = \"{value}\": serve \"#RRGGBB\"",
+                        "[{section}] {name} = \"{value}\": \"#RRGGBB\" expected"
+                    ));
                 }
             }
         }
@@ -194,7 +202,9 @@ pub fn load(name: &str) -> Result<Style, String> {
         Ok(text) => Style::parse(&text).map_err(|e| format!("{}: {e}", file(name).display())),
         Err(_) => match built_in(name) {
             Some(text) => Style::parse(text),
-            None => Err(format!("stile «{name}» non trovato in {}", dir().display())),
+            None => {
+                Err(tr_format!("stile «{name}» non trovato in {}", "style “{name}” not found in {}", dir().display()))
+            }
         },
     }
 }
@@ -207,7 +217,10 @@ pub fn save_new(base: &str, style: &Style) -> std::io::Result<String> {
         .map(|i| if i == 1 { base.to_string() } else { format!("{base}-{i}") })
         .find(|n| !file(n).exists() && built_in(n).is_none())
         .unwrap_or_else(|| base.to_string());
-    let header = "# Stile di Keyboard HUD: ogni voce è facoltativa, i colori sono \"#RRGGBB\".\n";
+    let header = pick(
+        "# Stile di Keyboard HUD: ogni voce è facoltativa, i colori sono \"#RRGGBB\".\n",
+        "# Keyboard HUD style: every entry is optional, colors are \"#RRGGBB\".\n",
+    );
     std::fs::write(file(&name), format!("{header}{}", style.to_toml()))?;
     Ok(name)
 }

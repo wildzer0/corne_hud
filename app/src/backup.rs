@@ -22,7 +22,10 @@ pub const CHANGELOG: &str = "CHANGELOG.md";
 /// Adds an entry for the backup `file` at the top of the history in `dir`.
 pub fn append_changelog(dir: &Path, keyboard: &str, file: &Path, now_secs: u64, lines: &[String]) -> io::Result<()> {
     let path = dir.join(CHANGELOG);
-    let title = "# Storico della configurazione della tastiera\n\nOgni voce corrisponde a un backup `.vil` di questa cartella (ora UTC), dal più recente.\n";
+    let title = crate::i18n::pick(
+        "# Storico della configurazione della tastiera\n\nOgni voce corrisponde a un backup `.vil` di questa cartella (ora UTC), dal più recente.\n",
+        "# Keyboard configuration history\n\nEach entry matches a `.vil` backup in this folder (UTC time), newest first.\n",
+    );
     let old = std::fs::read_to_string(&path).unwrap_or_else(|_| title.to_string());
     let (head, rest) = match old.find("\n## ") {
         Some(i) => old.split_at(i + 1),

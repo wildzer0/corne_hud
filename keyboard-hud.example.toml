@@ -15,6 +15,9 @@
 opacity = 0.85      # 0.2 – 1.0
 scale = 1.0         # 0.5 – 2.0 (anche Ctrl + rotellina sull'HUD)
 theme = "system"    # "system", "dark", "light"
+# Lingua dell'interfaccia: "auto" (quella del sistema: italiano se è italiano,
+# altrimenti inglese), "it" oppure "en". Anche dal menu.
+language = "auto"
 mode = "full"       # "full" (tastiera completa) o "compact" (striscia piccola)
 # Posizione iniziale in pixel logici. Di solito non serve: l'HUD ricorda
 # l'ultima posizione in keyboard-hud-state.toml.

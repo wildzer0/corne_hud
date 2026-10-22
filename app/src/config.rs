@@ -15,6 +15,16 @@ pub enum ThemeChoice {
     Light,
 }
 
+/// Interface language: the system's (Italian or English) or a fixed one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LanguageChoice {
+    #[default]
+    Auto,
+    It,
+    En,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ViewMode {
@@ -49,6 +59,7 @@ pub struct Appearance {
     pub tray: bool,
     /// Style (file name in `styles/`, without `.toml`); empty = the default one.
     pub style: String,
+    pub language: LanguageChoice,
     /// Opacity of the keys, 0.2–1; unset = from the style.
     pub key_opacity: Option<f32>,
     /// Corner radius of the keys, 0–0.5 of their size; unset = from the style.
@@ -68,6 +79,7 @@ impl Default for Appearance {
             screen_margin: 8.0,
             tray: true,
             style: String::new(),
+            language: LanguageChoice::Auto,
             key_opacity: None,
             key_radius: None,
         }
@@ -418,6 +430,7 @@ pub struct WindowState {
     pub headsup: Option<bool>,
     pub combos: Option<bool>,
     pub style: Option<String>,
+    pub language: Option<LanguageChoice>,
     pub keycast: Option<bool>,
     pub key_opacity: Option<f32>,
     pub key_radius: Option<f32>,
@@ -459,6 +472,7 @@ mod tests {
         assert_eq!(c.headsup.modifiers, ShownIn::Hud);
         assert_eq!(c.indicator.position, ScreenPlace::TopRight);
         assert!(!c.keycast.enabled);
+        assert_eq!(c.appearance.language, LanguageChoice::Auto);
         assert_eq!(c.keycast.position, ScreenPlace::Bottom);
         assert_eq!(c.headsup.modifier_delay_ms, 400);
         assert!(c.labels.iter().any(|l| l.label == "Step over" && l.keycode.as_deref() == Some("KC_F10")));

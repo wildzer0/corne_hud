@@ -12,7 +12,9 @@ pub mod theme;
 use crate::autostart;
 use crate::backup;
 use crate::changes;
-use crate::config::{Config, ConfigWatcher, Reload, ShownIn, StatsConfig, ThemeChoice, ViewMode, WindowState};
+use crate::config::{
+    Config, ConfigWatcher, LanguageChoice, Reload, ShownIn, StatsConfig, ThemeChoice, ViewMode, WindowState,
+};
 use crate::headsup::{self, HeadsUp};
 use crate::hid::protocol::{caps, flags, HudInfo, HudState, OsKind};
 use crate::hid::worker::{Event, PauseReason, Status, Worker};
@@ -131,6 +133,14 @@ enum HeatMode {
     Layer,
     /// Presses per physical key, all layers together.
     All,
+}
+
+fn resolve_language(choice: LanguageChoice) -> Lang {
+    match choice {
+        LanguageChoice::Auto => crate::i18n::system(),
+        LanguageChoice::It => Lang::It,
+        LanguageChoice::En => Lang::En,
+    }
 }
 
 fn stats_path(cfg: &StatsConfig) -> PathBuf {
@@ -367,6 +377,7 @@ impl HudToggle {
 
 pub struct HudApp {
     lang: Lang,
+    language: LanguageChoice,
     mode: Mode,
     status: Option<Status>,
     live: Option<Layout>,
@@ -457,6 +468,9 @@ impl HudApp {
         let headsup_on = s.window.headsup.unwrap_or(s.config.headsup.enabled);
         let show_combos = s.window.combos.unwrap_or(false);
         let keycast_on = s.window.keycast.unwrap_or(s.config.keycast.enabled);
+        let language = s.window.language.unwrap_or(s.config.appearance.language);
+        let lang = resolve_language(language);
+        crate::i18n::set_current(lang);
         let style_name = s
             .window
             .style
@@ -470,7 +484,8 @@ impl HudApp {
             }
         };
         let mut app = HudApp {
-            lang: Lang::It,
+            lang,
+            language,
             mode: s.mode,
             status: None,
             live: None,
@@ -751,6 +766,23 @@ impl HudApp {
         }
     }
 
+    /// Switches the interface language; the tray menu is built again.
+    fn set_language(&mut self, ctx: &egui::Context, choice: LanguageChoice) {
+        self.language = choice;
+        let lang = resolve_language(choice);
+        if lang == self.lang {
+            self.mark_dirty();
+            return;
+        }
+        self.lang = lang;
+        crate::i18n::set_current(lang);
+        self.search_stale = true;
+        if self.tray.take().is_some() {
+            self.apply_tray(ctx);
+        }
+        self.mark_dirty();
+    }
+
     /// Is the HUD on screen (not hidden, not faded out by heads-up)?
     fn on_screen(&self) -> bool {
         self.visible && (!self.headsup_on || self.pinned || self.headsup.level() > 0.01)
@@ -880,6 +912,9 @@ impl HudApp {
         if config.keycast.enabled != self.config.keycast.enabled {
             self.keycast_on = config.keycast.enabled;
         }
+        if config.appearance.language != self.config.appearance.language {
+            self.set_language(ctx, config.appearance.language);
+        }
         // appearance values edited in the file win over the remembered ones
         let (old, new) = (&self.config.appearance, &config.appearance);
         if new.opacity != old.opacity {
@@ -968,6 +1003,7 @@ impl HudApp {
         self.window.headsup = Some(self.headsup_on);
         self.window.combos = Some(self.show_combos);
         self.window.keycast = Some(self.keycast_on);
+        self.window.language = Some(self.language);
         self.window.style = Some(self.style_name.clone());
         self.window.key_opacity = self.key_opacity;
         self.window.key_radius = self.key_radius;
@@ -1474,6 +1510,16 @@ impl HudApp {
             ui.selectable_value(&mut self.theme, ThemeChoice::Light, tr(lang, Msg::ThemeLight));
             if self.theme != before {
                 self.mark_dirty();
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(tr(lang, Msg::MenuLanguage));
+            let mut choice = self.language;
+            ui.selectable_value(&mut choice, LanguageChoice::Auto, tr(lang, Msg::LanguageAuto));
+            ui.selectable_value(&mut choice, LanguageChoice::It, "Italiano");
+            ui.selectable_value(&mut choice, LanguageChoice::En, "English");
+            if choice != self.language {
+                self.set_language(&ctx, choice);
             }
         });
         ui.horizontal_wrapped(|ui| {

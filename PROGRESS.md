@@ -155,6 +155,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 
 ## Registro delle sessioni
 
+- **2026-10-22**: interfaccia in inglese. `i18n.rs` ora ha italiano e inglese affiancati per ogni messaggio (una traduzione mancante non compila), lingua corrente globale (`i18n::set_current`, `pick`, macro `tr_format!`) per i testi costruiti lontano dalla UI: legende, ricerca, CHANGELOG, CSV, errori. `[appearance] language` (`auto`/`it`/`en`) e voce di menu; `auto` legge `LC_ALL`/`LC_MESSAGES`/`LANG`, su Windows `GetUserDefaultUILanguage` (feature `Win32_Globalization`), su macOS `defaults read -g AppleLanguages` (non provato: macOS non compila da Linux). Il log resta in italiano, come i dettagli tecnici di `ProtocolError::Invalid`. Clippy pulito anche per `x86_64-pc-windows-msvc`. Screenshot in inglese di menu e ricerca.
+
 - **2026-10-22**: keycast (`ui/keycast.rs`, `[keycast]`, voce di menu). Regola di privacy in `keycast::describe`: un tasto che scrive compare solo con Ctrl/Alt/Gui; da soli solo F-tasti, Esc, Tab, navigazione, media. Un tasto premuto senza modificatore resta "in attesa" per 400 ms finché è giù, perché il Ctrl dei mod-tap arriva nello stato dopo il tasto. Verificato con uno screenshot del mock (finestre incorporate con una patch temporanea): `Ctrl+C` dal mod-tap.
 
 - **2026-10-22**: finestra Diagnostica (`ui/diagnostics.rs`, menu e `--diagnostics`): le cifre del collegamento vengono dal worker (`LinkStats` in `Control`, aggiornate ogni secondo da `Meter`), perché lo stato arriva alla UI solo quando cambia. Verificata con uno screenshot del mock.

@@ -151,7 +151,8 @@ mod imp {
     use std::path::{Path, PathBuf};
 
     fn path() -> io::Result<PathBuf> {
-        let base = directories::BaseDirs::new().ok_or_else(|| io::Error::other("cartella home non trovata"))?;
+        let base = directories::BaseDirs::new()
+            .ok_or_else(|| io::Error::other(crate::i18n::pick("cartella home non trovata", "home folder not found")))?;
         Ok(base.config_dir().join("autostart").join("keyboard-hud.desktop"))
     }
 
@@ -183,7 +184,8 @@ mod imp {
     use std::path::{Path, PathBuf};
 
     fn path() -> io::Result<PathBuf> {
-        let base = directories::BaseDirs::new().ok_or_else(|| io::Error::other("cartella home non trovata"))?;
+        let base = directories::BaseDirs::new()
+            .ok_or_else(|| io::Error::other(crate::i18n::pick("cartella home non trovata", "home folder not found")))?;
         Ok(base.home_dir().join("Library/LaunchAgents/io.github.keyboard-hud.plist"))
     }
 

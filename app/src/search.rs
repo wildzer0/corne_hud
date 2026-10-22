@@ -3,6 +3,7 @@
 
 use crate::labels::Labels;
 use crate::model::Keymap;
+use crate::tr_format;
 use crate::vial::dynamic::{Dynamic, TapAction};
 use crate::vial::keycode::Mods5;
 use crate::vial::keycode::{
@@ -105,8 +106,8 @@ pub fn sequence(keymap: &Keymap, ctx: &LegendContext, labels: &Labels, layer: u8
     }
     match activator(keymap, ctx, labels, layer) {
         Some((act, Reach::Hold)) => format!("{act} + {key}"),
-        Some((act, Reach::OneShot)) => format!("{act}, poi {key}"),
-        Some((act, Reach::Toggle)) => format!("{act} (blocca), poi {key}"),
+        Some((act, Reach::OneShot)) => tr_format!("{act}, poi {key}", "{act}, then {key}"),
+        Some((act, Reach::Toggle)) => tr_format!("{act} (blocca), poi {key}", "{act} (lock), then {key}"),
         None if layer == TRI_LAYER_ADJUST => {
             let lower = activator(keymap, ctx, labels, TRI_LAYER_LOWER);
             let upper = activator(keymap, ctx, labels, TRI_LAYER_UPPER);
@@ -165,7 +166,7 @@ fn dynamic_hits(
         });
         let Some((layer, keys)) = found else { continue };
         let names: Vec<String> = keys.iter().map(|&(r, c)| key_name_on(keymap, ctx, labels, layer, r, c)).collect();
-        let together = format!("{} insieme", names.join(" + "));
+        let together = tr_format!("{} insieme", "{} together", names.join(" + "));
         let sequence = match layer {
             0 => together,
             _ => format!("{}: {together}", ctx.layer_names.get(layer as usize).cloned().unwrap_or(format!("L{layer}"))),
