@@ -4,7 +4,7 @@ Registro dei progressi per riprendere il lavoro tra una sessione e l'altra.
 Specifica completa: [docs/PROMPT_HUD.md](docs/PROMPT_HUD.md). Protocollo: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Aggiorna questo file alla fine di ogni sessione.
 
-_Ultimo aggiornamento: 2026-10-22. Release **v0.1.0** pubblicata; su `main` ci sono commit locali non ancora pubblicati (correzione del trascinamento su Windows)._
+_Ultimo aggiornamento: 2026-10-22. Release **v0.2.0** (aggancio ai bordi, icona, combo/tap dance/key override, avvio automatico, backup con storico)._
 
 ---
 
@@ -72,7 +72,13 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - da verificare: che vial-gui ricarichi il file (*File → Load saved layout*). I nomi dei keycode vanno scritti come li scrive vial-gui; in alternativa i numeri, che vial-gui accetta;
    - da decidere: backup anche delle impostazioni QMK (`qmk_settings`, dipendono dalla versione del firmware).
 
-Idee rimandate: etichette per applicazione (idea 1), esportazione PNG/SVG della keymap (3), WPM (5).
+5. **Dopo v0.2.0** (scelti dall'utente il 2026-10-22, in quest'ordine):
+   1. **etichette per applicazione**: le `[[labels]]` con `app = "Code.exe"` valgono solo con quell'applicazione in primo piano;
+   2. **mini indicatore**: con l'HUD nascosto, un badge piccolo con lo stato "pericoloso" (layer bloccato, Caps Word, one-shot, modificatori bloccati);
+   3. **icona nella tray**: pausa, mostra/nascondi, cartella dei backup, avvio con il sistema, esci;
+   4. **statistiche più ricche**: bilanciamento tra le mani, carico per dito, uso di layer e combo, suggerimenti (sempre senza testo, sequenze o tempi).
+
+Idee rimandate: modalità allenamento, esportazione PNG/SVG della keymap, finestra "Storico" per confrontare backup qualsiasi, interfaccia in inglese, WPM. Sconsigliate: ripristino dei backup dall'HUD (scrive sulla tastiera), analisi dei mod-tap (servono i tempi).
 
 ## Decisioni prese (non rimetterle in discussione senza motivo)
 
