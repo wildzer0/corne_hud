@@ -155,6 +155,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 
 ## Registro delle sessioni
 
+- **2026-10-22**: release **v1.0.0** pubblicata (tag su `51e339d`, CI verde prima del tag) con tutti gli asset; `sha256sum -c SHA256SUMS.txt` sui file scaricati: tutti OK. Il push del tag ha avviato due esecuzioni del workflow (39820612961 e 39820619683), entrambe verdi, entrambe hanno pubblicato: causa non indagata.
+
 - **2026-10-22**: versione **1.0.0**, la prima release stabile. Motivo: l'utente usava ancora l'exe della 0.5.0 con una config nuova (`[keycast]`, `appearance.language`), che veniva rifiutata per `deny_unknown_fields`; da una build di `main` non si capiva quale versione fosse, perché diceva ancora 0.5.0.
 
 - **2026-10-22**: interfaccia in inglese. `i18n.rs` ora ha italiano e inglese affiancati per ogni messaggio (una traduzione mancante non compila), lingua corrente globale (`i18n::set_current`, `pick`, macro `tr_format!`) per i testi costruiti lontano dalla UI: legende, ricerca, CHANGELOG, CSV, errori. `[appearance] language` (`auto`/`it`/`en`) e voce di menu; `auto` legge `LC_ALL`/`LC_MESSAGES`/`LANG`, su Windows `GetUserDefaultUILanguage` (feature `Win32_Globalization`), su macOS `defaults read -g AppleLanguages` (non provato: macOS non compila da Linux). Il log resta in italiano, come i dettagli tecnici di `ProtocolError::Invalid`. Clippy pulito anche per `x86_64-pc-windows-msvc`. Screenshot in inglese di menu e ricerca.
