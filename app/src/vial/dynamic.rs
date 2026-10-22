@@ -5,6 +5,7 @@
 //! Every entry is 10 bytes, little-endian, laid out as the structs in
 //! vial-qmk's `quantum/vial.h`.
 
+use super::dump::MacroAction;
 use super::names::vial_code;
 use serde_json::Value;
 
@@ -186,6 +187,9 @@ pub struct Dynamic {
     pub combos: Vec<Combo>,
     /// Enabled key overrides only.
     pub key_overrides: Vec<KeyOverride>,
+    /// Dynamic macros, indexed by number (`M0`...). Read through VIA, not
+    /// with the other entries.
+    pub macros: Vec<Vec<MacroAction>>,
 }
 
 impl Dynamic {
@@ -195,6 +199,7 @@ impl Dynamic {
             tap_dances,
             combos: combos.into_iter().filter(Combo::is_active).collect(),
             key_overrides: key_overrides.into_iter().filter(KeyOverride::is_active).collect(),
+            macros: Vec::new(),
         }
     }
 
@@ -207,7 +212,7 @@ impl Dynamic {
         self.key_overrides.iter().find(|o| o.trigger == code && o.matches(mods, layer))
     }
 
-    /// Reads the `tap_dance`, `combo` and `key_override` sections of a `.vil`
+    /// Reads the `tap_dance`, `combo`, `key_override` and `macro` sections of a `.vil`
     /// (missing sections are empty). Unknown keycode names become `KC_NO`.
     pub fn from_vil(v: &Value) -> Self {
         let code = |v: &Value| -> u16 {
@@ -249,8 +254,29 @@ impl Dynamic {
                 options: int(e, "options") as u8,
             })
             .collect();
-        Dynamic::new(tap_dances, combos, key_overrides)
+        let macros = list("macro")
+            .iter()
+            .map(|m| {
+                m.as_array().map_or(&[][..], Vec::as_slice).iter().filter_map(|a| macro_action(a, &code)).collect()
+            })
+            .collect();
+        Dynamic { macros, ..Dynamic::new(tap_dances, combos, key_overrides) }
     }
+}
+
+/// One macro step as vial-gui saves it: `["text", "..."]`, `["tap", keys...]`,
+/// `["down", ...]`, `["up", ...]`, `["delay", ms]`.
+fn macro_action(v: &Value, code: &dyn Fn(&Value) -> u16) -> Option<MacroAction> {
+    let a = v.as_array()?;
+    let keys = || a[1..].iter().map(code).collect();
+    Some(match a.first()?.as_str()? {
+        "text" => MacroAction::Text(a.get(1)?.as_str()?.to_string()),
+        "tap" => MacroAction::Tap(keys()),
+        "down" => MacroAction::Down(keys()),
+        "up" => MacroAction::Up(keys()),
+        "delay" => MacroAction::Delay(a.get(1)?.as_u64()? as u32),
+        _ => return None,
+    })
 }
 
 #[cfg(test)]
@@ -317,11 +343,23 @@ mod tests {
         let v = serde_json::json!({
             "tap_dance": [["KC_A", "KC_LCTRL", "KC_ESCAPE", "KC_NO", 180]],
             "combo": [["KC_J", "KC_K", "KC_NO", "KC_NO", "KC_ESCAPE"], ["KC_J", "KC_NO", "KC_NO", "KC_NO", "KC_X"]],
+            "macro": [[["text", "hi"], ["tap", "KC_ENTER"]], [["down", "KC_LCTRL"], ["tap", 6], ["up", "KC_LCTRL"], ["delay", 30]], []],
         });
         let d = Dynamic::from_vil(&v);
         let td = d.tap_dance(0).unwrap();
         assert_eq!((td.on_tap, td.on_hold, td.on_double_tap, td.term_ms), (0x04, 0xE0, 0x29, 180));
         assert_eq!(d.tap_dance(1), None);
+        assert_eq!(d.macros.len(), 3);
+        assert_eq!(d.macros[0], vec![MacroAction::Text("hi".into()), MacroAction::Tap(vec![0x28])]);
+        assert_eq!(
+            d.macros[1],
+            vec![
+                MacroAction::Down(vec![0xE0]),
+                MacroAction::Tap(vec![0x06]),
+                MacroAction::Up(vec![0xE0]),
+                MacroAction::Delay(30)
+            ]
+        );
         // a combo needs two keys
         assert_eq!(d.combos, vec![Combo { keys: [0x0D, 0x0E, 0, 0], output: 0x29 }]);
     }

@@ -111,6 +111,8 @@ pub enum Msg {
     BadgePausedVial,
     BadgePausedForeign,
     BadgeError,
+    NumLock,
+    SplitLost,
 }
 
 pub fn tr(lang: Lang, msg: Msg) -> &'static str {
@@ -225,6 +227,8 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
             Msg::BadgePausedVial => "In pausa · Vial",
             Msg::BadgePausedForeign => "In pausa · altro programma",
             Msg::BadgeError => "Errore della tastiera",
+            Msg::NumLock => "Bloc Num",
+            Msg::SplitLost => "Altra metà scollegata",
         },
     }
 }

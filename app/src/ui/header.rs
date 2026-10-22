@@ -26,6 +26,8 @@ pub struct HeaderView<'a> {
     pub layer_name: &'a dyn Fn(u8) -> String,
     pub layer_color: &'a dyn Fn(u8) -> Option<Color32>,
     pub state: Option<&'a HudState>,
+    /// The other half of a split keyboard stopped answering.
+    pub split_lost: bool,
     pub compact: bool,
     /// Seconds, for the one-shot pulse.
     pub time: f64,
@@ -186,6 +188,9 @@ pub fn draw(painter: &Painter, rect: Rect, view: &HeaderView, palette: &Palette)
     chips.space();
 
     let lang = view.lang;
+    if view.split_lost {
+        chips.add(tr(lang, Msg::SplitLost), ChipStyle::Filled(palette.warning));
+    }
     if s.flag(flags::CAPS_WORD) {
         chips.add(tr(lang, Msg::CapsWord), ChipStyle::Filled(palette.caps_word));
     }
@@ -193,6 +198,10 @@ pub fn draw(painter: &Painter, rect: Rect, view: &HeaderView, palette: &Palette)
         chips.add(tr(lang, Msg::CapsLock), ChipStyle::Filled(palette.text));
     }
     let neutral = ChipStyle::Soft(mix(palette.chip_off, palette.text, 0.5));
+    // often always on: only in the full view
+    if s.flag(flags::NUM_LOCK) && !view.compact {
+        chips.add(tr(lang, Msg::NumLock), neutral);
+    }
     if s.flag(flags::COLEMAK) {
         chips.add(tr(lang, Msg::Colemak), ChipStyle::Soft(palette.colemak));
     } else if !view.compact {
@@ -220,6 +229,8 @@ pub struct IndicatorView<'a> {
     pub flash: Option<&'a str>,
     /// Heads-up leaves the modifiers held for a while to the indicator.
     pub held_mods: bool,
+    /// The other half of a split keyboard stopped answering.
+    pub split_lost: bool,
     pub time: f64,
 }
 
@@ -236,6 +247,7 @@ fn indicator_mod(level: ModLevel, held_mods: bool) -> bool {
 pub fn indicator_needed(view: &IndicatorView) -> bool {
     view.connection.is_some()
         || view.flash.is_some()
+        || view.split_lost
         || view.layers.iter().any(|(_, h)| *h != LayerHold::Held)
         || view.state.is_some_and(|s| {
             MODIFIERS.iter().any(|&m| indicator_mod(mod_level(s, m), view.held_mods))
@@ -248,6 +260,9 @@ fn indicator_chips(chips: &mut Chips, view: &IndicatorView, palette: &Palette) -
     let mut animating = false;
     if let Some(text) = view.connection {
         chips.add(text, ChipStyle::Soft(palette.text_dim));
+    }
+    if view.split_lost {
+        chips.add(tr(view.lang, Msg::SplitLost), ChipStyle::Filled(palette.warning));
     }
     for &(l, how) in view.layers.iter().filter(|(_, h)| *h != LayerHold::Held) {
         let c = (view.layer_color)(l).unwrap_or(palette.neutral_layer);
@@ -329,6 +344,7 @@ mod tests {
             connection: None,
             flash: None,
             held_mods,
+            split_lost: false,
             time: 0.0,
         };
         indicator_needed(&view)

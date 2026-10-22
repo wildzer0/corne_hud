@@ -183,7 +183,12 @@ impl Layout {
     }
 
     pub fn legend_context<'a>(&'a self, layer_names: &'a [String]) -> LegendContext<'a> {
-        LegendContext { layer_names, custom: &self.definition.custom, tap_dances: &self.dynamic.tap_dances }
+        LegendContext {
+            layer_names,
+            custom: &self.definition.custom,
+            tap_dances: &self.dynamic.tap_dances,
+            macros: &self.dynamic.macros,
+        }
     }
 }
 
@@ -384,6 +389,10 @@ pub struct HudApp {
     notice: Option<(String, Instant)>,
     /// Change shown for a moment in the mini indicator.
     flash: Option<(String, Instant)>,
+    /// The other half of the split keyboard answered in this session: from
+    /// then on a missing half is a warning (keyboards that are not split
+    /// never set the flag).
+    split_seen: bool,
     screenshot: Option<Screenshot>,
     started: Instant,
 
@@ -453,6 +462,7 @@ impl HudApp {
             hud_toggle: HudToggle::default(),
             notice: None,
             flash: None,
+            split_seen: false,
             screenshot: s.screenshot,
             started: Instant::now(),
             labels,
@@ -535,6 +545,11 @@ impl HudApp {
         }
     }
 
+    /// The other half of the split keyboard was there and is gone.
+    fn split_lost(&self) -> bool {
+        self.split_seen && self.state.is_some_and(|s| !s.flag(flags::SLAVE_OK))
+    }
+
     /// Short reason for the missing live state, for the mini indicator.
     fn connection_problem(&self) -> Option<&'static str> {
         let msg = match &self.status {
@@ -575,6 +590,7 @@ impl HudApp {
                         _ => {
                             self.live = None;
                             self.info = None;
+                            self.split_seen = false;
                             self.forget_state();
                         }
                     }
@@ -610,6 +626,11 @@ impl HudApp {
                     if let Some(old) = self.state {
                         self.flash_changes(&old, &s);
                     }
+                    let half = s.flag(flags::SLAVE_OK);
+                    if self.split_seen && self.state.is_some_and(|o| o.flag(flags::SLAVE_OK) != half) {
+                        log::warn!("{}", if half { "altra metà ricollegata" } else { tr(self.lang, Msg::SplitLost) });
+                    }
+                    self.split_seen |= half;
                     self.state = Some(s);
                 }
             }
@@ -1435,6 +1456,7 @@ impl eframe::App for HudApp {
                 layer_name: &names,
                 layer_color: &colors,
                 state: live_state.as_ref(),
+                split_lost: self.split_lost(),
                 compact,
                 time: self.started.elapsed().as_secs_f64(),
             },
@@ -1581,6 +1603,7 @@ impl eframe::App for HudApp {
                 held_mods: self.headsup_on
                     && self.config.headsup.modifiers == ShownIn::Indicator
                     && self.headsup.mods_held_long(),
+                split_lost: self.split_lost(),
                 time: self.started.elapsed().as_secs_f64(),
             };
             let shown = (!self.visible || faded) && header::indicator_needed(&view);

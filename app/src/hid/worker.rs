@@ -373,7 +373,7 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
         Err(e) => return SessionEnd::Lost(Status::Error(e.to_string())),
     };
     // read at every connection: Vial changes them while the HUD is paused
-    let dynamic = match conn.device.dynamic() {
+    let mut dynamic = match conn.device.dynamic() {
         Ok(d) => d,
         Err(DeviceError::Protocol(ProtocolError::Unsupported)) => Dynamic::default(),
         Err(e) => {
@@ -381,11 +381,16 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
             Dynamic::default()
         }
     };
+    dynamic.macros = conn.device.macros().unwrap_or_else(|e| {
+        log::warn!("macro non lette: {e}");
+        Vec::new()
+    });
     log::info!(
-        "Vial: {} tap dance, {} combo, {} key override",
+        "Vial: {} tap dance, {} combo, {} key override, {} macro",
         dynamic.tap_dances.iter().filter(|t| !t.is_empty()).count(),
         dynamic.combos.len(),
-        dynamic.key_overrides.len()
+        dynamic.key_overrides.len(),
+        dynamic.macros.iter().filter(|m| !m.is_empty()).count()
     );
     let status = match conn.info {
         Some(_) => Status::Connected { product: conn.product.clone() },

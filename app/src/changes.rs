@@ -201,8 +201,10 @@ pub fn summary(cur: &Value) -> String {
 /// Changes from `prev` to `cur`, one line each, in a stable order.
 pub fn describe(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
     let (td_prev, td_cur) = (tap_dances(prev), tap_dances(cur));
-    let ctx_prev = LegendContext { layer_names: names.layer_names, custom: names.custom, tap_dances: &td_prev };
-    let ctx_cur = LegendContext { layer_names: names.layer_names, custom: names.custom, tap_dances: &td_cur };
+    let ctx_prev =
+        LegendContext { layer_names: names.layer_names, custom: names.custom, tap_dances: &td_prev, macros: &[] };
+    let ctx_cur =
+        LegendContext { layer_names: names.layer_names, custom: names.custom, tap_dances: &td_cur, macros: &[] };
     let mut out = Vec::new();
 
     // keymap

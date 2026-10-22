@@ -49,6 +49,8 @@ pub struct Palette {
     pub chip_off: Color32,
     pub caps_word: Color32,
     pub colemak: Color32,
+    /// Something is wrong (half of the keyboard disconnected).
+    pub warning: Color32,
     /// Light theme: layer colors used as text are darkened to stay readable.
     darken_text: f32,
 }
@@ -70,6 +72,7 @@ impl Palette {
             chip_off: Color32::from_rgb(70, 72, 82),
             caps_word: Color32::from_rgb(70, 110, 255),
             colemak: Color32::from_rgb(170, 90, 255),
+            warning: Color32::from_rgb(235, 70, 60),
             darken_text: 0.0,
         }
     }
@@ -90,6 +93,7 @@ impl Palette {
             chip_off: Color32::from_rgb(190, 194, 204),
             caps_word: Color32::from_rgb(40, 80, 230),
             colemak: Color32::from_rgb(140, 60, 230),
+            warning: Color32::from_rgb(200, 40, 35),
             darken_text: 0.4,
         }
     }

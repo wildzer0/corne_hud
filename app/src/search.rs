@@ -316,7 +316,7 @@ mod tests {
     }
 
     fn first(f: &Fixture, q: &str) -> Hit {
-        let ctx = LegendContext { layer_names: &f.names, custom: &f.def.custom, tap_dances: &[] };
+        let ctx = LegendContext { layer_names: &f.names, custom: &f.def.custom, tap_dances: &[], macros: &[] };
         search(q, &f.keymap, &f.positions, &ctx, &f.labels, &f.dynamic)
             .into_iter()
             .next()
@@ -359,7 +359,12 @@ mod tests {
     fn finds_combos_key_overrides_and_tap_dances() {
         let mut f = fixture();
         let all = |f: &Fixture, q: &str| {
-            let ctx = LegendContext { layer_names: &f.names, custom: &f.def.custom, tap_dances: &f.dynamic.tap_dances };
+            let ctx = LegendContext {
+                layer_names: &f.names,
+                custom: &f.def.custom,
+                tap_dances: &f.dynamic.tap_dances,
+                macros: &f.dynamic.macros,
+            };
             search(q, &f.keymap, &f.positions, &ctx, &f.labels, &f.dynamic)
         };
         // combo J + K = Esc (mock): both keys marked
@@ -380,7 +385,7 @@ mod tests {
     #[test]
     fn empty_and_unknown_queries() {
         let f = fixture();
-        let ctx = LegendContext { layer_names: &f.names, custom: &f.def.custom, tap_dances: &[] };
+        let ctx = LegendContext { layer_names: &f.names, custom: &f.def.custom, tap_dances: &[], macros: &[] };
         assert!(search("   ", &f.keymap, &f.positions, &ctx, &f.labels, &f.dynamic).is_empty());
         assert!(search("zzzqqq", &f.keymap, &f.positions, &ctx, &f.labels, &f.dynamic).is_empty());
     }

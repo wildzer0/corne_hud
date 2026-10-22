@@ -131,7 +131,8 @@ const MOCK_MACROS: &[u8] = &[b'h', b'i', 1, 1, 0x28, 0, 0, 0, 0, 0, 0, 0];
 const MOCK_SETTINGS: &[(u16, u16)] = &[(2, 50), (7, 200)];
 
 /// What the simulated keyboard has configured in Vial: the `.vil` entries
-/// plus a few combos on the base layer, to show them off.
+/// plus a few combos on the base layer, to show them off. Macros are not
+/// dynamic entries: they come through VIA (`MOCK_MACROS`).
 pub fn mock_dynamic() -> Dynamic {
     let vil = serde_json::from_str(MOCK_VIL).map(|v| Dynamic::from_vil(&v)).unwrap_or_default();
     let combo = |keys: [u16; 2], output| Combo { keys: [keys[0], keys[1], 0, 0], output };
@@ -140,7 +141,7 @@ pub fn mock_dynamic() -> Dynamic {
         combo([0x1B, 0x06], 0x0106), // X + C = Ctrl+C
         combo([0x07, 0x09], 0x2B),   // D + F = Tab
     ];
-    Dynamic { combos, ..vil }
+    Dynamic { combos, macros: Vec::new(), ..vil }
 }
 
 impl MockKeyboard {
@@ -402,7 +403,7 @@ mod tests {
         // a .vil the HUD itself reads back
         let vil = Vil::parse(&dump.to_vil().to_string(), 8, 7).unwrap();
         assert_eq!(vil.keymap, dump.keymap);
-        assert_eq!(vil.dynamic, mock_dynamic());
+        assert_eq!(vil.dynamic, Dynamic { macros: dump.macros.clone(), ..mock_dynamic() });
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! Human-friendly legends for keycodes (what is drawn on each key).
 
 use super::definition::CustomKeycode;
+use super::dump::MacroAction;
 use super::dynamic::TapDance;
 use super::keycode::{decode, qmk_name, Keycode, LayerOp, Mods5};
 use super::names;
@@ -52,6 +53,8 @@ pub struct LegendContext<'a> {
     pub custom: &'a [CustomKeycode],
     /// Indexed by tap dance number.
     pub tap_dances: &'a [TapDance],
+    /// Indexed by macro number.
+    pub macros: &'a [Vec<MacroAction>],
 }
 
 impl LegendContext<'_> {
@@ -223,6 +226,73 @@ fn tap_dance_legend(n: u8, ctx: &LegendContext) -> Legend {
     Legend { tap, hold, tooltip: lines.join("\n"), kind: LegendKind::Normal }
 }
 
+/// Longest macro text on the key itself.
+const MACRO_KEY_CHARS: usize = 6;
+
+/// Macro: what it types or presses, shortened on the key ("hi⏎", "Ctrl+C"),
+/// every step in the tooltip.
+fn macro_legend(n: u8, ctx: &LegendContext) -> Legend {
+    let empty = Legend {
+        tap: Text::plain(format!("M{n}")),
+        hold: None,
+        tooltip: format!("Macro {n}"),
+        kind: LegendKind::Normal,
+    };
+    let Some(steps) = ctx.macros.get(n as usize).filter(|m| !m.is_empty()) else { return empty };
+    // nested macros would recurse: show them by number
+    let key = |code: u16| match decode(code) {
+        Keycode::Macro(m) => Text::plain(format!("M{m}")),
+        _ => legend(code, ctx).tap,
+    };
+    let (mut symbol, mut text) = (String::new(), String::new());
+    let mut lines = vec![format!("Macro {n}")];
+    for step in steps {
+        let names = |codes: &[u16], sep: &str| codes.iter().map(|&c| key(c).text).collect::<Vec<_>>().join(sep);
+        match step {
+            MacroAction::Text(t) => {
+                symbol.push_str(t);
+                text.push_str(t);
+                lines.push(format!("scrive «{t}»"));
+            }
+            MacroAction::Tap(codes) => {
+                for &c in codes {
+                    let k = key(c);
+                    symbol.push_str(&k.symbol);
+                    text.push_str(&k.text);
+                }
+                lines.push(format!("tocca {}", names(codes, " ")));
+            }
+            MacroAction::Down(codes) => {
+                for &c in codes {
+                    let k = key(c);
+                    symbol.push_str(&format!("{}+", k.symbol));
+                    text.push_str(&format!("{}+", k.text));
+                }
+                lines.push(format!("preme {}", names(codes, " ")));
+            }
+            MacroAction::Up(codes) => lines.push(format!("rilascia {}", names(codes, " "))),
+            MacroAction::Delay(ms) => lines.push(format!("attende {ms} ms")),
+        }
+    }
+    let short = |s: &str| {
+        let s = s.trim_end_matches('+');
+        if s.chars().count() > MACRO_KEY_CHARS {
+            format!("{}…", s.chars().take(MACRO_KEY_CHARS - 1).collect::<String>())
+        } else {
+            s.to_string()
+        }
+    };
+    if text.is_empty() {
+        return Legend { tooltip: lines.join("\n"), ..empty };
+    }
+    Legend {
+        tap: Text { symbol: short(&symbol), text: short(&text) },
+        hold: Some(Text::plain(format!("M{n}"))),
+        tooltip: lines.join("\n"),
+        kind: LegendKind::Normal,
+    }
+}
+
 /// Builds the legend for `code`.
 pub fn legend(code: u16, ctx: &LegendContext) -> Legend {
     let normal = |tap: Text, tooltip: String| Legend { tap, hold: None, tooltip, kind: LegendKind::Normal };
@@ -278,7 +348,7 @@ pub fn legend(code: u16, ctx: &LegendContext) -> Legend {
         }
         Keycode::OneShotMod(m) => normal(Text::plain(format!("1×{}", m.display())), qmk_name(code)),
         Keycode::TapDance(n) => tap_dance_legend(n, ctx),
-        Keycode::Macro(n) => normal(Text::plain(format!("M{n}")), format!("Macro {n}")),
+        Keycode::Macro(n) => macro_legend(n, ctx),
         Keycode::Custom(n) => match ctx.custom.get(n as usize) {
             Some(c) => Legend {
                 tap: Text::plain(c.short_name.clone()),
@@ -302,7 +372,7 @@ mod tests {
     use super::*;
 
     fn ctx_with<'a>(names: &'a [String], custom: &'a [CustomKeycode]) -> LegendContext<'a> {
-        LegendContext { layer_names: names, custom, tap_dances: &[] }
+        LegendContext { layer_names: names, custom, tap_dances: &[], macros: &[] }
     }
 
     fn names() -> Vec<String> {
@@ -359,12 +429,35 @@ mod tests {
     fn tap_dance_shows_its_actions() {
         let n = names();
         let tds = [TapDance { on_tap: 0x04, on_hold: 0xE0, on_double_tap: 0x29, on_tap_hold: 0, term_ms: 0 }];
-        let ctx = LegendContext { layer_names: &n, custom: &[], tap_dances: &tds };
+        let ctx = LegendContext { layer_names: &n, custom: &[], tap_dances: &tds, macros: &[] };
         let l = legend(0x5700, &ctx);
         assert_eq!((l.tap.text.as_str(), l.hold.map(|h| h.text)), ("A", Some("Ctrl".into())));
         assert_eq!(l.tooltip, "Tap dance 0\ntocca: A\ntieni: Ctrl\ndoppio tocco: Esc");
         // unknown or empty: by number
         assert_eq!(legend(0x5701, &ctx).tap.text, "TD1");
+    }
+
+    #[test]
+    fn macros_show_what_they_do() {
+        let n = names();
+        let macros = [
+            vec![MacroAction::Text("hi".into()), MacroAction::Tap(vec![0x28])],
+            vec![MacroAction::Down(vec![0xE0]), MacroAction::Tap(vec![0x06]), MacroAction::Up(vec![0xE0])],
+            vec![MacroAction::Text("buongiorno".into()), MacroAction::Delay(50)],
+            vec![],
+        ];
+        let ctx = LegendContext { layer_names: &n, custom: &[], tap_dances: &[], macros: &macros };
+        let m = |i: u16| legend(0x7700 + i, &ctx);
+        assert_eq!((m(0).tap.symbol.as_str(), m(0).hold.map(|h| h.text)), ("hi⏎", Some("M0".into())));
+        assert_eq!(m(0).tap.text, "hiEnt…");
+        assert_eq!(m(0).tooltip, "Macro 0\nscrive «hi»\ntocca Enter");
+        assert_eq!(m(1).tap.text, "Ctrl+C");
+        assert_eq!(m(1).tooltip, "Macro 1\npreme Ctrl\ntocca C\nrilascia Ctrl");
+        assert_eq!(m(2).tap.text, "buong…");
+        assert!(m(2).tooltip.ends_with("attende 50 ms"));
+        // empty or unknown: by number
+        assert_eq!((m(3).tap.text.as_str(), m(3).hold), ("M3", None));
+        assert_eq!(m(9).tap.text, "M9");
     }
 
     #[test]
