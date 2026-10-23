@@ -1,0 +1,34 @@
+# One: One Dark e One Light, i temi di Atom.
+key_opacity = 1.0
+key_radius = 0.15
+border_width = 1.0
+legend_scale = 1.0
+window_radius = 12.0
+
+[dark]
+background = "#282C34"
+key = "#3E4451"
+key_empty = "#21252B"
+key_border = "#4B5263"
+pressed = "#61AFEF"
+pressed_text = "#282C34"
+text = "#ABB2BF"
+text_dim = "#7F848E"
+accent = "#E5C07B"
+caps_word = "#56B6C2"
+colemak = "#C678DD"
+warning = "#E06C75"
+
+[light]
+background = "#FAFAFA"
+key = "#FFFFFF"
+key_empty = "#EAEAEB"
+key_border = "#D4D4D4"
+pressed = "#4078F2"
+pressed_text = "#FFFFFF"
+text = "#383A42"
+text_dim = "#696C77"
+accent = "#C18401"
+caps_word = "#0184BC"
+colemak = "#A626A4"
+warning = "#E45649"

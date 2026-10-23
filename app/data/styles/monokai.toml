@@ -1,0 +1,34 @@
+# Monokai: il tema classico di Sublime Text; chiaro ispirato a Monokai Pro Light.
+key_opacity = 1.0
+key_radius = 0.15
+border_width = 1.0
+legend_scale = 1.0
+window_radius = 12.0
+
+[dark]
+background = "#272822"
+key = "#3E3D32"
+key_empty = "#1E1F1C"
+key_border = "#49483E"
+pressed = "#A6E22E"
+pressed_text = "#272822"
+text = "#F8F8F2"
+text_dim = "#90908A"
+accent = "#F92672"
+caps_word = "#66D9EF"
+colemak = "#AE81FF"
+warning = "#FD971F"
+
+[light]
+background = "#FAF4F2"
+key = "#FFFFFF"
+key_empty = "#EDE7E5"
+key_border = "#D3CDCC"
+pressed = "#E14775"
+pressed_text = "#FFFFFF"
+text = "#29242A"
+text_dim = "#706B6E"
+accent = "#E14775"
+caps_word = "#1C8CA8"
+colemak = "#7058BE"
+warning = "#E16032"

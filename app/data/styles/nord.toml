@@ -1,0 +1,34 @@
+# Nord: blu e grigi freddi, poco contrasto.
+key_opacity = 1.0
+key_radius = 0.15
+border_width = 1.0
+legend_scale = 1.0
+window_radius = 12.0
+
+[dark]
+background = "#2E3440"
+key = "#3B4252"
+key_empty = "#272C36"
+key_border = "#4C566A"
+pressed = "#88C0D0"
+pressed_text = "#2E3440"
+text = "#ECEFF4"
+text_dim = "#8F9BB3"
+accent = "#81A1C1"
+caps_word = "#8FBCBB"
+colemak = "#B48EAD"
+warning = "#D08770"
+
+[light]
+background = "#ECEFF4"
+key = "#FFFFFF"
+key_empty = "#E5E9F0"
+key_border = "#D8DEE9"
+pressed = "#5E81AC"
+pressed_text = "#FFFFFF"
+text = "#2E3440"
+text_dim = "#4C566A"
+accent = "#5E81AC"
+caps_word = "#3B7E8A"
+colemak = "#8F6A87"
+warning = "#BF616A"

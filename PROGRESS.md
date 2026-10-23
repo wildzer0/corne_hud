@@ -169,6 +169,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 
 ## Registro delle sessioni
 
+- **2026-10-23**: l'utente non trovava *Cambia questo tasto…* (compariva solo con il clic destro sopra un tasto): ora la voce è sempre nel menu, disattivata con la spiegazione se sotto il clic non c'è un tasto. Otto stili nuovi chiesti dall'utente, scuri e chiari: monokai, dracula, nord, solarized, gruvbox, catppuccin, one, tokyo-night (screenshot di dracula e monokai col mock). L'utente aveva acceso il Caps Lock senza volerlo: nella sua keymap `KC_CAPSLOCK` è sul layer SYS (Fn1 + Fn2), riga 1 colonna 1, e i due Shift insieme accendono Caps Word (`BOTH_SHIFTS_TURNS_ON_CAPS_WORD`).
+
 - **2026-10-23**: release **v1.2.0** (ombra tolta, editor della keymap, storico dei backup, esportazione, allenamento). Tag pubblicato su richiesta dell'utente senza attendere la CI del commit: da controllare sul sito che la CI del tag sia verde e la release abbia tutti gli asset.
 
 - **2026-10-23**: funzione 4 del piano 6, **allenamento**; il piano 6 è completo. 156 test. Verificato col mock in X11 con `--training`: domanda, tempo, errori (il copione del mock preme altri tasti), suggerimento "Fn1 + M" dopo 6 s e il tasto "1" marcato sul layer SYM dell'HUD (fotogramma catturato con `XGetImage`). Non provato: un giro risposto davvero, che richiede la tastiera.

@@ -14,11 +14,19 @@ use std::time::{Duration, Instant, SystemTime};
 
 pub const DEFAULT_STYLE: &str = "predefinito";
 
-const BUILT_IN: [(&str, &str); 4] = [
+const BUILT_IN: [(&str, &str); 12] = [
     ("predefinito", include_str!("../data/styles/predefinito.toml")),
     ("minimal", include_str!("../data/styles/minimal.toml")),
     ("vetro", include_str!("../data/styles/vetro.toml")),
     ("alto-contrasto", include_str!("../data/styles/alto-contrasto.toml")),
+    ("monokai", include_str!("../data/styles/monokai.toml")),
+    ("dracula", include_str!("../data/styles/dracula.toml")),
+    ("nord", include_str!("../data/styles/nord.toml")),
+    ("solarized", include_str!("../data/styles/solarized.toml")),
+    ("gruvbox", include_str!("../data/styles/gruvbox.toml")),
+    ("catppuccin", include_str!("../data/styles/catppuccin.toml")),
+    ("one", include_str!("../data/styles/one.toml")),
+    ("tokyo-night", include_str!("../data/styles/tokyo-night.toml")),
 ];
 
 /// Palette colors a style can set.

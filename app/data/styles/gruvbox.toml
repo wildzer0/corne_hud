@@ -1,0 +1,34 @@
+# Gruvbox: toni caldi, retrò.
+key_opacity = 1.0
+key_radius = 0.15
+border_width = 1.0
+legend_scale = 1.0
+window_radius = 12.0
+
+[dark]
+background = "#282828"
+key = "#3C3836"
+key_empty = "#1D2021"
+key_border = "#504945"
+pressed = "#FABD2F"
+pressed_text = "#282828"
+text = "#EBDBB2"
+text_dim = "#A89984"
+accent = "#FE8019"
+caps_word = "#83A598"
+colemak = "#D3869B"
+warning = "#FB4934"
+
+[light]
+background = "#FBF1C7"
+key = "#F2E5BC"
+key_empty = "#EBDBB2"
+key_border = "#BDAE93"
+pressed = "#B57614"
+pressed_text = "#FBF1C7"
+text = "#3C3836"
+text_dim = "#7C6F64"
+accent = "#AF3A03"
+caps_word = "#076678"
+colemak = "#8F3F71"
+warning = "#9D0006"

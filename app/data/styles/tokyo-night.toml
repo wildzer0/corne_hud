@@ -1,0 +1,34 @@
+# Tokyo Night: blu notte e neon; chiaro come Tokyo Night Day.
+key_opacity = 1.0
+key_radius = 0.15
+border_width = 1.0
+legend_scale = 1.0
+window_radius = 12.0
+
+[dark]
+background = "#1A1B26"
+key = "#24283B"
+key_empty = "#16161E"
+key_border = "#414868"
+pressed = "#7AA2F7"
+pressed_text = "#1A1B26"
+text = "#C0CAF5"
+text_dim = "#8089B3"
+accent = "#FF9E64"
+caps_word = "#7DCFFF"
+colemak = "#BB9AF7"
+warning = "#F7768E"
+
+[light]
+background = "#E1E2E7"
+key = "#F2F2F5"
+key_empty = "#D5D6DB"
+key_border = "#C4C8DA"
+pressed = "#2E7DE9"
+pressed_text = "#FFFFFF"
+text = "#3760BF"
+text_dim = "#6172B0"
+accent = "#B15C00"
+caps_word = "#007197"
+colemak = "#9854F1"
+warning = "#F52A65"

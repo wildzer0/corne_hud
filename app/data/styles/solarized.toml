@@ -1,0 +1,34 @@
+# Solarized: la palette di Ethan Schoonover, scura e chiara.
+key_opacity = 1.0
+key_radius = 0.15
+border_width = 1.0
+legend_scale = 1.0
+window_radius = 12.0
+
+[dark]
+background = "#002B36"
+key = "#073642"
+key_empty = "#00212B"
+key_border = "#586E75"
+pressed = "#268BD2"
+pressed_text = "#FDF6E3"
+text = "#EEE8D5"
+text_dim = "#839496"
+accent = "#B58900"
+caps_word = "#2AA198"
+colemak = "#6C71C4"
+warning = "#CB4B16"
+
+[light]
+background = "#FDF6E3"
+key = "#EEE8D5"
+key_empty = "#F5EFDC"
+key_border = "#93A1A1"
+pressed = "#268BD2"
+pressed_text = "#FDF6E3"
+text = "#073642"
+text_dim = "#657B83"
+accent = "#B58900"
+caps_word = "#2AA198"
+colemak = "#6C71C4"
+warning = "#CB4B16"

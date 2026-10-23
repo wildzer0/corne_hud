@@ -1,0 +1,34 @@
+# Catppuccin: Mocha di sera, Latte di giorno.
+key_opacity = 1.0
+key_radius = 0.15
+border_width = 1.0
+legend_scale = 1.0
+window_radius = 12.0
+
+[dark]
+background = "#1E1E2E"
+key = "#313244"
+key_empty = "#181825"
+key_border = "#45475A"
+pressed = "#CBA6F7"
+pressed_text = "#1E1E2E"
+text = "#CDD6F4"
+text_dim = "#A6ADC8"
+accent = "#F5C2E7"
+caps_word = "#89DCEB"
+colemak = "#B4BEFE"
+warning = "#F38BA8"
+
+[light]
+background = "#EFF1F5"
+key = "#E6E9EF"
+key_empty = "#DCE0E8"
+key_border = "#BCC0CC"
+pressed = "#8839EF"
+pressed_text = "#EFF1F5"
+text = "#4C4F69"
+text_dim = "#6C6F85"
+accent = "#EA76CB"
+caps_word = "#04A5E5"
+colemak = "#7287FD"
+warning = "#D20F39"

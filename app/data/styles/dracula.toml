@@ -1,0 +1,34 @@
+# Dracula: viola e rosa su grigio scuro; chiaro come Alucard.
+key_opacity = 1.0
+key_radius = 0.15
+border_width = 1.0
+legend_scale = 1.0
+window_radius = 12.0
+
+[dark]
+background = "#282A36"
+key = "#44475A"
+key_empty = "#21222C"
+key_border = "#6272A4"
+pressed = "#BD93F9"
+pressed_text = "#282A36"
+text = "#F8F8F2"
+text_dim = "#9AA3C4"
+accent = "#FF79C6"
+caps_word = "#8BE9FD"
+colemak = "#BD93F9"
+warning = "#FFB86C"
+
+[light]
+background = "#FFFBEB"
+key = "#FFFFFF"
+key_empty = "#EFEDDC"
+key_border = "#CFCFDE"
+pressed = "#644AC9"
+pressed_text = "#FFFFFF"
+text = "#1F1F1F"
+text_dim = "#6C664B"
+accent = "#A3144D"
+caps_word = "#036A96"
+colemak = "#644AC9"
+warning = "#A34D14"

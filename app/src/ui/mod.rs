@@ -1943,15 +1943,21 @@ impl HudApp {
         });
         ui.separator();
         let can_write = self.can_write_keys();
-        if let Some(key) = self.menu_key.filter(|_| self.live.is_some()) {
-            let r = ui
-                .add_enabled(can_write, egui::Button::new(tr(lang, Msg::MenuEditKey)))
-                .on_hover_text(tr(lang, Msg::MenuEditKeyHint))
-                .on_disabled_hover_text(tr(lang, Msg::EditKeyUnavailable));
-            if r.clicked() {
+        // always there, so it can be found: without a key under the click it says how
+        let key = self.menu_key.filter(|_| self.live.is_some());
+        let why_not = if !can_write { tr(lang, Msg::EditKeyUnavailable) } else { tr(lang, Msg::EditKeyRightClick) };
+        let r = ui
+            .add_enabled(can_write && key.is_some(), egui::Button::new(tr(lang, Msg::MenuEditKey)))
+            .on_hover_text(tr(lang, Msg::MenuEditKeyHint))
+            .on_disabled_hover_text(why_not);
+        if r.clicked() {
+            if let Some(key) = key {
                 self.open_key_editor(key);
                 self.close_menu();
             }
+        }
+        if key.is_none() {
+            ui.label(egui::RichText::new(why_not).small().weak());
         }
         if let Some((done, previous)) = self.last_write {
             let what = self.change_text(done.code, previous);
@@ -1961,9 +1967,7 @@ impl HudApp {
                 self.close_menu();
             }
         }
-        if self.menu_key.is_some() || self.last_write.is_some() {
-            ui.separator();
-        }
+        ui.separator();
         ui.horizontal(|ui| {
             ui.label(tr(lang, Msg::MenuOpacity));
             let mut pct = (self.opacity * 100.0).round();
