@@ -9,6 +9,7 @@ pub mod history;
 pub mod key_editor;
 pub mod keyboard;
 pub mod keycast;
+pub mod marker;
 pub mod report;
 pub mod search_panel;
 pub mod settings;
@@ -16,6 +17,7 @@ pub mod theme;
 pub mod training;
 
 use crate::autostart;
+use crate::backdrop::ScreenRect;
 use crate::backup;
 use crate::changes;
 use crate::config::{
@@ -143,6 +145,12 @@ fn cursor_on_screen() -> Option<egui::Pos2> {
 fn cursor_on_screen() -> Option<egui::Pos2> {
     None
 }
+
+/// The heads-up marker fades in this fast once the HUD is gone.
+const MARKER_FADE: Duration = Duration::from_millis(250);
+const MARKER_OPACITY: f32 = 0.85;
+/// Fn1 and Fn2 in the marker when their layers have no colour (the icon's).
+const MARKER_FN: [Color32; 2] = [Color32::from_rgb(0x00, 0xB9, 0xD7), Color32::from_rgb(0x3C, 0xC8, 0x5A)];
 
 /// Statistics are counted from polled states: below this rate quick taps get lost.
 const MIN_STATS_HZ: u32 = 30;
@@ -418,6 +426,7 @@ struct Prefs {
     key_opacity: Option<f32>,
     key_radius: Option<f32>,
     headsup: bool,
+    marker: bool,
     combos: bool,
     keycast: bool,
 }
@@ -436,6 +445,7 @@ impl Prefs {
             key_opacity: a.key_opacity,
             key_radius: a.key_radius,
             headsup: c.headsup.enabled,
+            marker: c.headsup.marker,
             combos: a.combos,
             keycast: c.keycast.enabled,
         }
@@ -462,6 +472,7 @@ impl Prefs {
         put(self.key_radius != old.key_radius, "appearance.key_radius", self.key_radius.and_then(|v| value(&v)));
         put(self.combos != old.combos, "appearance.combos", value(&self.combos));
         put(self.headsup != old.headsup, "headsup.enabled", value(&self.headsup));
+        put(self.marker != old.marker, "headsup.marker", value(&self.marker));
         put(self.keycast != old.keycast, "keycast.enabled", value(&self.keycast));
         out
     }
@@ -525,6 +536,12 @@ pub struct HudApp {
     labels: Labels,
     headsup: HeadsUp,
     headsup_on: bool,
+    /// Heads-up marker shown while the HUD is faded out.
+    marker_on: bool,
+    /// Since when the marker is shown (it fades in).
+    marker_since: Option<Instant>,
+    /// Light or dark background behind the marker.
+    backdrop: crate::backdrop::Backdrop,
     /// Combos drawn over the keys.
     show_combos: bool,
     keycast_on: bool,
@@ -582,6 +599,7 @@ impl HudApp {
         let (labels, label_errors) = Labels::from_config(&s.config.labels);
         let stats = s.config.stats.enabled.then(|| Stats::load(stats_path(&s.config.stats)));
         let headsup_on = s.window.headsup.unwrap_or(s.config.headsup.enabled);
+        let marker_on = s.config.headsup.marker;
         let show_combos = s.window.combos.unwrap_or(a.combos);
         let keycast_on = s.window.keycast.unwrap_or(s.config.keycast.enabled);
         let language = s.window.language.unwrap_or(s.config.appearance.language);
@@ -643,6 +661,9 @@ impl HudApp {
             labels,
             headsup: HeadsUp::default(),
             headsup_on,
+            marker_on,
+            marker_since: None,
+            backdrop: crate::backdrop::Backdrop::new(),
             show_combos,
             keycast_on,
             keycast: keycast::Keycast::default(),
@@ -1081,6 +1102,9 @@ impl HudApp {
         if config.headsup.enabled != self.config.headsup.enabled {
             self.headsup_on = config.headsup.enabled;
         }
+        if config.headsup.marker != self.config.headsup.marker {
+            self.marker_on = config.headsup.marker;
+        }
         if config.appearance.combos != self.config.appearance.combos {
             self.show_combos = config.appearance.combos;
         }
@@ -1150,6 +1174,7 @@ impl HudApp {
             key_opacity: self.key_opacity,
             key_radius: self.key_radius,
             headsup: self.headsup_on,
+            marker: self.marker_on,
             combos: self.show_combos,
             keycast: self.keycast_on,
         }
@@ -2041,6 +2066,14 @@ impl HudApp {
             self.pinned = false;
             self.mark_dirty();
         }
+        ui.indent("marker", |ui| {
+            let r = ui
+                .add_enabled(self.headsup_on, egui::Checkbox::new(&mut self.marker_on, tr(lang, Msg::MenuMarker)))
+                .on_hover_text(tr(lang, Msg::MarkerHint));
+            if r.changed() {
+                self.mark_dirty();
+            }
+        });
         let available = self.click_through_available();
         let mut ct = self.click_through;
         let hint = tr(lang, if available { Msg::ClickThroughHint } else { Msg::ClickThroughUnavailable });
@@ -2594,6 +2627,36 @@ impl eframe::App for HudApp {
             FontId::proportional(if compact { 10.5 } else { 12.0 }),
             color,
         );
+
+        // heads-up marker: where the HUD shows up, while it is faded out
+        if faded && self.headsup_on && self.marker_on && live_state.is_some() {
+            if self.marker_since.is_none() {
+                self.marker_since = Some(now);
+                self.backdrop.reset();
+            }
+            let since = self.marker_since.unwrap_or(now);
+            let at = marker::rect(full);
+            let light_background = ctx.input(|i| i.viewport().inner_rect).and_then(|inner| {
+                let ppp = ctx.pixels_per_point();
+                let on_screen = |r: Rect| {
+                    let (min, max) = ((inner.min + r.min.to_vec2()) * ppp, (inner.min + r.max.to_vec2()) * ppp);
+                    let (x, y) = (min.x.round() as i32, min.y.round() as i32);
+                    ScreenRect { x, y, w: max.x.round() as i32 - x, h: max.y.round() as i32 - y }
+                };
+                // around the keys, not the keys themselves
+                self.backdrop.light(on_screen(at.expand(8.0)), on_screen(at.expand(2.0)), now)
+            });
+            let appear = (now.duration_since(since).as_secs_f32() / MARKER_FADE.as_secs_f32()).min(1.0);
+            let mut p = ui.painter_at(full);
+            p.set_opacity(MARKER_OPACITY * appear);
+            let fn_keys = [colors(1).unwrap_or(MARKER_FN[0]), colors(2).unwrap_or(MARKER_FN[1])];
+            marker::draw(&p, at, &marker::Colors { light_background, fn_keys });
+            if appear < 1.0 {
+                ctx.request_repaint();
+            }
+        } else {
+            self.marker_since = None;
+        }
 
         if let Some(n) = browse_layers {
             if !self.search.open {

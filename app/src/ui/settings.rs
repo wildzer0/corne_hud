@@ -135,6 +135,7 @@ pub static GROUPS: &[Group] = &[
                 Msg::SetHiddenOpacityHint,
                 Kind::Percent(config::HIDDEN_OPACITY),
             ),
+            s("headsup.marker", Msg::SetMarker, Msg::SetMarkerHint, Kind::Toggle),
             s("headsup.locked_layer", Msg::SetLockedLayer, Msg::SetLockedLayerHint, Kind::Choice(SHOWN_IN)),
             s("headsup.oneshot", Msg::SetOneshot, Msg::SetOneshotHint, Kind::Choice(SHOWN_IN)),
             s("headsup.modifiers", Msg::SetModifiers, Msg::SetModifiersHint, Kind::Choice(SHOWN_IN)),

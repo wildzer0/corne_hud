@@ -176,6 +176,8 @@ pub struct HeadsUp {
     pub oneshot: ShownIn,
     /// What a modifier held past `modifier_delay_ms` brings up.
     pub modifiers: ShownIn,
+    /// A small keyboard where the HUD shows up, while it is faded out.
+    pub marker: bool,
 }
 
 impl Default for HeadsUp {
@@ -188,6 +190,7 @@ impl Default for HeadsUp {
             locked_layer: ShownIn::Hud,
             oneshot: ShownIn::Hud,
             modifiers: ShownIn::Hud,
+            marker: true,
         }
     }
 }

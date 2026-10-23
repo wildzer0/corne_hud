@@ -3,6 +3,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod autostart;
+mod backdrop;
 mod backup;
 mod changes;
 mod cli;

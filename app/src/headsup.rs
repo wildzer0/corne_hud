@@ -71,7 +71,8 @@ impl HeadsUp {
     /// Advances the fade. `force` keeps the HUD fully shown (no live state,
     /// search or menu open, HUD pinned). Returns the visibility level 0..1.
     pub fn update(&mut self, wanted: bool, force: bool, settings: &Settings, now: Instant) -> f32 {
-        if wanted || force {
+        // the first state keeps the HUD up for a moment: the app is running, and this is where it shows up
+        if wanted || force || self.last_update.is_none() {
             self.last_wanted = Some(now);
         }
         let hold = Duration::from_millis(settings.hide_delay_ms);
@@ -167,6 +168,8 @@ mod tests {
         let ms = |n| t0 + Duration::from_millis(n);
         let mut h = HeadsUp::default();
         h.update(false, false, &s, t0);
+        // the first state keeps the HUD up for hide_delay
+        assert_eq!(h.update(false, false, &s, ms(500)), 1.0);
         // nothing wanted for longer than hide_delay: fades out
         h.update(false, false, &s, ms(900));
         assert_eq!(h.level(), 0.0);
