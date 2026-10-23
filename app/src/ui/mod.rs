@@ -13,6 +13,7 @@ pub mod report;
 pub mod search_panel;
 pub mod settings;
 pub mod theme;
+pub mod training;
 
 use crate::autostart;
 use crate::backup;
@@ -254,6 +255,8 @@ pub struct DevOptions {
     /// Opens the key editor on `(layer, row, col)`, searching for the text.
     pub edit_key: Option<((u8, u8, u8), String)>,
     pub history: bool,
+    /// Opens the training window and starts a round once the keyboard is ready.
+    pub training: bool,
     /// Writes the keymap page to this file as soon as a layout is known, then quits.
     pub export: Option<PathBuf>,
 }
@@ -541,12 +544,15 @@ pub struct HudApp {
     menu_key: Option<(u8, u8, u8)>,
     key_editor: key_editor::KeyEditor,
     history: history::HistoryWindow,
+    training: training::TrainingWindow,
     /// Last key written from the HUD, with the keycode it replaced (for undo).
     last_write: Option<(KeyWrite, u16)>,
     /// Undo sent, answer not come yet.
     undoing: Option<KeyWrite>,
     /// `--menu`: open the menu as soon as the window position is known.
     dev_menu: bool,
+    /// `--training`: start a round as soon as the keyboard is ready.
+    dev_training: bool,
     /// `--export`: write the keymap page once a layout is known, then quit.
     dev_export: Option<PathBuf>,
     /// `--edit-key`: open the key editor once the keyboard is connected.
@@ -645,11 +651,13 @@ impl HudApp {
             menu_key: None,
             key_editor: key_editor::KeyEditor::default(),
             history: history::HistoryWindow::default(),
+            training: training::TrainingWindow::default(),
             last_write: None,
             undoing: None,
             dev_menu: s.dev.menu,
             dev_edit_key: s.dev.edit_key.clone(),
             dev_export: s.dev.export.clone(),
+            dev_training: s.dev.training,
         };
         // what the file says, except where an older version remembered a menu
         // choice in the state file: that is moved into the config at the first save
@@ -672,6 +680,7 @@ impl HudApp {
         if s.dev.history {
             app.history.open(&app.backup_dir());
         }
+        app.training.open = s.dev.training;
         if s.dev.settings {
             app.open_settings();
             app.settings.open_page(s.dev.settings_page.as_deref());
@@ -821,6 +830,19 @@ impl HudApp {
                             let ctx = l.legend_context(&self.layer_names);
                             let held = s.mods | s.oneshot_mods | s.oneshot_locked_mods;
                             self.keycast.update(&codes, |r, c| s.is_pressed(r, c), held, s.active_os, &ctx, now);
+                        }
+                    }
+                    if self.training.active() {
+                        if let (Some(l), Some(session)) = (&self.live, &mut self.training.session) {
+                            let mods = s.mods | s.oneshot_mods | s.oneshot_locked_mods;
+                            let mut last = None;
+                            for &(r, c) in &presses {
+                                let code = l.keymap.resolve(layer, s.active_mask(), r, c).0;
+                                last = Some(session.press(code, mods, now));
+                            }
+                            if let Some(o) = last {
+                                self.training.feedback(o, now);
+                            }
                         }
                     }
                     self.fade.update(&s.matrix, now);
@@ -1572,6 +1594,49 @@ impl HudApp {
         }
     }
 
+    fn show_training(&mut self, ctx: &egui::Context) {
+        if !self.training.open {
+            return;
+        }
+        let available = self.can_write_keys() && self.info.is_some() && self.state.is_some();
+        let Some(l) = &self.live else {
+            let legends = crate::vial::legend::LegendContext {
+                layer_names: &self.layer_names,
+                custom: &[],
+                tap_dances: &[],
+                macros: &[],
+            };
+            let input = training::TrainingInput { lang: self.lang, legends: &legends, hint: None, available: false };
+            self.training.show(ctx, &input);
+            return;
+        };
+        let legends = l.legend_context(&self.layer_names);
+        let hint = self
+            .training
+            .session
+            .as_ref()
+            .and_then(|s| s.current())
+            .map(|t| crate::search::sequence(&l.keymap, &legends, &self.labels, t.layer, t.row, t.col));
+        let input = training::TrainingInput { lang: self.lang, legends: &legends, hint, available };
+        let start = matches!(self.training.show(ctx, &input), training::Action::Start);
+        if start || (available && std::mem::take(&mut self.dev_training)) {
+            let present = positions(&l.keys);
+            let default_layer = self.state.map_or(0, |s| (s.default_layer_state as u32).trailing_zeros().min(31) as u8);
+            let pool = crate::training::pool(&l.keymap, &present, default_layer);
+            // presses per keycode, from the statistics: rare keys come up more
+            let mut usage = HashMap::new();
+            if let Some(stats) = &self.stats {
+                for (&(layer, r, c), &n) in &stats.totals(None) {
+                    *usage.entry(l.keymap.get(layer, r, c)).or_insert(0) += n;
+                }
+            }
+            let seed =
+                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_nanos() as u64);
+            self.training.session =
+                Some(crate::training::Session::new(pool, usage, crate::training::ROUND, seed, Instant::now()));
+        }
+    }
+
     /// `export/<keyboard>-keymap_<time>.html` next to the configuration.
     fn export_path(&self) -> PathBuf {
         let name = self.live.as_ref().or(self.offline.as_ref()).map_or("keyboard", |l| l.definition.name.as_str());
@@ -2059,6 +2124,10 @@ impl HudApp {
             }
             self.close_menu();
         }
+        if ui.button(tr(lang, Msg::MenuTraining)).clicked() {
+            self.training.open = true;
+            self.close_menu();
+        }
         if ui.button(tr(lang, Msg::MenuHistory)).clicked() {
             self.history.open(&self.backup_dir());
             self.close_menu();
@@ -2261,6 +2330,7 @@ impl eframe::App for HudApp {
                     || self.menu.is_some()
                     || ctx.any_popup_open()
                     || self.drag.is_some()
+                    || self.training.active()
                     || (self.headsup.level() > 0.5 && response.hovered());
                 self.headsup.update(wanted, force, hu, now)
             }
@@ -2340,7 +2410,21 @@ impl eframe::App for HudApp {
                 self.search.refresh(&l.keymap, &pos, &legends, &self.labels, &l.dynamic, self.search_stale);
                 self.search_stale = false;
                 let search = &self.search;
-                let mark = |r: u8, c: u8| search.mark(layer, r, c);
+                // training: after a while the key to press lights up
+                let train_hint = self
+                    .training
+                    .session
+                    .as_ref()
+                    .filter(|t| self.training.active() && t.hint_due(now))
+                    .and_then(|t| t.current());
+                let mark = |r: u8, c: u8| {
+                    let hinted = train_hint.is_some_and(|t| (t.layer, t.row, t.col) == (layer, r, c));
+                    if hinted {
+                        1.0
+                    } else {
+                        search.mark(layer, r, c)
+                    }
+                };
                 // heatmap: presses on the layer shown, or on every layer
                 let heat_counts: Option<HashMap<(u8, u8), u64>> = match (self.heat, &self.heat_cache) {
                     (HeatMode::Off, _) | (_, None) => None,
@@ -2491,6 +2575,7 @@ impl eframe::App for HudApp {
         };
         self.report.show(&ctx, self.stats.as_mut(), &input);
         self.show_history(&ctx, &palette);
+        self.show_training(&ctx);
         self.show_key_editor(&ctx);
         if self.diagnostics.open {
             let sections = self.diagnostics_sections();

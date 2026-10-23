@@ -23,6 +23,7 @@ mod screen;
 mod search;
 mod stats;
 mod style;
+mod training;
 mod tray;
 mod ui;
 mod vial;
@@ -184,6 +185,7 @@ fn run(opts: Options) -> ExitCode {
                     menu: opts.menu,
                     edit_key: opts.edit_key,
                     history: opts.history,
+                    training: opts.training,
                     export: opts.export,
                 },
                 config,

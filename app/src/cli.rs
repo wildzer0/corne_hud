@@ -25,6 +25,7 @@ Uso: keyboard-hud [opzioni]
   --settings-page P     sviluppo: la apre su layers, labels o text
   --menu                sviluppo: apre il menu contestuale all'avvio
   --history             sviluppo: apre lo storico dei backup
+  --training            sviluppo: apre l'allenamento e fa partire un giro
   --export FILE         esporta la keymap in FILE (pagina HTML) ed esce
   --edit-key L,R,C[,T]  sviluppo: apre «Cambia tasto» su layer L, riga R, colonna C (e cerca T)
   --verbose             log dettagliato
@@ -53,6 +54,7 @@ pub struct Options {
     pub menu: bool,
     pub edit_key: Option<((u8, u8, u8), String)>,
     pub history: bool,
+    pub training: bool,
     pub export: Option<PathBuf>,
     pub print_udev_rule: bool,
     pub verbose: bool,
@@ -111,6 +113,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             }
             "--menu" => o.menu = true,
             "--history" => o.history = true,
+            "--training" => o.training = true,
             "--export" => o.export = Some(PathBuf::from(value("--export")?)),
             "--edit-key" => {
                 let v = value("--edit-key")?;
