@@ -335,8 +335,10 @@ impl Default for Page {
 #[derive(Default)]
 struct TextPage {
     content: String,
-    /// As last read from disk.
+    /// As last read from disk, with `\n` only (the text editor's way).
     original: String,
+    /// The file on disk has `\r\n` line endings: saved the same way.
+    crlf: bool,
     revision: Option<u64>,
     /// Parse error of the content being edited.
     problem: Option<String>,
@@ -353,7 +355,9 @@ impl TextPage {
             return;
         }
         self.revision = Some(revision);
-        self.original = std::fs::read_to_string(path).unwrap_or_default();
+        let text = std::fs::read_to_string(path).unwrap_or_default();
+        self.crlf = text.contains("\r\n");
+        self.original = text.replace("\r\n", "\n");
         self.content = self.original.clone();
         self.check();
     }
@@ -987,7 +991,9 @@ impl SettingsWindow {
             let can_save = dirty && self.text.problem.is_none();
             if ui.add_enabled(can_save, egui::Button::new(tr(lang, Msg::TextSave))).clicked() || (save_key && can_save)
             {
-                *action = Action::SaveText(self.text.content.clone());
+                let text =
+                    if self.text.crlf { self.text.content.replace('\n', "\r\n") } else { self.text.content.clone() };
+                *action = Action::SaveText(text);
                 // what is saved becomes the original: no reload over it
                 self.text.original = self.text.content.clone();
             }

@@ -78,7 +78,16 @@ pub fn apply(text: &str, edits: &[Edit]) -> Result<String, String> {
             doc.set_trailing("");
         }
     }
-    Ok(doc.to_string())
+    Ok(with_line_endings_of(text, doc.to_string()))
+}
+
+/// `toml_edit` writes `\n`: a file with `\r\n` (Notepad) keeps them.
+pub fn with_line_endings_of(original: &str, text: String) -> String {
+    if original.contains("\r\n") {
+        text.replace("\r\n", "\n").replace('\n', "\r\n")
+    } else {
+        text
+    }
 }
 
 fn set_key(doc: &mut DocumentMut, key: &str, value: Option<&toml::Value>) -> Result<(), String> {
@@ -264,6 +273,20 @@ mod tests {
     fn inline_tables_too() {
         let out = apply("appearance = { scale = 1.0 }\n", &[key("appearance.scale", float(1.5))]).unwrap();
         assert_eq!(out, "appearance = { scale = 1.5 }\n");
+    }
+
+    #[test]
+    fn windows_line_endings_stay() {
+        let text = "# intestazione\r\n[appearance]\r\nscale = 1.0   # x\r\n";
+        let out = apply(
+            text,
+            &[key("appearance.scale", float(1.5)), key("log.level", Some(toml::Value::String("debug".into())))],
+        )
+        .unwrap();
+        assert_eq!(out, "# intestazione\r\n[appearance]\r\nscale = 1.5   # x\r\n\r\n[log]\r\nlevel = \"debug\"\r\n");
+        let crlf = include_str!("../../keyboard-hud.example.toml").replace("\r\n", "\n").replace('\n', "\r\n");
+        let out = apply(&crlf, &[key("appearance.scale", float(1.2))]).unwrap();
+        assert_eq!(out, crlf.replace("scale = 1.0", "scale = 1.2"));
     }
 
     #[test]
