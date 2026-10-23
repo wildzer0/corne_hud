@@ -109,9 +109,15 @@ fn draw_text(painter: &Painter, text: &Text, center: Pos2, angle: f32, size: f32
     if s.is_empty() {
         return;
     }
-    // lone symbols (⌫ ⏎ ␣ ...) read better a little larger than text
-    let size = if s.chars().count() == 1 && !s.chars().all(char::is_alphanumeric) { size * 1.3 } else { size };
+    // lone symbols (⏎ ⇧ ␣ ...) read better a little larger than text
+    let lone = s.chars().count() == 1 && !s.chars().all(char::is_alphanumeric);
+    let mut size = if lone { size * 1.3 } else { size };
     let mut galley = painter.layout_no_wrap(s.clone(), FontId::proportional(size), color);
+    // ...but no wider than a square: ⌫ and ⌦ are 1.4 em wide, the arrows 0.84
+    if lone && galley.size().x > size {
+        size *= size / galley.size().x;
+        galley = painter.layout_no_wrap(s.clone(), FontId::proportional(size), color);
+    }
     if galley.size().x > max_width && galley.size().x > 0.0 {
         let fitted = (size * max_width / galley.size().x).max(size * 0.45);
         galley = painter.layout_no_wrap(s.clone(), FontId::proportional(fitted), color);
