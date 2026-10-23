@@ -3,11 +3,20 @@
 
 use crate::config::Config;
 use std::path::Path;
-use toml_edit::{DocumentMut, Item, Table, TableLike, Value};
+use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, TableLike, Value};
 
-/// A dotted key (`appearance.scale`) and its new value; `None` removes the
-/// key, so that the default applies.
-pub type Edit = (&'static str, Option<toml::Value>);
+#[derive(Debug, Clone, PartialEq)]
+pub enum Edit {
+    /// A dotted key (`appearance.scale`) and its new value; `None` removes
+    /// the key, so that the default applies.
+    Key(&'static str, Option<toml::Value>),
+    /// A field of one element of a list of tables (`[[layers]]`); `None` removes it.
+    Field { list: &'static str, index: usize, field: &'static str, value: Option<toml::Value> },
+    /// A new element at the end of a list of tables.
+    Push { list: &'static str, fields: Vec<(&'static str, toml::Value)> },
+    /// Removes an element of a list of tables.
+    Remove { list: &'static str, index: usize },
+}
 
 /// Written at the top of a config file created by the app.
 const HEADER: &str = "# Keyboard HUD: configurazione. Modificabile a mano o dalla finestra\n\
@@ -20,6 +29,7 @@ fn to_edit(v: &toml::Value) -> Result<Value, String> {
         toml::Value::Integer(i) => Value::from(*i),
         toml::Value::Float(f) => Value::from((f * 10_000.0).round() / 10_000.0),
         toml::Value::Boolean(b) => Value::from(*b),
+        toml::Value::Array(a) => Value::Array(a.iter().map(to_edit).collect::<Result<_, _>>()?),
         other => return Err(format!("valore non supportato: {other}")),
     })
 }
@@ -31,22 +41,29 @@ pub fn apply(text: &str, edits: &[Edit]) -> Result<String, String> {
     // comments only (a new file, its header): they belong above the first table,
     // not after the tables added
     let header = doc.is_empty().then(|| doc.trailing().as_str().unwrap_or("").to_string());
-    for (key, value) in edits {
-        let (path, leaf) = match key.rsplit_once('.') {
-            Some((p, l)) => (p.split('.').collect::<Vec<_>>(), l),
-            None => (Vec::new(), *key),
-        };
-        let mut table: &mut dyn TableLike = doc.as_table_mut();
-        for part in path {
-            if value.is_none() && table.get(part).is_none() {
-                break; // nothing to remove
+    for edit in edits {
+        match edit {
+            Edit::Key(key, value) => set_key(&mut doc, key, value.as_ref())?,
+            Edit::Field { list, index, field, value } => {
+                let table = list_mut(&mut doc, list)?
+                    .get_mut(*index)
+                    .ok_or_else(|| format!("{list}: elemento {} mancante", index + 1))?;
+                match value {
+                    Some(v) => set(table, field, to_edit(v)?),
+                    None => remove(table, field),
+                }
             }
-            let item = table.entry(part).or_insert_with(|| Item::Table(Table::new()));
-            table = item.as_table_like_mut().ok_or_else(|| format!("{key}: {part} non è una tabella"))?;
-        }
-        match value {
-            Some(v) => set(table, leaf, to_edit(v)?),
-            None => remove(table, leaf),
+            Edit::Push { list, fields } => {
+                let mut table = Table::new();
+                for (field, v) in fields {
+                    table.insert(field, Item::Value(to_edit(v)?));
+                }
+                if doc.get(list).is_none() {
+                    doc.insert(list, Item::ArrayOfTables(ArrayOfTables::new()));
+                }
+                list_mut(&mut doc, list)?.push(table);
+            }
+            Edit::Remove { list, index } => remove_element(&mut doc, list, *index)?,
         }
     }
     if let Some(header) = header.filter(|h| !h.trim().is_empty()) {
@@ -62,6 +79,77 @@ pub fn apply(text: &str, edits: &[Edit]) -> Result<String, String> {
         }
     }
     Ok(doc.to_string())
+}
+
+fn set_key(doc: &mut DocumentMut, key: &str, value: Option<&toml::Value>) -> Result<(), String> {
+    let (path, leaf) = match key.rsplit_once('.') {
+        Some((p, l)) => (p.split('.').collect::<Vec<_>>(), l),
+        None => (Vec::new(), key),
+    };
+    let mut table: &mut dyn TableLike = doc.as_table_mut();
+    for part in path {
+        if value.is_none() && table.get(part).is_none() {
+            return Ok(()); // nothing to remove
+        }
+        let item = table.entry(part).or_insert_with(|| Item::Table(Table::new()));
+        table = item.as_table_like_mut().ok_or_else(|| format!("{key}: {part} non è una tabella"))?;
+    }
+    match value {
+        Some(v) => set(table, leaf, to_edit(v)?),
+        None => remove(table, leaf),
+    }
+    Ok(())
+}
+
+fn list_mut<'a>(doc: &'a mut DocumentMut, list: &str) -> Result<&'a mut ArrayOfTables, String> {
+    doc.get_mut(list)
+        .and_then(Item::as_array_of_tables_mut)
+        .ok_or_else(|| format!("{list}: non è una lista di tabelle [[{list}]]"))
+}
+
+/// Removes an element; the comment lines above it go to whatever comes next
+/// (the next element, or the next table in the file).
+fn remove_element(doc: &mut DocumentMut, list: &str, index: usize) -> Result<(), String> {
+    let tables = list_mut(doc, list)?;
+    let old = tables.get(index).ok_or_else(|| format!("{list}: elemento {} mancante", index + 1))?;
+    let prefix = old.decor().prefix().and_then(|p| p.as_str()).unwrap_or("").to_string();
+    let position = old.position();
+    tables.remove(index);
+    if tables.is_empty() {
+        doc.remove(list);
+    }
+    if !prefix.contains('#') {
+        return Ok(());
+    }
+    let next = match list_mut(doc, list).ok().and_then(|t| t.get_mut(index)) {
+        Some(t) => Some(t),
+        None => next_table(doc, position),
+    };
+    match next {
+        Some(t) => {
+            let own = t.decor().prefix().and_then(|p| p.as_str()).unwrap_or("").to_string();
+            t.decor_mut().set_prefix(format!("{prefix}{}", own.trim_start_matches('\n')));
+        }
+        None => {
+            let trailing = doc.trailing().as_str().unwrap_or("").to_string();
+            doc.set_trailing(format!("{prefix}{trailing}"));
+        }
+    }
+    Ok(())
+}
+
+/// The table written first after `position`, at the top level.
+fn next_table(doc: &mut DocumentMut, position: Option<isize>) -> Option<&mut Table> {
+    let after = position?;
+    let mut tables: Vec<&mut Table> = Vec::new();
+    for (_, item) in doc.as_table_mut().iter_mut() {
+        match item {
+            Item::Table(t) => tables.push(t),
+            Item::ArrayOfTables(a) => tables.extend(a.iter_mut()),
+            _ => {}
+        }
+    }
+    tables.into_iter().filter(|t| t.position().is_some_and(|p| p > after)).min_by_key(|t| t.position())
 }
 
 /// Replaces the value keeping its comment (`scale = 1.2   # 0.5 – 2.0`).
@@ -97,11 +185,15 @@ pub fn write(path: &Path, edits: &[Edit]) -> Result<Config, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => HEADER.to_string(),
         Err(e) => return Err(format!("{}: {e}", path.display())),
     };
-    let new = apply(&text, edits)?;
-    let config = Config::parse(&new)?;
+    write_text(path, &apply(&text, edits)?)
+}
+
+/// Replaces the whole file (text edited in the settings window), if valid.
+pub fn write_text(path: &Path, text: &str) -> Result<Config, String> {
+    let config = Config::parse(text)?;
     // through a temporary file: an editor or the watcher never sees half a file
     let tmp = path.with_extension("toml.tmp");
-    std::fs::write(&tmp, &new)
+    std::fs::write(&tmp, text)
         .and_then(|()| std::fs::rename(&tmp, path))
         .map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(config)
@@ -115,16 +207,20 @@ mod tests {
         Some(toml::Value::Float(f as f64))
     }
 
+    fn key(k: &'static str, v: Option<toml::Value>) -> Edit {
+        Edit::Key(k, v)
+    }
+
     #[test]
     fn keeps_comments_and_layout() {
         let text = "# intestazione\n[appearance]\n# commento sopra\nscale = 1.0   # 0.5 – 2.0\ntheme = \"dark\"\n\n[log]\nlevel = \"info\"\n";
-        let out = apply(text, &[("appearance.scale", float(1.25))]).unwrap();
+        let out = apply(text, &[key("appearance.scale", float(1.25))]).unwrap();
         assert_eq!(out, text.replace("scale = 1.0", "scale = 1.25"));
     }
 
     #[test]
     fn rounds_floats_from_f32() {
-        let out = apply("", &[("appearance.opacity", float(0.85))]).unwrap();
+        let out = apply("", &[key("appearance.opacity", float(0.85))]).unwrap();
         assert_eq!(out, "[appearance]\nopacity = 0.85\n");
     }
 
@@ -132,8 +228,8 @@ mod tests {
     fn adds_tables_and_keys() {
         let text = "[appearance]\nscale = 1.0\n";
         let edits = [
-            ("appearance.theme", Some(toml::Value::String("light".into()))),
-            ("keycast.enabled", Some(toml::Value::Boolean(true))),
+            key("appearance.theme", Some(toml::Value::String("light".into()))),
+            key("keycast.enabled", Some(toml::Value::Boolean(true))),
         ];
         let out = apply(text, &edits).unwrap();
         assert_eq!(out, "[appearance]\nscale = 1.0\ntheme = \"light\"\n\n[keycast]\nenabled = true\n");
@@ -143,7 +239,7 @@ mod tests {
     #[test]
     fn removal_keeps_the_comment_above() {
         let text = "[appearance]\n# chiave\nkey_opacity = 0.5\n# stile\nstyle = \"vetro\"\n";
-        let out = apply(text, &[("appearance.key_opacity", None), ("device.vid", None)]).unwrap();
+        let out = apply(text, &[key("appearance.key_opacity", None), key("device.vid", None)]).unwrap();
         assert_eq!(out, "[appearance]\n# chiave\n# stile\nstyle = \"vetro\"\n");
     }
 
@@ -151,7 +247,7 @@ mod tests {
     fn header_of_a_new_file_stays_on_top() {
         let out = apply(
             HEADER,
-            &[("appearance.scale", float(1.5)), ("log.level", Some(toml::Value::String("debug".into())))],
+            &[key("appearance.scale", float(1.5)), key("log.level", Some(toml::Value::String("debug".into())))],
         )
         .unwrap();
         assert_eq!(out, format!("{HEADER}[appearance]\nscale = 1.5\n\n[log]\nlevel = \"debug\"\n"));
@@ -160,20 +256,86 @@ mod tests {
 
     #[test]
     fn invalid_file_is_left_alone() {
-        assert!(apply("[appearance\nscale = 1", &[("appearance.scale", float(1.0))]).is_err());
-        assert!(apply("appearance = 3", &[("appearance.scale", float(1.0))]).is_err());
+        assert!(apply("[appearance\nscale = 1", &[key("appearance.scale", float(1.0))]).is_err());
+        assert!(apply("appearance = 3", &[key("appearance.scale", float(1.0))]).is_err());
     }
 
     #[test]
     fn inline_tables_too() {
-        let out = apply("appearance = { scale = 1.0 }\n", &[("appearance.scale", float(1.5))]).unwrap();
+        let out = apply("appearance = { scale = 1.0 }\n", &[key("appearance.scale", float(1.5))]).unwrap();
         assert_eq!(out, "appearance = { scale = 1.5 }\n");
     }
 
     #[test]
     fn example_config_survives() {
         let example = include_str!("../../keyboard-hud.example.toml");
-        let out = apply(example, &[("appearance.scale", float(1.2))]).unwrap();
+        let out = apply(example, &[key("appearance.scale", float(1.2))]).unwrap();
         assert_eq!(out, example.replace("scale = 1.0", "scale = 1.2"));
+    }
+
+    fn string(v: &str) -> toml::Value {
+        toml::Value::String(v.into())
+    }
+
+    const LISTS: &str = "[appearance]\nscale = 1.0\n\n# Layer\n[[layers]]\nname = \"BASE\"\ncolor = \"\"\n\n[[layers]]\nname = \"SYM\"   # simboli\ncolor = \"#00B9D7\"\n\n# Etichette del layer DEBUG\n[[labels]]\nlayer = 4\nkeycode = \"KC_F2\"\nlabel = \"Rename\"\n\n# Esempio commentato\n# [[labels]]\n\n[polling]\nvisible_hz = 60\n";
+
+    #[test]
+    fn list_fields_keep_comments() {
+        let edits = [
+            Edit::Field { list: "layers", index: 1, field: "name", value: Some(string("SIMBOLI")) },
+            Edit::Field { list: "layers", index: 0, field: "color", value: Some(string("#FF0000")) },
+            Edit::Field { list: "labels", index: 0, field: "description", value: Some(string("Rinomina")) },
+        ];
+        let out = apply(LISTS, &edits).unwrap();
+        let expected = LISTS
+            .replace("name = \"SYM\"   # simboli", "name = \"SIMBOLI\"   # simboli")
+            .replace("color = \"\"\n", "color = \"#FF0000\"\n")
+            .replace("label = \"Rename\"\n", "label = \"Rename\"\ndescription = \"Rinomina\"\n");
+        assert_eq!(out, expected);
+        let bad = [Edit::Field { list: "layers", index: 5, field: "name", value: Some(string("X")) }];
+        assert!(apply(LISTS, &bad).is_err());
+    }
+
+    #[test]
+    fn push_goes_after_the_last_element() {
+        let edits =
+            [Edit::Push { list: "labels", fields: vec![("keycode", string("KC_F10")), ("label", string("Step"))] }];
+        let out = apply(LISTS, &edits).unwrap();
+        assert!(
+            out.contains(
+                "label = \"Rename\"\n\n[[labels]]\nkeycode = \"KC_F10\"\nlabel = \"Step\"\n\n# Esempio commentato"
+            ),
+            "{out}"
+        );
+        assert_eq!(Config::parse(&out).unwrap().labels.len(), 2);
+        // a list that is not there yet
+        let out = apply(
+            "[log]\nlevel = \"info\"\n",
+            &[Edit::Push { list: "layers", fields: vec![("name", string("BASE"))] }],
+        )
+        .unwrap();
+        assert_eq!(Config::parse(&out).unwrap().layers[0].name, "BASE");
+    }
+
+    #[test]
+    fn removal_moves_the_comments_on() {
+        // the next element takes them
+        let out = apply(LISTS, &[Edit::Remove { list: "layers", index: 0 }]).unwrap();
+        assert!(out.contains("scale = 1.0\n\n# Layer\n[[layers]]\nname = \"SYM\""), "{out}");
+        // the last one: the next table in the file
+        let out = apply(LISTS, &[Edit::Remove { list: "labels", index: 0 }]).unwrap();
+        assert!(!out.contains("[[labels]]\nlayer"), "{out}");
+        assert!(out.contains("# Etichette del layer DEBUG\n# Esempio commentato\n# [[labels]]\n\n[polling]"), "{out}");
+        assert!(Config::parse(&out).unwrap().labels.is_empty());
+        assert!(apply(LISTS, &[Edit::Remove { list: "labels", index: 3 }]).is_err());
+    }
+
+    #[test]
+    fn app_lists() {
+        let apps = toml::Value::Array(vec![string("idea64"), string("pycharm64")]);
+        let edits = [Edit::Field { list: "labels", index: 0, field: "app", value: Some(apps) }];
+        let out = apply(LISTS, &edits).unwrap();
+        assert!(out.contains("app = [\"idea64\", \"pycharm64\"]"), "{out}");
+        Config::parse(&out).unwrap();
     }
 }

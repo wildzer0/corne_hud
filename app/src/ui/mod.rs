@@ -245,6 +245,7 @@ pub struct DevOptions {
     pub stats_window: bool,
     pub diagnostics: bool,
     pub settings: bool,
+    pub settings_page: Option<String>,
     pub menu: bool,
 }
 
@@ -422,7 +423,7 @@ impl Prefs {
         let mut out = Vec::new();
         let mut put = |changed: bool, key: &'static str, v: Option<toml::Value>| {
             if changed {
-                out.push((key, v));
+                out.push(Edit::Key(key, v));
             }
         };
         put(self.opacity != old.opacity, "appearance.opacity", value(&self.opacity));
@@ -457,6 +458,8 @@ pub struct HudApp {
     watcher: ConfigWatcher,
     /// The config file does not parse (the last config read stays in use).
     config_error: Option<String>,
+    /// Grows whenever the config file is read or written.
+    config_revision: u64,
     /// Menu choices as last written to (or read from) the config file.
     synced: Prefs,
     verbose: bool,
@@ -579,6 +582,7 @@ impl HudApp {
             config: s.config,
             watcher: s.watcher,
             config_error: None,
+            config_revision: 0,
             verbose: s.verbose,
             window: s.window,
             window_path: s.window_path,
@@ -639,6 +643,7 @@ impl HudApp {
         app.diagnostics.open = s.dev.diagnostics;
         if s.dev.settings {
             app.open_settings();
+            app.settings.open_page(s.dev.settings_page.as_deref());
         }
         if (s.dev.stats_window || s.dev.diagnostics || s.dev.settings || s.dev.menu) && app.screenshot.is_some() {
             // capture the other windows inside the HUD window
@@ -975,7 +980,8 @@ impl HudApp {
         }
     }
 
-    fn apply_config(&mut self, ctx: &egui::Context, config: Config) {
+    /// Applies a new configuration; returns the problems found in the labels.
+    fn apply_config(&mut self, ctx: &egui::Context, config: Config) -> Vec<String> {
         if config.device != self.config.device {
             log::warn!("le impostazioni [device] valgono dal prossimo avvio");
         }
@@ -1051,7 +1057,7 @@ impl HudApp {
         if resize {
             self.resize(ctx);
         }
-        self.report_label_errors(&errors);
+        errors
     }
 
     /// Menu choices as they are now.
@@ -1074,9 +1080,15 @@ impl HudApp {
     /// Writes keys into the config file; the watcher does not reload it.
     fn write_config(&mut self, edits: &[Edit]) -> Result<Config, String> {
         let config = config_edit::write(self.watcher.path(), edits)?;
+        self.written();
+        Ok(config)
+    }
+
+    /// The app wrote a valid config file.
+    fn written(&mut self) {
         self.watcher.written();
         self.config_error = None;
-        Ok(config)
+        self.config_revision += 1;
     }
 
     /// Menu choices changed since the last save go into the config file.
@@ -1086,7 +1098,7 @@ impl HudApp {
         if edits.is_empty() {
             return;
         }
-        log::debug!("scelte del menu nella configurazione: {:?}", edits.iter().map(|e| e.0).collect::<Vec<_>>());
+        log::debug!("scelte del menu nella configurazione: {edits:?}");
         // also on failure: the choice stays for this session, without a notice every second
         self.synced = prefs;
         match self.write_config(&edits) {
@@ -1099,10 +1111,26 @@ impl HudApp {
     }
 
     /// A change from the settings window: written, then applied like an edit by hand.
-    fn edit_config(&mut self, ctx: &egui::Context, edit: Edit) {
+    /// Label problems are not notified: the window shows them next to the label.
+    fn edit_config(&mut self, ctx: &egui::Context, edits: &[Edit]) {
         self.save_prefs();
-        match self.write_config(&[edit]) {
-            Ok(c) => self.apply_config(ctx, c),
+        match self.write_config(edits) {
+            Ok(c) => {
+                self.apply_config(ctx, c);
+            }
+            Err(e) => self.notify(format!("{}: {e}", tr(self.lang, Msg::ConfigError))),
+        }
+    }
+
+    /// The whole file, edited as text in the settings window.
+    fn save_config_text(&mut self, ctx: &egui::Context, text: &str) {
+        match config_edit::write_text(self.watcher.path(), text) {
+            Ok(c) => {
+                self.written();
+                let errors = self.apply_config(ctx, c);
+                self.notify(tr(self.lang, Msg::ConfigReloaded).to_string());
+                self.report_label_errors(&errors);
+            }
             Err(e) => self.notify(format!("{}: {e}", tr(self.lang, Msg::ConfigError))),
         }
     }
@@ -1868,13 +1896,16 @@ impl eframe::App for HudApp {
             Reload::Unchanged => {}
             Reload::Changed(c) => {
                 self.config_error = None;
-                self.apply_config(ctx, *c);
+                self.config_revision += 1;
+                let errors = self.apply_config(ctx, *c);
                 self.notify(tr(self.lang, Msg::ConfigReloaded).to_string());
+                self.report_label_errors(&errors);
             }
             Reload::Error(e) => {
                 let path = self.watcher.path().display().to_string();
                 self.notify(format!("{} ({path}): {e}", tr(self.lang, Msg::ConfigError)));
                 self.config_error = Some(e);
+                self.config_revision += 1;
             }
         }
         if !self.checked_on_screen && self.started.elapsed() > Duration::from_millis(500) {
@@ -2194,9 +2225,12 @@ impl eframe::App for HudApp {
                 error: self.config_error.as_deref(),
                 styles: &self.style_names,
                 style_look: self.style.look(),
+                layer_names: &self.layer_names,
+                revision: self.config_revision,
             };
             match self.settings.show(&ctx, &input) {
-                settings::Action::Edit(edit) => self.edit_config(&ctx, edit),
+                settings::Action::Edits(edits) => self.edit_config(&ctx, &edits),
+                settings::Action::SaveText(text) => self.save_config_text(&ctx, &text),
                 settings::Action::OpenFile => self.open_config_file(),
                 settings::Action::None => {}
             }

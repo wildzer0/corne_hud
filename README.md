@@ -190,7 +190,13 @@ L'HUD si accorge comunque dei cambi di keymap fatti da Vial. Il firmware rileva 
 
 Copia [`keyboard-hud.example.toml`](keyboard-hud.example.toml) accanto all'eseguibile con il nome `keyboard-hud.toml`, oppure nella cartella di configurazione dell'utente. Ogni voce è facoltativa. Le modifiche valgono **entro un secondo, senza riavviare**; solo `[device]` richiede un riavvio.
 
-**Finestra Impostazioni** (menu → *Impostazioni…*, icona nella tray, oppure **Ctrl+,** con l'HUD in primo piano), come in VS Code: tutte le voci del file divise per sezione, con la descrizione, una casella di ricerca, un pallino sulle voci diverse dal predefinito e ↺ per ripristinarlo. Ogni modifica si salva subito in `keyboard-hud.toml` toccando solo quella voce: commenti e ordine del file restano. *Apri come testo* (o **Ctrl+Shift+,**) apre il file nell'editor di sistema; se il file contiene un errore la finestra lo mostra e resta in sola lettura finché non lo correggi. Nomi e colori dei layer ed etichette per ora si modificano nel testo.
+**Finestra Impostazioni** (menu → *Impostazioni…*, icona nella tray, oppure **Ctrl+,** con l'HUD in primo piano), come in VS Code: tutte le voci del file divise per sezione, con la descrizione, una casella di ricerca, un pallino sulle voci diverse dal predefinito e ↺ per ripristinarlo. Ogni modifica si salva subito in `keyboard-hud.toml` toccando solo quella voce: commenti e ordine del file restano. *Apri come testo* (o **Ctrl+Shift+,**) apre il file nell'editor di sistema; se il file contiene un errore la finestra lo mostra e resta in sola lettura finché non lo correggi.
+
+- **Layer**: nome e colore di ogni layer, nell'ordine del firmware, con il selettore di colore (o *neutro*); *Aggiungi layer* e ✕ sull'ultimo.
+- **Etichette**: una scheda per etichetta con testo, descrizione, tasto (keycode oppure riga e colonna della matrice), layer e app. Un keycode non riconosciuto o un'etichetta incompleta vengono segnalati sulla scheda. La ricerca in alto trova anche le etichette.
+- **File di testo**: il file intero con i commenti, modificabile nella finestra; *Salva* (Ctrl+S) scrive solo un file valido, altrimenti mostra l'errore con la riga. Serve anche a correggere un file rotto senza uscire dall'app.
+
+Slider, numeri e colori si salvano quando rilasci il mouse; i campi di testo quando premi Invio o passi ad altro.
 
 | Sezione | Cosa regola |
 |---|---|
@@ -328,7 +334,7 @@ L'HUD salva da solo la configurazione della tastiera come file `.vil`, lo stesso
 --version, -h/--help
 ```
 
-Ci sono anche opzioni di sviluppo, che servono a catturare gli stati dell'interfaccia: `--mock-at`, `--screenshot`, `--screenshot-after`, `--search`, `--heatmap`, `--stats-window`, `--settings`.
+Ci sono anche opzioni di sviluppo, che servono a catturare gli stati dell'interfaccia: `--mock-at`, `--screenshot`, `--screenshot-after`, `--search`, `--heatmap`, `--stats-window`, `--settings`, `--settings-page layers|labels|text`.
 
 Su Windows l'eseguibile release è un'applicazione grafica senza console, quindi l'output di `--help` non si vede: le opzioni sono comunque quelle elencate qui.
 

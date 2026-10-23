@@ -179,6 +179,7 @@ fn run(opts: Options) -> ExitCode {
                     stats_window: opts.stats_window,
                     diagnostics: opts.diagnostics,
                     settings: opts.settings,
+                    settings_page: opts.settings_page,
                     menu: opts.menu,
                 },
                 config,

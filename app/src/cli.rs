@@ -22,6 +22,7 @@ Uso: keyboard-hud [opzioni]
   --stats-window        sviluppo: apre la finestra delle statistiche
   --diagnostics         sviluppo: apre la finestra di diagnostica
   --settings            sviluppo: apre la finestra delle impostazioni
+  --settings-page P     sviluppo: la apre su layers, labels o text
   --menu                sviluppo: apre il menu contestuale all'avvio
   --verbose             log dettagliato
   --version             versione
@@ -45,6 +46,7 @@ pub struct Options {
     pub stats_window: bool,
     pub diagnostics: bool,
     pub settings: bool,
+    pub settings_page: Option<String>,
     pub menu: bool,
     pub print_udev_rule: bool,
     pub verbose: bool,
@@ -93,6 +95,14 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--stats-window" => o.stats_window = true,
             "--diagnostics" => o.diagnostics = true,
             "--settings" => o.settings = true,
+            "--settings-page" => {
+                let v = value("--settings-page")?;
+                if !["layers", "labels", "text"].contains(&v.as_str()) {
+                    return Err("--settings-page: usa 'layers', 'labels' o 'text'".into());
+                }
+                o.settings = true;
+                o.settings_page = Some(v);
+            }
             "--menu" => o.menu = true,
             "--print-udev-rule" => o.print_udev_rule = true,
             "--verbose" | "-v" => o.verbose = true,

@@ -238,7 +238,7 @@ Includi un file d'esempio commentato con almeno:
 
 Le modifiche al file vengono ricaricate senza riavviare l'app.
 
-**Finestra Impostazioni** (stile VS Code): il file resta la fonte di verità, la finestra è una vista che lo modifica. Voci divise per sezione con descrizione, ricerca, indicatore "diversa dal predefinito" e ripristino; ogni modifica riscrive solo quella chiave con `toml_edit`, conservando commenti e formattazione. Si apre dal menu, dalla tray e con `Ctrl+,`; *Apri come testo* (`Ctrl+Shift+,`) apre il file nell'editor di sistema. Se il file non è valido la finestra è in sola lettura e mostra l'errore.
+**Finestra Impostazioni** (stile VS Code): il file resta la fonte di verità, la finestra è una vista che lo modifica. Voci divise per sezione con descrizione, ricerca, indicatore "diversa dal predefinito" e ripristino; ogni modifica riscrive solo quella chiave con `toml_edit`, conservando commenti e formattazione. Si apre dal menu, dalla tray e con `Ctrl+,`; *Apri come testo* (`Ctrl+Shift+,`) apre il file nell'editor di sistema. Se il file non è valido la finestra è in sola lettura e mostra l'errore. Pagine dedicate per `[[layers]]` (nome, colore con selettore, aggiunta e rimozione dell'ultimo) e `[[labels]]` (testo, descrizione, keycode o posizione, layer, app, con la validazione sulla scheda), e una scheda *File di testo* che modifica il file intero e lo salva solo se valido.
 
 Anche le scelte del menu (scala, opacità, vista, tema, lingua, stile, tasti, heads-up, combo, keycast) vengono scritte nel TOML allo stesso modo; `keyboard-hud-state.toml` ricorda solo la posizione della finestra.
 
