@@ -67,7 +67,11 @@ const INDICATOR_VIEWPORT: &str = "hud-indicator";
 const INDICATOR_SIZE: Vec2 = Vec2::new(420.0, 32.0);
 
 /// Menu size before the first measurement.
-const MENU_ESTIMATE: Vec2 = Vec2::new(300.0, 340.0);
+/// The menu window never changes size (resizing it while it draws flickers on
+/// Windows): tabs keep it short.
+const MENU_SIZE: Vec2 = Vec2::new(430.0, 470.0);
+/// Width of the tab column in the menu.
+const MENU_TABS_WIDTH: f32 = 96.0;
 
 #[derive(Debug, Clone, Copy)]
 struct MenuWindow {
@@ -77,8 +81,18 @@ struct MenuWindow {
     anchor: Option<egui::Pos2>,
     left: bool,
     up: bool,
-    size: Option<Vec2>,
     focused_once: bool,
+}
+
+/// Tabs of the context menu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum MenuTab {
+    #[default]
+    Window,
+    Style,
+    Keys,
+    Tools,
+    General,
 }
 
 /// Commands for the HUD window, also when issued while drawing another window.
@@ -540,6 +554,8 @@ pub struct HudApp {
     heat: HeatMode,
     heat_cache: Option<(Instant, Totals)>,
     menu: Option<MenuWindow>,
+    /// Tab shown in the menu, kept while the app runs.
+    menu_tab: MenuTab,
     /// Key under the pointer when the menu was opened: `(layer, row, col)`.
     menu_key: Option<(u8, u8, u8)>,
     key_editor: key_editor::KeyEditor,
@@ -648,6 +664,7 @@ impl HudApp {
             heat: HeatMode::Off,
             heat_cache: None,
             menu: None,
+            menu_tab: MenuTab::default(),
             menu_key: None,
             key_editor: key_editor::KeyEditor::default(),
             history: history::HistoryWindow::default(),
@@ -1796,7 +1813,6 @@ impl HudApp {
             anchor,
             left: pointer.x > hud.center().x,
             up: pointer.y > hud.center().y,
-            size: None,
             focused_once: false,
         });
     }
@@ -1868,8 +1884,7 @@ impl HudApp {
         let area = m.anchor.and_then(|a| work_area(ctx, Rect::from_center_size(a, Vec2::splat(2.0))));
         // taller than the screen (small or scaled displays): it scrolls
         let max_height = area.map_or(f32::INFINITY, |a| a.height() - 2.0 * margin);
-        let size = m.size.unwrap_or(MENU_ESTIMATE);
-        let size = Vec2::new(size.x, size.y.min(max_height));
+        let size = Vec2::new(MENU_SIZE.x, MENU_SIZE.y.min(max_height));
         let place = m.anchor.map(|a| match area {
             Some(area) => screen::popup_position(a, size, area, m.left, m.up, margin),
             None => a - Vec2::new(if m.left { size.x } else { 0.0 }, if m.up { size.y } else { 0.0 }),
@@ -1886,7 +1901,6 @@ impl HudApp {
             None => builder,
         };
         let mut close = false;
-        let mut measured = None;
         let mut focused_once = m.focused_once;
         ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(MENU_VIEWPORT), builder, |ui, _class| {
             let vctx = ui.ctx().clone();
@@ -1902,36 +1916,69 @@ impl HudApp {
                 _ => {}
             }
             close |= esc || close_requested;
-            // the window size to use: the frame around the whole contents, also
-            // the part scrolled out of view
-            let mut content = Vec2::ZERO;
-            let mut visible = Vec2::ZERO;
-            let r = egui::Frame::central_panel(ui.style())
-                .show(ui, |ui| {
-                    let out =
-                        egui::ScrollArea::vertical().max_height(max_height - 16.0).show(ui, |ui| self.context_menu(ui));
-                    content = out.content_size;
-                    visible = out.inner_rect.size();
-                })
-                .response
-                .rect;
-            measured = Some(Vec2::new(r.width(), r.height() - visible.y + content.y).ceil());
+            self.context_menu(ui);
         });
         match &mut self.menu {
-            Some(m) if !close => {
-                m.focused_once = focused_once;
-                if measured.is_some_and(|s| m.size.is_none_or(|old| (old - s).length() > 0.5)) {
-                    m.size = measured;
-                }
-            }
+            Some(m) if !close => m.focused_once = focused_once,
             _ => self.menu = None,
         }
     }
 
+    /// The menu: what is under the click and the main switches on top, tabs
+    /// on the left, the chosen tab in the middle, Settings and Quit at the
+    /// bottom. Panels share the fixed window, which never changes size.
     fn context_menu(&mut self, ui: &mut egui::Ui) {
         let lang = self.lang;
         let ctx = ui.ctx().clone();
-        ui.set_min_width(270.0);
+        egui::Panel::top("menu-head").show(ui, |ui| self.menu_head(ui));
+        egui::Panel::bottom("menu-foot").show(ui, |ui| {
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if ui.button(tr(lang, Msg::MenuSettings)).clicked() {
+                    self.open_settings();
+                    self.close_menu();
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button(tr(lang, Msg::MenuQuit)).clicked() {
+                        root_cmd(&ctx, ViewportCommand::Close);
+                    }
+                });
+            });
+            ui.add_space(2.0);
+        });
+        egui::Panel::left("menu-tabs").resizable(false).exact_size(MENU_TABS_WIDTH + 12.0).show(ui, |ui| {
+            ui.add_space(6.0);
+            for (tab, msg) in [
+                (MenuTab::Window, Msg::GroupWindow),
+                (MenuTab::Style, Msg::GroupStyle),
+                (MenuTab::Keys, Msg::GroupOnKeys),
+                (MenuTab::Tools, Msg::GroupTools),
+                (MenuTab::General, Msg::GroupGeneral),
+            ] {
+                let r = ui
+                    .add_sized([MENU_TABS_WIDTH, 26.0], egui::Button::selectable(self.menu_tab == tab, tr(lang, msg)));
+                if r.clicked() {
+                    self.menu_tab = tab;
+                }
+            }
+        });
+        egui::CentralPanel::default().show(ui, |ui| {
+            egui::ScrollArea::vertical().id_salt("menu-body").auto_shrink([false, false]).show(ui, |ui| {
+                ui.add_space(4.0);
+                match self.menu_tab {
+                    MenuTab::Window => self.menu_window_tab(ui, &ctx),
+                    MenuTab::Style => self.menu_style_tab(ui),
+                    MenuTab::Keys => self.menu_keys_tab(ui),
+                    MenuTab::Tools => self.menu_tools_tab(ui, &ctx),
+                    MenuTab::General => self.menu_general_tab(ui, &ctx),
+                }
+            });
+        });
+    }
+
+    fn menu_head(&mut self, ui: &mut egui::Ui) {
+        let lang = self.lang;
+        let ctx = ui.ctx().clone();
         ui.spacing_mut().item_spacing.y = 5.0;
         // some window systems never give focus to the menu window: always offer a way out
         ui.horizontal(|ui| {
@@ -2011,235 +2058,226 @@ impl HudApp {
                 w.set_paused(paused);
             }
         }
-        ui.separator();
+        ui.add_space(4.0);
+    }
 
-        egui::CollapsingHeader::new(tr(lang, Msg::GroupWindow)).id_salt("menu-window").show(ui, |ui| {
-            egui::Grid::new("menu-window-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-                ui.label(tr(lang, Msg::MenuOpacity));
-                let mut pct = (self.opacity * 100.0).round();
-                if ui.add(egui::Slider::new(&mut pct, 20.0..=100.0).suffix("%").fixed_decimals(0)).changed() {
-                    self.opacity = pct / 100.0;
-                    self.mark_dirty();
+    fn menu_window_tab(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let lang = self.lang;
+        egui::Grid::new("menu-window-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+            ui.label(tr(lang, Msg::MenuOpacity));
+            let mut pct = (self.opacity * 100.0).round();
+            if ui.add(egui::Slider::new(&mut pct, 20.0..=100.0).suffix("%").fixed_decimals(0)).changed() {
+                self.opacity = pct / 100.0;
+                self.mark_dirty();
+            }
+            ui.end_row();
+            ui.label(tr(lang, Msg::MenuScale));
+            let mut pct = (self.scale * 100.0).round();
+            let r = ui.add(egui::Slider::new(&mut pct, 50.0..=200.0).suffix("%").fixed_decimals(0));
+            if r.changed() {
+                self.scale = pct / 100.0;
+            }
+            // resizing while dragging would move the slider under the pointer
+            if r.drag_stopped() || (r.changed() && !r.dragged()) {
+                self.resize(ctx);
+            }
+            ui.end_row();
+            ui.label(tr(lang, Msg::MenuView));
+            ui.horizontal(|ui| {
+                let before = self.view;
+                ui.selectable_value(&mut self.view, ViewMode::Full, tr(lang, Msg::ViewFull));
+                ui.selectable_value(&mut self.view, ViewMode::Compact, tr(lang, Msg::ViewCompact));
+                if self.view != before {
+                    self.resize(ctx);
                 }
-                ui.end_row();
-                ui.label(tr(lang, Msg::MenuScale));
-                let mut pct = (self.scale * 100.0).round();
-                let r = ui.add(egui::Slider::new(&mut pct, 50.0..=200.0).suffix("%").fixed_decimals(0));
-                if r.changed() {
-                    self.scale = pct / 100.0;
-                }
-                // resizing while dragging would move the slider under the pointer
-                if r.drag_stopped() || (r.changed() && !r.dragged()) {
-                    self.resize(&ctx);
-                }
-                ui.end_row();
-                ui.label(tr(lang, Msg::MenuView));
-                ui.horizontal(|ui| {
-                    let before = self.view;
-                    ui.selectable_value(&mut self.view, ViewMode::Full, tr(lang, Msg::ViewFull));
-                    ui.selectable_value(&mut self.view, ViewMode::Compact, tr(lang, Msg::ViewCompact));
-                    if self.view != before {
-                        self.resize(&ctx);
-                    }
-                });
-                ui.end_row();
-                ui.label(tr(lang, Msg::MenuPosition));
-                let movable = root_outer_rect(&ctx).is_some();
-                ui.add_enabled_ui(movable, |ui| {
-                    egui::Grid::new("positions").spacing([2.0, 2.0]).show(ui, |ui| {
-                        for (row, arrows) in POSITIONS.iter().enumerate() {
-                            for (col, arrow) in arrows.iter().enumerate() {
-                                if ui.small_button(*arrow).clicked() {
-                                    self.move_to(&ctx, screen::Anchor { col: col as u8, row: row as u8 });
-                                    self.close_menu();
-                                }
+            });
+            ui.end_row();
+            ui.label(tr(lang, Msg::MenuPosition));
+            let movable = root_outer_rect(ctx).is_some();
+            ui.add_enabled_ui(movable, |ui| {
+                egui::Grid::new("positions").spacing([2.0, 2.0]).show(ui, |ui| {
+                    for (row, arrows) in POSITIONS.iter().enumerate() {
+                        for (col, arrow) in arrows.iter().enumerate() {
+                            if ui.add_sized([28.0, 24.0], egui::Button::new(*arrow)).clicked() {
+                                self.move_to(ctx, screen::Anchor { col: col as u8, row: row as u8 });
+                                self.close_menu();
                             }
-                            ui.end_row();
                         }
-                    });
-                })
-                .response
-                .on_disabled_hover_text(tr(lang, Msg::PositionUnavailable));
-                ui.end_row();
-            });
-        });
-
-        egui::CollapsingHeader::new(tr(lang, Msg::GroupStyle)).id_salt("menu-style").show(ui, |ui| {
-            egui::Grid::new("menu-theme-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-                ui.label(tr(lang, Msg::MenuTheme));
-                ui.horizontal(|ui| {
-                    let before = self.theme;
-                    ui.selectable_value(&mut self.theme, ThemeChoice::System, tr(lang, Msg::ThemeSystem));
-                    ui.selectable_value(&mut self.theme, ThemeChoice::Dark, tr(lang, Msg::ThemeDark));
-                    ui.selectable_value(&mut self.theme, ThemeChoice::Light, tr(lang, Msg::ThemeLight));
-                    if self.theme != before {
-                        self.mark_dirty();
-                    }
-                });
-                ui.end_row();
-            });
-            ui.add_space(2.0);
-            ui.label(tr(lang, Msg::MenuStyle));
-            // the styles in even columns
-            let mut chosen = None;
-            egui::Grid::new("menu-styles").num_columns(3).spacing([4.0, 4.0]).min_col_width(84.0).show(ui, |ui| {
-                for (i, name) in self.style_names.iter().enumerate() {
-                    let r =
-                        ui.add_sized([84.0, 20.0], egui::Button::selectable(*name == self.style_name, name.as_str()));
-                    if r.clicked() && *name != self.style_name {
-                        chosen = Some(name.clone());
-                    }
-                    if i % 3 == 2 {
                         ui.end_row();
                     }
-                }
-            });
-            if let Some(name) = chosen {
-                self.set_style(&name, true);
-            }
-            ui.add_space(2.0);
-            let look = self.look();
-            egui::Grid::new("menu-look-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-                ui.label(tr(lang, Msg::MenuKeyOpacity));
-                let mut pct = (look.key_opacity * 100.0).round();
-                if ui.add(egui::Slider::new(&mut pct, 20.0..=100.0).suffix("%").fixed_decimals(0)).changed() {
-                    self.key_opacity = Some(pct / 100.0);
-                    self.mark_dirty();
-                }
-                ui.end_row();
-                ui.label(tr(lang, Msg::MenuKeyRadius));
-                let mut pct = (look.key_radius * 100.0).round();
-                if ui.add(egui::Slider::new(&mut pct, 0.0..=50.0).suffix("%").fixed_decimals(0)).changed() {
-                    self.key_radius = Some(pct / 100.0);
-                    self.mark_dirty();
-                }
-                ui.end_row();
-            });
-            ui.horizontal(|ui| {
-                if ui.button(tr(lang, Msg::MenuSaveStyle)).on_hover_text(tr(lang, Msg::SaveStyleHint)).clicked() {
-                    self.save_style();
-                }
-                let dir = style::dir();
-                if ui.button(tr(lang, Msg::MenuStylesFolder)).on_hover_text(dir.display().to_string()).clicked() {
-                    if let Err(e) = backup::open_folder(&dir) {
-                        self.notify(format!("{}: {e}", dir.display()));
-                    }
-                    self.close_menu();
-                }
-            });
-        });
-
-        egui::CollapsingHeader::new(tr(lang, Msg::GroupOnKeys)).id_salt("menu-keys").show(ui, |ui| {
-            let has_combos = self.live.as_ref().or(self.offline.as_ref()).is_some_and(|l| !l.dynamic.combos.is_empty());
-            let hint = tr(lang, if has_combos { Msg::CombosHint } else { Msg::NoCombos });
-            let r = ui
-                .add_enabled(has_combos, egui::Checkbox::new(&mut self.show_combos, tr(lang, Msg::MenuCombos)))
-                .on_hover_text(hint)
-                .on_disabled_hover_text(hint);
-            if r.changed() {
-                self.mark_dirty();
-            }
-            if ui
-                .checkbox(&mut self.keycast_on, tr(lang, Msg::MenuKeycast))
-                .on_hover_text(tr(lang, Msg::KeycastHint))
-                .changed()
-            {
-                self.keycast = keycast::Keycast::default();
-                self.mark_dirty();
-            }
-            ui.horizontal(|ui| {
-                ui.label(tr(lang, Msg::MenuHeatmap));
-                ui.add_enabled_ui(self.stats.is_some(), |ui| {
-                    ui.selectable_value(&mut self.heat, HeatMode::Off, tr(lang, Msg::HeatOff));
-                    ui.selectable_value(&mut self.heat, HeatMode::Layer, tr(lang, Msg::HeatLayer));
-                    ui.selectable_value(&mut self.heat, HeatMode::All, tr(lang, Msg::HeatAll));
                 });
-            });
+            })
+            .response
+            .on_disabled_hover_text(tr(lang, Msg::PositionUnavailable));
+            ui.end_row();
         });
+    }
 
-        egui::CollapsingHeader::new(tr(lang, Msg::GroupTools)).id_salt("menu-tools").show(ui, |ui| {
-            let wide = |ui: &mut egui::Ui, text: &str| ui.add(egui::Button::new(text).min_size(Vec2::new(220.0, 0.0)));
-            if wide(ui, tr(lang, Msg::MenuSearch)).clicked() {
-                self.search.open();
-                root_cmd(&ctx, ViewportCommand::Focus);
-                self.close_menu();
-            }
-            if wide(ui, tr(lang, Msg::MenuTraining)).clicked() {
-                self.training.open = true;
-                self.close_menu();
-            }
-            if wide(ui, tr(lang, Msg::MenuStats)).clicked() {
-                self.report.open = true;
-                self.close_menu();
-            }
-            let has_layout = self.live.is_some() || self.offline.is_some();
-            let r = ui
-                .add_enabled(has_layout, egui::Button::new(tr(lang, Msg::MenuExport)).min_size(Vec2::new(220.0, 0.0)));
-            if r.on_hover_text(tr(lang, Msg::ExportHint)).clicked() {
-                let path = self.export_path();
-                match self.export_keymap(&path) {
-                    Ok(()) => {
-                        if let Err(e) = backup::open_path(&path) {
-                            log::warn!("{}: {e}", path.display());
-                        }
-                        self.notify(format!("{}: {}", tr(lang, Msg::ExportDone), path.display()));
-                    }
-                    Err(e) => self.notify(format!("{}: {e}", tr(lang, Msg::ExportFailed))),
+    fn menu_style_tab(&mut self, ui: &mut egui::Ui) {
+        let lang = self.lang;
+        egui::Grid::new("menu-theme-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+            ui.label(tr(lang, Msg::MenuTheme));
+            ui.horizontal(|ui| {
+                let before = self.theme;
+                ui.selectable_value(&mut self.theme, ThemeChoice::System, tr(lang, Msg::ThemeSystem));
+                ui.selectable_value(&mut self.theme, ThemeChoice::Dark, tr(lang, Msg::ThemeDark));
+                ui.selectable_value(&mut self.theme, ThemeChoice::Light, tr(lang, Msg::ThemeLight));
+                if self.theme != before {
+                    self.mark_dirty();
                 }
-                self.close_menu();
+            });
+            ui.end_row();
+        });
+        ui.add_space(2.0);
+        ui.label(tr(lang, Msg::MenuStyle));
+        // the styles in even columns
+        let mut chosen = None;
+        egui::Grid::new("menu-styles").num_columns(3).spacing([4.0, 4.0]).min_col_width(84.0).show(ui, |ui| {
+            for (i, name) in self.style_names.iter().enumerate() {
+                let r = ui.add_sized([84.0, 20.0], egui::Button::selectable(*name == self.style_name, name.as_str()));
+                if r.clicked() && *name != self.style_name {
+                    chosen = Some(name.clone());
+                }
+                if i % 3 == 2 {
+                    ui.end_row();
+                }
             }
-            if wide(ui, tr(lang, Msg::MenuHistory)).clicked() {
-                self.history.open(&self.backup_dir());
-                self.close_menu();
+        });
+        if let Some(name) = chosen {
+            self.set_style(&name, true);
+        }
+        ui.add_space(2.0);
+        let look = self.look();
+        egui::Grid::new("menu-look-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+            ui.label(tr(lang, Msg::MenuKeyOpacity));
+            let mut pct = (look.key_opacity * 100.0).round();
+            if ui.add(egui::Slider::new(&mut pct, 20.0..=100.0).suffix("%").fixed_decimals(0)).changed() {
+                self.key_opacity = Some(pct / 100.0);
+                self.mark_dirty();
             }
-            let dir = self.backup_dir();
-            if wide(ui, tr(lang, Msg::MenuBackups)).on_hover_text(dir.display().to_string()).clicked() {
+            ui.end_row();
+            ui.label(tr(lang, Msg::MenuKeyRadius));
+            let mut pct = (look.key_radius * 100.0).round();
+            if ui.add(egui::Slider::new(&mut pct, 0.0..=50.0).suffix("%").fixed_decimals(0)).changed() {
+                self.key_radius = Some(pct / 100.0);
+                self.mark_dirty();
+            }
+            ui.end_row();
+        });
+        ui.horizontal(|ui| {
+            if ui.button(tr(lang, Msg::MenuSaveStyle)).on_hover_text(tr(lang, Msg::SaveStyleHint)).clicked() {
+                self.save_style();
+            }
+            let dir = style::dir();
+            if ui.button(tr(lang, Msg::MenuStylesFolder)).on_hover_text(dir.display().to_string()).clicked() {
                 if let Err(e) = backup::open_folder(&dir) {
                     self.notify(format!("{}: {e}", dir.display()));
                 }
                 self.close_menu();
             }
-            if wide(ui, tr(lang, Msg::MenuDiagnostics)).clicked() {
-                self.diagnostics.open = true;
-                self.close_menu();
-            }
         });
+    }
 
-        egui::CollapsingHeader::new(tr(lang, Msg::GroupGeneral)).id_salt("menu-general").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(tr(lang, Msg::MenuLanguage));
-                let mut choice = self.language;
-                ui.selectable_value(&mut choice, LanguageChoice::Auto, tr(lang, Msg::LanguageAuto));
-                ui.selectable_value(&mut choice, LanguageChoice::It, "Italiano");
-                ui.selectable_value(&mut choice, LanguageChoice::En, "English");
-                if choice != self.language {
-                    self.set_language(&ctx, choice);
-                }
-            });
-            let (mut on, hint) = match &self.autostart {
-                Ok(autostart::State::On) => (true, tr(lang, Msg::AutostartHint).to_string()),
-                Ok(autostart::State::Off) => (false, tr(lang, Msg::AutostartHint).to_string()),
-                Ok(autostart::State::Stale) => (false, tr(lang, Msg::AutostartStale).to_string()),
-                Err(e) => (false, format!("{}: {e}", tr(lang, Msg::AutostartError))),
-            };
-            let hint = format!("{hint}\n{}", autostart::location());
-            if ui.checkbox(&mut on, tr(lang, Msg::MenuAutostart)).on_hover_text(hint).changed() {
-                self.set_autostart(on);
-            }
-        });
-
-        ui.separator();
+    fn menu_keys_tab(&mut self, ui: &mut egui::Ui) {
+        let lang = self.lang;
+        let has_combos = self.live.as_ref().or(self.offline.as_ref()).is_some_and(|l| !l.dynamic.combos.is_empty());
+        let hint = tr(lang, if has_combos { Msg::CombosHint } else { Msg::NoCombos });
+        let r = ui
+            .add_enabled(has_combos, egui::Checkbox::new(&mut self.show_combos, tr(lang, Msg::MenuCombos)))
+            .on_hover_text(hint)
+            .on_disabled_hover_text(hint);
+        if r.changed() {
+            self.mark_dirty();
+        }
+        if ui
+            .checkbox(&mut self.keycast_on, tr(lang, Msg::MenuKeycast))
+            .on_hover_text(tr(lang, Msg::KeycastHint))
+            .changed()
+        {
+            self.keycast = keycast::Keycast::default();
+            self.mark_dirty();
+        }
         ui.horizontal(|ui| {
-            if ui.button(tr(lang, Msg::MenuSettings)).clicked() {
-                self.open_settings();
-                self.close_menu();
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(tr(lang, Msg::MenuQuit)).clicked() {
-                    root_cmd(&ctx, ViewportCommand::Close);
-                }
+            ui.label(tr(lang, Msg::MenuHeatmap));
+            ui.add_enabled_ui(self.stats.is_some(), |ui| {
+                ui.selectable_value(&mut self.heat, HeatMode::Off, tr(lang, Msg::HeatOff));
+                ui.selectable_value(&mut self.heat, HeatMode::Layer, tr(lang, Msg::HeatLayer));
+                ui.selectable_value(&mut self.heat, HeatMode::All, tr(lang, Msg::HeatAll));
             });
         });
+    }
+
+    fn menu_tools_tab(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let lang = self.lang;
+        let wide = |ui: &mut egui::Ui, text: &str| ui.add(egui::Button::new(text).min_size(Vec2::new(220.0, 0.0)));
+        if wide(ui, tr(lang, Msg::MenuSearch)).clicked() {
+            self.search.open();
+            root_cmd(ctx, ViewportCommand::Focus);
+            self.close_menu();
+        }
+        if wide(ui, tr(lang, Msg::MenuTraining)).clicked() {
+            self.training.open = true;
+            self.close_menu();
+        }
+        if wide(ui, tr(lang, Msg::MenuStats)).clicked() {
+            self.report.open = true;
+            self.close_menu();
+        }
+        let has_layout = self.live.is_some() || self.offline.is_some();
+        let r =
+            ui.add_enabled(has_layout, egui::Button::new(tr(lang, Msg::MenuExport)).min_size(Vec2::new(220.0, 0.0)));
+        if r.on_hover_text(tr(lang, Msg::ExportHint)).clicked() {
+            let path = self.export_path();
+            match self.export_keymap(&path) {
+                Ok(()) => {
+                    if let Err(e) = backup::open_path(&path) {
+                        log::warn!("{}: {e}", path.display());
+                    }
+                    self.notify(format!("{}: {}", tr(lang, Msg::ExportDone), path.display()));
+                }
+                Err(e) => self.notify(format!("{}: {e}", tr(lang, Msg::ExportFailed))),
+            }
+            self.close_menu();
+        }
+        if wide(ui, tr(lang, Msg::MenuHistory)).clicked() {
+            self.history.open(&self.backup_dir());
+            self.close_menu();
+        }
+        let dir = self.backup_dir();
+        if wide(ui, tr(lang, Msg::MenuBackups)).on_hover_text(dir.display().to_string()).clicked() {
+            if let Err(e) = backup::open_folder(&dir) {
+                self.notify(format!("{}: {e}", dir.display()));
+            }
+            self.close_menu();
+        }
+        if wide(ui, tr(lang, Msg::MenuDiagnostics)).clicked() {
+            self.diagnostics.open = true;
+            self.close_menu();
+        }
+    }
+
+    fn menu_general_tab(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let lang = self.lang;
+        ui.horizontal(|ui| {
+            ui.label(tr(lang, Msg::MenuLanguage));
+            let mut choice = self.language;
+            ui.selectable_value(&mut choice, LanguageChoice::Auto, tr(lang, Msg::LanguageAuto));
+            ui.selectable_value(&mut choice, LanguageChoice::It, "Italiano");
+            ui.selectable_value(&mut choice, LanguageChoice::En, "English");
+            if choice != self.language {
+                self.set_language(ctx, choice);
+            }
+        });
+        let (mut on, hint) = match &self.autostart {
+            Ok(autostart::State::On) => (true, tr(lang, Msg::AutostartHint).to_string()),
+            Ok(autostart::State::Off) => (false, tr(lang, Msg::AutostartHint).to_string()),
+            Ok(autostart::State::Stale) => (false, tr(lang, Msg::AutostartStale).to_string()),
+            Err(e) => (false, format!("{}: {e}", tr(lang, Msg::AutostartError))),
+        };
+        let hint = format!("{hint}\n{}", autostart::location());
+        if ui.checkbox(&mut on, tr(lang, Msg::MenuAutostart)).on_hover_text(hint).changed() {
+            self.set_autostart(on);
+        }
     }
 }
 

@@ -661,7 +661,7 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
         Msg::MenuEditKeyHint => ("Scrive il tasto sulla tastiera, senza aprire Vial. Prima di scrivere viene fatto un backup.", "Writes the key to the keyboard, without opening Vial. A backup is made before writing."),
         Msg::EditKeyRightClick => ("Per cambiare un tasto, apri il menu con il clic destro sopra quel tasto.", "To change a key, open the menu with a right-click on that key."),
         Msg::GroupWindow => ("Finestra", "Window"),
-        Msg::GroupStyle => ("Stile e colori", "Style and colors"),
+        Msg::GroupStyle => ("Stile", "Style"),
         Msg::GroupOnKeys => ("Sui tasti", "On the keys"),
         Msg::GroupTools => ("Strumenti", "Tools"),
         Msg::GroupGeneral => ("Generale", "General"),

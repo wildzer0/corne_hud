@@ -91,7 +91,7 @@ Il firmware funziona identico anche senza HUD collegato. Risponde solo alle rich
 
 ## Uso
 
-**Il menu** (clic destro sull'HUD) ha in alto le azioni sul tasto cliccato (*Cambia questo tasto…*, *Annulla l'ultima modifica*) e gli interruttori più usati (heads-up, click-through, pausa); sotto, gruppi che si aprono con un clic: **Finestra** (opacità, scala, vista, posizione), **Stile e colori** (tema, stili, tasti), **Sui tasti** (combo, keycast, heatmap), **Strumenti** (cerca, allenamento, statistiche, esportazione, backup, diagnostica), **Generale** (lingua, avvio con il sistema). In fondo *Impostazioni…* ed *Esci*.
+**Il menu** (clic destro sull'HUD) ha in alto le azioni sul tasto cliccato (*Cambia questo tasto…*, *Annulla l'ultima modifica*) e gli interruttori più usati (heads-up, click-through, pausa); sotto, a sinistra, le schede **Finestra** (opacità, scala, vista, posizione), **Stile** (tema, stili, tasti), **Sui tasti** (combo, keycast, heatmap), **Strumenti** (cerca, allenamento, statistiche, esportazione, backup, diagnostica), **Generale** (lingua, avvio con il sistema). In fondo *Impostazioni…* ed *Esci*. La finestra del menu ha sempre la stessa misura; ricorda l'ultima scheda aperta.
 
 | Azione | Come |
 |---|---|
@@ -258,7 +258,7 @@ Uno stile decide colori e forma dell'HUD: arrotondamento e opacità dei tasti, b
 
 Inclusi: **predefinito** (l'aspetto di sempre, tasti appena arrotondati), **minimal** (niente bordi, tasti morbidi), **vetro** (finestra e tasti semitrasparenti; un tasto premuto torna pieno), **alto-contrasto** (bianco e nero, bordi spessi, legende più grandi). Poi i colori dei temi più noti, in versione scura e chiara (segue *Tema*): **monokai**, **dracula**, **nord**, **solarized**, **gruvbox**, **catppuccin** (Mocha e Latte), **one** (One Dark e One Light), **tokyo-night**. I colori dei layer restano quelli di `[[layers]]`.
 
-I tuoi stili sono file `.toml` nella cartella `styles/` accanto alla configurazione (menu → Stile e colori → **Cartella stili**); il nome del file è il nome dello stile, e un file con il nome di uno stile incluso lo sostituisce. Ogni voce è facoltativa:
+I tuoi stili sono file `.toml` nella cartella `styles/` accanto alla configurazione (menu → Stile → **Cartella stili**); il nome del file è il nome dello stile, e un file con il nome di uno stile incluso lo sostituisce. Ogni voce è facoltativa:
 
 ```toml
 # styles/notte.toml
