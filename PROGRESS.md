@@ -4,7 +4,7 @@ Registro dei progressi per riprendere il lavoro tra una sessione e l'altra.
 Specifica completa: [docs/PROMPT_HUD.md](docs/PROMPT_HUD.md). Protocollo: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Aggiorna questo file alla fine di ogni sessione.
 
-_Ultimo aggiornamento: 2026-10-23. Piano 6 completo: editor leggero della keymap, storico dei backup, esportazione della keymap, allenamento (editor, storico e allenamento da provare sulla tastiera). Niente release ancora. Ombra di sistema tolta dalle finestre trasparenti (da provare su Windows). Release **v1.1.1** (la v1.1.0 non è stata pubblicata: test fallito su Windows; finestra Impostazioni stile VS Code: voci, layer, etichette e file di testo; scelte del menu nel TOML; icone ⌫/⌦ ridimensionate)._
+_Ultimo aggiornamento: 2026-10-23. Piano 6 completo: editor leggero della keymap, storico dei backup, esportazione della keymap, allenamento (editor, storico e allenamento da provare sulla tastiera). Release **v1.2.0**. Ombra di sistema tolta dalle finestre trasparenti (da provare su Windows). Release **v1.1.1** (la v1.1.0 non è stata pubblicata: test fallito su Windows; finestra Impostazioni stile VS Code: voci, layer, etichette e file di testo; scelte del menu nel TOML; icone ⌫/⌦ ridimensionate)._
 
 ---
 
@@ -168,6 +168,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`, `settings.rs` (finestra Impostazioni), `key_editor.rs` (Cambia tasto), `history.rs` (storico dei backup), `export.rs` (pagina HTML della keymap), `training.rs` (finestra dell'allenamento), `diagnostics.rs`, `keycast.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-23**: release **v1.2.0** (ombra tolta, editor della keymap, storico dei backup, esportazione, allenamento). Tag pubblicato su richiesta dell'utente senza attendere la CI del commit: da controllare sul sito che la CI del tag sia verde e la release abbia tutti gli asset.
 
 - **2026-10-23**: funzione 4 del piano 6, **allenamento**; il piano 6 è completo. 156 test. Verificato col mock in X11 con `--training`: domanda, tempo, errori (il copione del mock preme altri tasti), suggerimento "Fn1 + M" dopo 6 s e il tasto "1" marcato sul layer SYM dell'HUD (fotogramma catturato con `XGetImage`). Non provato: un giro risposto davvero, che richiede la tastiera.
 
