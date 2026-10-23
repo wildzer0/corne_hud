@@ -4,7 +4,7 @@ Registro dei progressi per riprendere il lavoro tra una sessione e l'altra.
 Specifica completa: [docs/PROMPT_HUD.md](docs/PROMPT_HUD.md). Protocollo: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Aggiorna questo file alla fine di ogni sessione.
 
-_Ultimo aggiornamento: 2026-10-23. Piano 6 completo: editor leggero della keymap, storico dei backup, esportazione della keymap, allenamento (editor, storico e allenamento da provare sulla tastiera). Release **v1.2.0**. Ombra di sistema tolta dalle finestre trasparenti (da provare su Windows). Release **v1.1.1** (la v1.1.0 non è stata pubblicata: test fallito su Windows; finestra Impostazioni stile VS Code: voci, layer, etichette e file di testo; scelte del menu nel TOML; icone ⌫/⌦ ridimensionate)._
+_Ultimo aggiornamento: 2026-10-23. Piano 6 completo: editor leggero della keymap, storico dei backup, esportazione della keymap, allenamento (editor, storico e allenamento da provare sulla tastiera). Release **v1.2.1** (stili dei temi noti, voce *Cambia questo tasto…* sempre nel menu). Ombra di sistema tolta dalle finestre trasparenti (da provare su Windows). Release **v1.1.1** (la v1.1.0 non è stata pubblicata: test fallito su Windows; finestra Impostazioni stile VS Code: voci, layer, etichette e file di testo; scelte del menu nel TOML; icone ⌫/⌦ ridimensionate)._
 
 ---
 
@@ -168,6 +168,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`, `settings.rs` (finestra Impostazioni), `key_editor.rs` (Cambia tasto), `history.rs` (storico dei backup), `export.rs` (pagina HTML della keymap), `training.rs` (finestra dell'allenamento), `diagnostics.rs`, `keycast.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-23**: release **v1.2.1** su richiesta dell'utente.
 
 - **2026-10-23**: l'utente non trovava *Cambia questo tasto…* (compariva solo con il clic destro sopra un tasto): ora la voce è sempre nel menu, disattivata con la spiegazione se sotto il clic non c'è un tasto. Otto stili nuovi chiesti dall'utente, scuri e chiari: monokai, dracula, nord, solarized, gruvbox, catppuccin, one, tokyo-night (screenshot di dracula e monokai col mock). L'utente aveva acceso il Caps Lock senza volerlo: nella sua keymap `KC_CAPSLOCK` è sul layer SYS (Fn1 + Fn2), riga 1 colonna 1, e i due Shift insieme accendono Caps Word (`BOTH_SHIFTS_TURNS_ON_CAPS_WORD`).
 
