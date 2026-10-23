@@ -2,6 +2,7 @@
 //! view, context menu.
 
 pub mod diagnostics;
+pub mod export;
 pub mod frameless;
 pub mod header;
 pub mod history;
@@ -253,6 +254,8 @@ pub struct DevOptions {
     /// Opens the key editor on `(layer, row, col)`, searching for the text.
     pub edit_key: Option<((u8, u8, u8), String)>,
     pub history: bool,
+    /// Writes the keymap page to this file as soon as a layout is known, then quits.
+    pub export: Option<PathBuf>,
 }
 
 /// Development aid: capture the window to a PPM file, then quit.
@@ -544,6 +547,8 @@ pub struct HudApp {
     undoing: Option<KeyWrite>,
     /// `--menu`: open the menu as soon as the window position is known.
     dev_menu: bool,
+    /// `--export`: write the keymap page once a layout is known, then quit.
+    dev_export: Option<PathBuf>,
     /// `--edit-key`: open the key editor once the keyboard is connected.
     dev_edit_key: Option<((u8, u8, u8), String)>,
 }
@@ -644,6 +649,7 @@ impl HudApp {
             undoing: None,
             dev_menu: s.dev.menu,
             dev_edit_key: s.dev.edit_key.clone(),
+            dev_export: s.dev.export.clone(),
         };
         // what the file says, except where an older version remembered a menu
         // choice in the state file: that is moved into the config at the first save
@@ -1517,6 +1523,15 @@ impl HudApp {
     }
 
     fn show_key_editor(&mut self, ctx: &egui::Context) {
+        if self.live.is_some() || self.offline.is_some() {
+            if let Some(path) = self.dev_export.take() {
+                match self.export_keymap(&path) {
+                    Ok(()) => log::info!("keymap esportata in {}", path.display()),
+                    Err(e) => log::error!("esportazione in {}: {e}", path.display()),
+                }
+                root_cmd(ctx, ViewportCommand::Close);
+            }
+        }
         if self.live.is_some() {
             if let Some((key, query)) = self.dev_edit_key.take() {
                 self.open_key_editor(key);
@@ -1555,6 +1570,36 @@ impl HudApp {
                 None => self.key_editor.writing = None,
             }
         }
+    }
+
+    /// `export/<keyboard>-keymap_<time>.html` next to the configuration.
+    fn export_path(&self) -> PathBuf {
+        let name = self.live.as_ref().or(self.offline.as_ref()).map_or("keyboard", |l| l.definition.name.as_str());
+        let file = format!("{}-keymap_{}.html", backup::slug(name), crate::clock::file_stamp(crate::clock::now_secs()));
+        paths::base_dir().join("export").join(file)
+    }
+
+    /// Writes the printable keymap page (light theme) to `path`.
+    fn export_keymap(&self, path: &Path) -> std::io::Result<()> {
+        let layout = self.live.as_ref().or(self.offline.as_ref()).ok_or_else(|| std::io::Error::other("no layout"))?;
+        let palette = Palette::new(false, 1.0, self.style.colors(false), self.look());
+        let date = format!("{} UTC", crate::clock::timestamp());
+        let input = export::ExportInput {
+            keyboard: &layout.definition.name,
+            date: &date,
+            keys: &layout.keys,
+            keymap: &layout.keymap,
+            dynamic: &layout.dynamic,
+            layer_names: &self.layer_names,
+            layer_colors: &self.layer_colors,
+            custom: &layout.definition.custom,
+            labels: &self.labels,
+            palette: &palette,
+        };
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(path, export::html(&input))
     }
 
     fn show_history(&mut self, ctx: &egui::Context, palette: &Palette) {
@@ -1997,6 +2042,23 @@ impl HudApp {
                 ui.selectable_value(&mut self.heat, HeatMode::All, tr(lang, Msg::HeatAll));
             });
         });
+        if ui
+            .add_enabled(self.live.is_some() || self.offline.is_some(), egui::Button::new(tr(lang, Msg::MenuExport)))
+            .on_hover_text(tr(lang, Msg::ExportHint))
+            .clicked()
+        {
+            let path = self.export_path();
+            match self.export_keymap(&path) {
+                Ok(()) => {
+                    if let Err(e) = backup::open_path(&path) {
+                        log::warn!("{}: {e}", path.display());
+                    }
+                    self.notify(format!("{}: {}", tr(lang, Msg::ExportDone), path.display()));
+                }
+                Err(e) => self.notify(format!("{}: {e}", tr(lang, Msg::ExportFailed))),
+            }
+            self.close_menu();
+        }
         if ui.button(tr(lang, Msg::MenuHistory)).clicked() {
             self.history.open(&self.backup_dir());
             self.close_menu();

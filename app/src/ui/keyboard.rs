@@ -81,7 +81,7 @@ impl Transform {
     }
 }
 
-fn inset(k: &KleKey) -> KleKey {
+pub(super) fn inset(k: &KleKey) -> KleKey {
     let g = GAP.min(k.w / 4.0).min(k.h / 4.0);
     KleKey { x: k.x + g, y: k.y + g, w: k.w - 2.0 * g, h: k.h - 2.0 * g, ..k.clone() }
 }
@@ -132,7 +132,7 @@ const CORNER_STEPS: usize = 6;
 /// `poly` (convex) with its corners rounded by `radius` pixels, at most half
 /// of each side. Each corner is a quadratic curve with the corner as control
 /// point: the result stays convex and inside `poly`, rotated keys included.
-fn rounded_polygon(poly: &[Pos2], radius: f32) -> Vec<Pos2> {
+pub(super) fn rounded_polygon(poly: &[Pos2], radius: f32) -> Vec<Pos2> {
     let n = poly.len();
     if radius <= 0.0 || n < 3 {
         return poly.to_vec();

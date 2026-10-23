@@ -357,6 +357,10 @@ pub enum Msg {
     HistRestore,
     HistRestoreHint,
     HistRestoreUnavailable,
+    MenuExport,
+    ExportHint,
+    ExportDone,
+    ExportFailed,
 }
 
 pub fn tr(lang: Lang, msg: Msg) -> &'static str {
@@ -672,6 +676,10 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
         Msg::HistRestore => ("Rimetti com'era", "Put it back"),
         Msg::HistRestoreHint => ("Apre «Cambia tasto» con il tasto di prima: si controlla e si scrive da lì.", "Opens “Change key” with the key as it was: check it and write it from there."),
         Msg::HistRestoreUnavailable => ("Per rimettere un tasto serve la tastiera collegata, non in pausa.", "Putting a key back needs the keyboard connected, not paused."),
+        Msg::MenuExport => ("Esporta la keymap…", "Export the keymap…"),
+        Msg::ExportHint => ("Pagina HTML con un disegno per ogni layer, combo, tap dance, macro e key override: si apre nel browser, da cui si stampa o si salva in PDF.", "HTML page with a drawing of every layer, combos, tap dances, macros and key overrides: it opens in the browser, to print or save as PDF."),
+        Msg::ExportDone => ("Keymap esportata", "Keymap exported"),
+        Msg::ExportFailed => ("Esportazione non riuscita", "Export failed"),
     };
     match lang {
         Lang::It => it,

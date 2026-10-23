@@ -136,12 +136,12 @@ fn key(c: u16, ctx: &LegendContext) -> String {
     }
 }
 
-fn combo_text(c: &Combo, ctx: &LegendContext) -> String {
+pub fn combo_text(c: &Combo, ctx: &LegendContext) -> String {
     let keys: Vec<String> = c.inputs().map(|k| key(k, ctx)).collect();
     tr_format!("{} insieme → {}", "{} together → {}", keys.join(" + "), key(c.output, ctx))
 }
 
-fn override_text(o: &KeyOverride, ctx: &LegendContext, names: &Context) -> String {
+pub fn override_text(o: &KeyOverride, ctx: &LegendContext, names: &Context) -> String {
     let off = if o.is_active() { "" } else { pick(" (disattivato)", " (off)") };
     format!(
         "{} + {} → {} ({}){off}",
@@ -152,7 +152,7 @@ fn override_text(o: &KeyOverride, ctx: &LegendContext, names: &Context) -> Strin
     )
 }
 
-fn tap_dance_text(t: &TapDance, ctx: &LegendContext) -> String {
+pub fn tap_dance_text(t: &TapDance, ctx: &LegendContext) -> String {
     let parts: Vec<String> = t
         .actions()
         .iter()

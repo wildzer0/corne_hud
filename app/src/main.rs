@@ -184,6 +184,7 @@ fn run(opts: Options) -> ExitCode {
                     menu: opts.menu,
                     edit_key: opts.edit_key,
                     history: opts.history,
+                    export: opts.export,
                 },
                 config,
                 watcher,
