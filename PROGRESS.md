@@ -4,7 +4,7 @@ Registro dei progressi per riprendere il lavoro tra una sessione e l'altra.
 Specifica completa: [docs/PROMPT_HUD.md](docs/PROMPT_HUD.md). Protocollo: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Aggiorna questo file alla fine di ogni sessione.
 
-_Ultimo aggiornamento: 2026-10-23. Release **v1.1.1** (la v1.1.0 non è stata pubblicata: test fallito su Windows; finestra Impostazioni stile VS Code: voci, layer, etichette e file di testo; scelte del menu nel TOML; icone ⌫/⌦ ridimensionate)._
+_Ultimo aggiornamento: 2026-10-23. Ombra di sistema tolta dalle finestre trasparenti (da provare su Windows). Release **v1.1.1** (la v1.1.0 non è stata pubblicata: test fallito su Windows; finestra Impostazioni stile VS Code: voci, layer, etichette e file di testo; scelte del menu nel TOML; icone ⌫/⌦ ridimensionate)._
 
 ---
 
@@ -40,6 +40,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
    - avvio con il sistema: spuntare dal menu, controllare in `regedit` il valore `Keyboard HUD` sotto `HKCU\...\Run`, riavviare la sessione; poi togliere la spunta;
    - icona nella tray su Windows (area di notifica): clic sinistro, menu, spunte di pausa e avvio automatico; su macOS nella barra dei menu;
    - mini indicatore su Windows: nessun furto di focus all'avvio o dopo (la finestra ora esiste anche senza tastiera), chip "In pausa · Vial" aprendo Vial con l'HUD nascosto, avvisi di `CMK_TOG` e del cambio di OS, click-through, aggiornamento anche con l'HUD nascosto da HUD_TOG (su X11 i fotogrammi continuano, su Windows da verificare);
+   - ombra di sistema assente (2026-10-23, `ui/frameless.rs`): con heads-up e HUD nascosto sopra un'altra finestra non deve restare alcuna ombra, né attorno all'indicatore vuoto o al keycast; con l'HUD visibile niente riga nera in alto, angoli e bordo di Windows 11 assenti; trascinamento, aggancio, click-through e dimensioni giuste come prima. Menu e Impostazioni devono avere ancora l'ombra;
    - icona dell'`.exe` in Esplora risorse e in Proprietà → Dettagli (versione). La CI deve trovare `rc.exe`: se manca, nel log di build compare l'avviso "risorse Windows non incluse".
 4. **Prossime release**: aumentare `version` in `app/Cargo.toml`, poi `git tag vX.Y.Z && git push origin vX.Y.Z`. Il tag deve corrispondere alla versione, altrimenti la CI si ferma.
 
@@ -115,6 +116,7 @@ Idee rimandate: modalità allenamento, esportazione PNG/SVG della keymap, finest
 - Avvio con il sistema: l'elemento è "attivo" solo se coincide esattamente con quello che questo eseguibile scriverebbe (percorso + opzioni `--x11`, `--vid`, `--pid`, `--verbose`); altrimenti è "da aggiornare" e la casella appare vuota. Lo stato si rilegge a ogni apertura del menu. Solo per l'utente corrente, mai voci di sistema.
 - Backup: `.vil` con keycode **numerici** (vial-gui li accetta; la tabella `VIAL_NAMES` mescola nomi e costanti, quindi niente conversione inversa). Si confronta il JSON con l'ultimo backup dello stesso UID; i file si chiamano `<slug>_<YYYY-MM-DDTHHMMSSZ>.vil` e solo quelli vengono potati (`keep`, default 30). Il mock non fa backup. Impostazioni QMK: larghezze da `qmk_settings.c` (`dump::qmk_setting_width`), id sconosciuti saltati.
 - Traffico altrui: durante il polling l'HUD invia solo richieste `0xF0`, quindi ogni report con un altro primo byte è di un altro programma. La pausa ascolta senza inviare e chiude la sessione dopo 20 s di silenzio.
+- Niente ombra di sistema su HUD, indicatore e keycast (Windows): egui-winit la chiede per ogni finestra senza bordi e Windows la disegna attorno a tutto il rettangolo, anche trasparente (fastidiosa con heads-up, segnalato dall'utente). `ui/frameless.rs` riconosce le finestre dal titolo, le sottoclassa (`SetWindowSubclass`) e risponde a `WM_NCCALCSIZE` con l'area client pari alla finestra, cioè come winit senza ombra; toglie anche angoli e bordo di Windows 11. Menu e altre finestre tengono l'ombra. Scartati: ombra solo da visibile (scatta mentre l'HUD sfuma) e `Visible(false)` (rischio di furto del focus).
 - Il menu contestuale è una finestra separata, non un popup dentro l'HUD (vedi registro, 2026-10-22).
 
 ## Ambiente di sviluppo
@@ -159,6 +161,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`, `settings.rs` (finestra Impostazioni), `diagnostics.rs`, `keycast.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-23**: l'utente trova fastidiosa l'ombra dell'HUD nascosto in heads-up. Causa: l'ombra di sistema che egui-winit chiede per le finestre senza bordi (`with_undecorated_shadow`), disegnata da Windows anche sulla finestra trasparente. Tolta da HUD, indicatore e keycast con `ui/frameless.rs` (vedi decisioni). Controllato con clippy per Linux e `x86_64-pc-windows-msvc`, 142 test; **non provato su Windows**.
 
 - **2026-10-23**: la CI del tag `v1.1.0` è fallita su Windows (`config_edit::tests::example_config_survives`): il checkout di Windows mette `\r\n` e `toml_edit` riscrive tutto con `\n`. Era anche un difetto vero, perché un file salvato con il Blocco note avrebbe cambiato tutte le terminazioni di riga alla prima modifica dall'app. Ora `config_edit::with_line_endings_of` conserva `\r\n`, e la scheda di testo modifica con `\n` e salva come il file originale. La release esce come **v1.1.1**; il tag `v1.1.0` resta su GitHub senza release.
 

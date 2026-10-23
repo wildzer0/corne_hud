@@ -2,6 +2,7 @@
 //! view, context menu.
 
 pub mod diagnostics;
+pub mod frameless;
 pub mod header;
 pub mod keyboard;
 pub mod keycast;
@@ -1504,7 +1505,7 @@ impl HudApp {
         let now = Instant::now();
         let (col, row) = self.config.keycast.position.cell();
         let builder = egui::ViewportBuilder::default()
-            .with_title("Keyboard HUD · Keycast")
+            .with_title(frameless::KEYCAST_TITLE)
             .with_decorations(false)
             .with_transparent(true)
             .with_always_on_top()
@@ -1535,7 +1536,7 @@ impl HudApp {
         let size = Vec2::new(INDICATOR_SIZE.x, INDICATOR_SIZE.y);
         let (col, row) = self.config.indicator.position.cell();
         let builder = egui::ViewportBuilder::default()
-            .with_title("Keyboard HUD · Indicatore")
+            .with_title(frameless::INDICATOR_TITLE)
             .with_decorations(false)
             .with_transparent(true)
             .with_always_on_top()
@@ -1846,6 +1847,7 @@ impl eframe::App for HudApp {
     }
 
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        frameless::remove_shadows();
         self.drain_events(ctx);
         let now = Instant::now();
         if let TapAction::Single = self.hud_toggle.poll(now) {

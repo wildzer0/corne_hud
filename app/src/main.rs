@@ -131,7 +131,7 @@ fn run(opts: Options) -> ExitCode {
     let scale = window.scale.unwrap_or(a.scale);
     let size = ui::base_size(window.mode.unwrap_or(a.mode)) * scale;
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("Keyboard HUD")
+        .with_title(ui::frameless::HUD_TITLE)
         .with_app_id("keyboard-hud")
         .with_inner_size(size)
         .with_min_inner_size([200.0, 100.0])
