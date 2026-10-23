@@ -91,17 +91,19 @@ Il firmware funziona identico anche senza HUD collegato. Risponde solo alle rich
 
 ## Uso
 
+**Il menu** (clic destro sull'HUD) ha in alto le azioni sul tasto cliccato (*Cambia questo tasto…*, *Annulla l'ultima modifica*) e gli interruttori più usati (heads-up, click-through, pausa); sotto, gruppi che si aprono con un clic: **Finestra** (opacità, scala, vista, posizione), **Stile e colori** (tema, stili, tasti), **Sui tasti** (combo, keycast, heatmap), **Strumenti** (cerca, allenamento, statistiche, esportazione, backup, diagnostica), **Generale** (lingua, avvio con il sistema). In fondo *Impostazioni…* ed *Esci*.
+
 | Azione | Come |
 |---|---|
 | Spostare l'HUD | trascinalo con il mouse. Su Windows si aggancia ai bordi, agli angoli e al centro dello schermo |
-| Metterlo in un angolo, a metà di un bordo o al centro | menu → Posizione (griglia 3×3) |
-| Ingrandire / rimpicciolire (50–200%) | Ctrl + rotellina sull'HUD, oppure menu → Scala |
+| Metterlo in un angolo, a metà di un bordo o al centro | menu → Finestra → Posizione (griglia 3×3) |
+| Ingrandire / rimpicciolire (50–200%) | Ctrl + rotellina sull'HUD, oppure menu → Finestra → Scala |
 | Menu (opacità, scala, vista, posizione, tema, heads-up, combo, heatmap, statistiche, ricerca, impostazioni, click-through, pausa, avvio con il sistema, esci) | clic destro sull'HUD |
 | Mostrare / nascondere | un tocco di **HUD_TOG**. Con l'heads-up attivo il tocco *fissa* l'HUD a schermo, e un altro tocco lo restituisce all'heads-up |
 | Click-through (i clic passano alle finestre sotto) | menu, oppure **doppio tocco** di HUD_TOG. Si disattiva solo con il doppio tocco |
-| Cercare un tasto | Ctrl+F o `/` con l'HUD in primo piano, oppure menu → Cerca. Frecce per scegliere, Invio/Esc per chiudere. Trova anche combo, tap dance e key override |
-| Vedere le combo | menu → Mostra le combo |
-| Avviare l'HUD all'accesso | menu → Avvia con il sistema (vedi sotto) |
+| Cercare un tasto | Ctrl+F o `/` con l'HUD in primo piano, oppure menu → Strumenti → Cerca. Frecce per scegliere, Invio/Esc per chiudere. Trova anche combo, tap dance e key override |
+| Vedere le combo | menu → Sui tasti → Mostra le combo |
+| Avviare l'HUD all'accesso | menu → Generale → Avvia con il sistema (vedi sotto) |
 | Icona nella tray | clic sinistro: mostra/nasconde l'HUD; clic destro: menu con pausa, backup, statistiche, impostazioni, avvio con il sistema, esci |
 | Impostazioni | Ctrl+, con l'HUD in primo piano, menu → Impostazioni…, oppure la tray; Ctrl+Shift+, apre il file di testo |
 | Sfogliare i layer (solo offline) | rotellina o tasti 0–9 |
@@ -124,11 +126,11 @@ Il click-through si attiva solo se la tastiera collegata ha il tasto HUD_TOG, co
 - **Macro**: il tasto mostra cosa scrive o preme (`hi⏎`, `Ctrl+C`, troncato a 6 caratteri) con `M0` in piccolo; il tooltip elenca ogni passo. Le macro si leggono dalla tastiera a ogni connessione, o dal `.vil` in offline.
 - **Tasti premuti**: si accendono subito e sfumano in 200 ms.
 - **Lingua**: italiano o inglese (*English*), dal menu o con `language` in `[appearance]`; con `auto` segue il sistema. Cambiano interfaccia, tooltip, ricerca, CSV delle statistiche e nuove voci del `CHANGELOG.md` dei backup; il log resta in italiano.
-- **Keycast** (menu → *Keycast*, o `[keycast] enabled = true`): per video e presentazioni, in basso sullo schermo compaiono per due secondi e mezzo le scorciatoie premute: `Ctrl+Shift+P`, `Alt+Tab`, `F5`, `Esc`, frecce, tasti multimediali. **Mai il testo**: un tasto che scrive un carattere compare solo insieme a Ctrl, Alt o Gui (Shift da solo non basta), e Invio, Spazio e Backspace non compaiono mai da soli. Niente viene salvato. I mod-tap (Ctrl sulla home row) funzionano: il tasto aspetta un attimo che il modificatore arrivi.
+- **Keycast** (menu → Sui tasti → *Keycast*, o `[keycast] enabled = true`): per video e presentazioni, in basso sullo schermo compaiono per due secondi e mezzo le scorciatoie premute: `Ctrl+Shift+P`, `Alt+Tab`, `F5`, `Esc`, frecce, tasti multimediali. **Mai il testo**: un tasto che scrive un carattere compare solo insieme a Ctrl, Alt o Gui (Shift da solo non basta), e Invio, Spazio e Backspace non compaiono mai da soli. Niente viene salvato. I mod-tap (Ctrl sulla home row) funzionano: il tasto aspetta un attimo che il modificatore arrivi.
 - **Cambiare un tasto senza Vial**: clic destro **sopra il tasto** da cambiare → *Cambia questo tasto…* (prima voce del menu; aperto altrove, il menu la mostra disattivata). Si cerca il nuovo tasto per nome o descrizione (`esc`, `redo`, `MO(2)`, `HUD_TOG`) oppure lo si scrive come in Vial (`C(KC_Z)`, `LCTL_T(KC_A)`, `LT1(KC_SPC)`). Prima di scrivere, l'HUD avvisa se un layer non si potrà più raggiungere o se sparisce l'ultimo `QK_BOOT` o `HUD_TOG`, e chiede conferma. `QK_BOOT` si assegna solo da Vial. Subito prima di ogni scrittura viene fatto un [backup](#backup-automatico) e la modifica finisce nel `CHANGELOG.md`; menu → *Annulla l'ultima modifica* rimette il tasto di prima. Con Colemak attivo le lettere dei layer rimappati vanno cambiate in QWERTY. Macro, tap dance, combo, key override e impostazioni restano in Vial.
-- **Esportare la keymap** (menu → *Esporta la keymap…*, oppure `--export FILE`): una pagina HTML con un disegno per ogni layer, nei colori dei layer e con le tue etichette, più l'elenco di combo, tap dance, macro e key override. Si apre nel browser, da cui si stampa o si salva in PDF. I file finiscono in `export/` accanto alla configurazione.
-- **Allenamento** (menu → *Allenamento…*): l'HUD chiede un simbolo o una scorciatoia (`{`, `Ctrl+Z`, `F5`) e aspetta che tu la prema, 20 domande per giro. Dopo 6 secondi mostra come si fa (`Fn1 + D`) e illumina il tasto sull'HUD. Escono più spesso i tasti dei layer superiori che usi poco (dalle [statistiche](#statistiche-e-privacy), se attive) e quelli sbagliati; alla fine ci sono i risultati e i tasti da ripassare. Vale anche Shift + tasto per un simbolo con Shift. Serve il firmware HUD.
-- **Diagnostica** (menu → *Diagnostica…*): tastiera, protocollo del firmware, letture al secondo, latenza delle risposte, errori e riconnessioni, OS rilevato, altra metà, percorsi dei file, ultimo backup. *Copia tutto* la mette negli appunti, pronta per una segnalazione.
+- **Esportare la keymap** (menu → Strumenti → *Esporta la keymap…*, oppure `--export FILE`): una pagina HTML con un disegno per ogni layer, nei colori dei layer e con le tue etichette, più l'elenco di combo, tap dance, macro e key override. Si apre nel browser, da cui si stampa o si salva in PDF. I file finiscono in `export/` accanto alla configurazione.
+- **Allenamento** (menu → Strumenti → *Allenamento…*): l'HUD chiede un simbolo o una scorciatoia (`{`, `Ctrl+Z`, `F5`) e aspetta che tu la prema, 20 domande per giro. Dopo 6 secondi mostra come si fa (`Fn1 + D`) e illumina il tasto sull'HUD. Escono più spesso i tasti dei layer superiori che usi poco (dalle [statistiche](#statistiche-e-privacy), se attive) e quelli sbagliati; alla fine ci sono i risultati e i tasti da ripassare. Vale anche Shift + tasto per un simbolo con Shift. Serve il firmware HUD.
+- **Diagnostica** (menu → Strumenti → *Diagnostica…*): tastiera, protocollo del firmware, letture al secondo, latenza delle risposte, errori e riconnessioni, OS rilevato, altra metà, percorsi dei file, ultimo backup. *Copia tutto* la mette negli appunti, pronta per una segnalazione.
 - **Mini indicatore**: quando l'HUD è nascosto (heads-up o HUD_TOG), un piccolo badge in un angolo dello schermo ricorda gli stati che restano dopo aver rilasciato i tasti: layer bloccato (per esempio DEBUG con il lucchetto), one-shot in attesa, modificatori bloccati, Caps Lock, Caps Word. Mostra anche perché manca la tastiera (non trovata, in pausa per Vial) e, per due secondi, cosa è appena cambiato: QWERTY/Colemak-DH, OS rilevato o forzato, HUD nascosto da HUD_TOG. Non intercetta i clic. Con `locked_layer = "indicator"` un layer bloccato non tiene più su l'HUD intero, ma solo il badge; con `oneshot = "indicator"` vale lo stesso per i one-shot in attesa (layer e modificatori), con `modifiers = "indicator"` per i modificatori tenuti a lungo.
 - **Tap dance, combo e key override** configurati in Vial, letti dalla tastiera a ogni connessione (quindi anche quando l'HUD riprende dopo la pausa per Vial) oppure dal `.vil` in modalità offline:
   - un tasto tap dance mostra in grande l'azione al tocco e in piccolo quella tenendolo premuto (o il doppio tocco); il tooltip le elenca tutte;
@@ -256,7 +258,7 @@ Uno stile decide colori e forma dell'HUD: arrotondamento e opacità dei tasti, b
 
 Inclusi: **predefinito** (l'aspetto di sempre, tasti appena arrotondati), **minimal** (niente bordi, tasti morbidi), **vetro** (finestra e tasti semitrasparenti; un tasto premuto torna pieno), **alto-contrasto** (bianco e nero, bordi spessi, legende più grandi). Poi i colori dei temi più noti, in versione scura e chiara (segue *Tema*): **monokai**, **dracula**, **nord**, **solarized**, **gruvbox**, **catppuccin** (Mocha e Latte), **one** (One Dark e One Light), **tokyo-night**. I colori dei layer restano quelli di `[[layers]]`.
 
-I tuoi stili sono file `.toml` nella cartella `styles/` accanto alla configurazione (menu → **Cartella stili**); il nome del file è il nome dello stile, e un file con il nome di uno stile incluso lo sostituisce. Ogni voce è facoltativa:
+I tuoi stili sono file `.toml` nella cartella `styles/` accanto alla configurazione (menu → Stile e colori → **Cartella stili**); il nome del file è il nome dello stile, e un file con il nome di uno stile incluso lo sostituisce. Ogni voce è facoltativa:
 
 ```toml
 # styles/notte.toml
@@ -287,8 +289,8 @@ Opacità e arrotondamento dei tasti: il valore di `[appearance]` se c'è, altrim
 L'HUD salva da solo la configurazione della tastiera come file `.vil`, lo stesso formato dell'export di Vial: keymap, encoder, macro, tap dance, combo, key override, alt-repeat e impostazioni QMK. Non serve ricordarsi di esportare dopo ogni modifica.
 
 - **Quando**: alla connessione, quando chiudi Vial (o finisce il traffico della web app), quando il keymap cambia e, ogni 2 minuti a tastiera ferma, per combo e macro, che il firmware non segnala. Un nuovo file nasce **solo se qualcosa è cambiato** rispetto all'ultimo backup della stessa tastiera.
-- **Dove**: cartella `backups/` accanto alla configurazione; si apre da menu → *Backup della tastiera…*. I file si chiamano `corne-v4_2026-10-22T081530Z.vil` (ora UTC); se ne tengono 30 per tastiera.
-- **Confronto** (menu → *Storico dei backup…*): scegli due backup qualsiasi e vedi cosa è cambiato. I tasti cambiati sono evidenziati sulla tastiera disegnata, layer per layer; sotto c'è l'elenco a parole, con combo, tap dance, macro e impostazioni. *Rimetti com'era* accanto a un tasto apre *Cambia tasto* con il valore di prima, da controllare e scrivere. Un backup intero si ricarica in Vial (*File → Load saved layout*).
+- **Dove**: cartella `backups/` accanto alla configurazione; si apre da menu → Strumenti → *Cartella dei backup…*. I file si chiamano `corne-v4_2026-10-22T081530Z.vil` (ora UTC); se ne tengono 30 per tastiera.
+- **Confronto** (menu → Strumenti → *Storico dei backup…*): scegli due backup qualsiasi e vedi cosa è cambiato. I tasti cambiati sono evidenziati sulla tastiera disegnata, layer per layer; sotto c'è l'elenco a parole, con combo, tap dance, macro e impostazioni. *Rimetti com'era* accanto a un tasto apre *Cambia tasto* con il valore di prima, da controllare e scrivere. Un backup intero si ricarica in Vial (*File → Load saved layout*).
 - **Storico**: nella stessa cartella, `CHANGELOG.md` racconta a parole cosa è cambiato a ogni backup, dal più recente. Per esempio:
 
   ```markdown
@@ -309,8 +311,8 @@ L'HUD salva da solo la configurazione della tastiera come file `.vil`, lo stesso
 - Si conta solo **quante volte** viene premuto ogni tasto fisico, su quale layer e in quale giorno (UTC).
 - **Mai** testo, sequenze di tasti o tempi tra un tasto e l'altro. I dati restano sul tuo computer, in `keyboard-hud-stats.json`, e non vengono mai trasmessi.
 - Si disattivano con `[stats] enabled = false` e si azzerano dalla finestra delle statistiche, con conferma.
-- **Heatmap** (menu → Heatmap): pressioni sul layer mostrato, oppure su tutti i layer insieme.
-- **Finestra delle statistiche** (menu → Statistiche): utilizzo dei layer, distribuzione tra le mani, le dita e le righe (quanto lavori sulla home row), tasti più usati con la combinazione per raggiungerli, attività giornaliera, tasti mai usati negli ultimi N giorni, esportazione CSV (`keyboard-hud-stats.csv`).
+- **Heatmap** (menu → Sui tasti → Heatmap): pressioni sul layer mostrato, oppure su tutti i layer insieme.
+- **Finestra delle statistiche** (menu → Strumenti → Statistiche): utilizzo dei layer, distribuzione tra le mani, le dita e le righe (quanto lavori sulla home row), tasti più usati con la combinazione per raggiungerli, attività giornaliera, tasti mai usati negli ultimi N giorni, esportazione CSV (`keyboard-hud-stats.csv`).
 - **Suggerimenti**: se un tasto molto usato di un layer superiore sta in una posizione faticosa (mignolo, righe alta e bassa, colonne di allungamento), la finestra propone di scambiarlo con una posizione comoda e poco usata dello stesso layer, con il risparmio stimato. Segnala anche se una mano lavora molto più dell'altra. Il layer base non viene toccato: la disposizione delle lettere è una scelta di layout. Il modello di fatica è semplice (dito, riga, allungamento) e va preso come uno spunto, non come una regola.
 - Il conteggio si basa sugli stati letti dalla tastiera. Con l'HUD visibile la lettura è a 60 Hz, da nascosto almeno a 30 Hz se le statistiche sono attive. Un tocco più breve di circa 16 ms può sfuggire.
 
@@ -392,7 +394,7 @@ Le tabelle dei keycode sono **generate** da `build.rs` a partire dai file hjson 
 | "In pausa: Vial è aperto" | Chiudi Vial: l'HUD riprende da solo |
 | L'HUD non resta sopra le altre finestre (Linux) | Wayland: avvia con `--x11` |
 | Non riesco più a cliccare l'HUD | Il click-through è attivo: doppio tocco di HUD_TOG. Riavviare l'app lo disattiva comunque |
-| L'HUD è fuori dallo schermo | All'avvio torna da solo sullo schermo più vicino (anche se il monitor dove stava è scollegato). Altrimenti menu → Posizione |
+| L'HUD è fuori dallo schermo | All'avvio torna da solo sullo schermo più vicino (anche se il monitor dove stava è scollegato). Altrimenti menu → Finestra → Posizione |
 | L'HUD è sparito | Heads-up: ricompare tenendo Fn1/Fn2. Oppure è nascosto: tocca HUD_TOG |
 | Legende sbagliate dopo una modifica in Vial | Si aggiornano da sole entro un secondo. Altrimenti metti in pausa e riprendi dal menu |
 | Dettagli | `keyboard-hud.log`, con `--verbose` per il livello debug |

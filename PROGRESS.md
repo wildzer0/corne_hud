@@ -169,6 +169,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 
 ## Registro delle sessioni
 
+- **2026-10-23**: menu contestuale riorganizzato su richiesta dell'utente ("più pulito e comprensibile"): in alto le azioni sul tasto cliccato (con il layer, la posizione e la legenda del tasto) e heads-up, click-through, pausa; poi gruppi richiudibili Finestra, Stile e colori (stili in griglia da 3 colonne), Sui tasti, Strumenti, Generale; in fondo Impostazioni ed Esci. "Backup della tastiera…" diventa "Cartella dei backup…". Verificato in X11 con clic veri sui gruppi.
+
 - **2026-10-23**: release **v1.2.1** su richiesta dell'utente.
 
 - **2026-10-23**: l'utente non trovava *Cambia questo tasto…* (compariva solo con il clic destro sopra un tasto): ora la voce è sempre nel menu, disattivata con la spiegazione se sotto il clic non c'è un tasto. Otto stili nuovi chiesti dall'utente, scuri e chiari: monokai, dracula, nord, solarized, gruvbox, catppuccin, one, tokyo-night (screenshot di dracula e monokai col mock). L'utente aveva acceso il Caps Lock senza volerlo: nella sua keymap `KC_CAPSLOCK` è sul layer SYS (Fn1 + Fn2), riga 1 colonna 1, e i due Shift insieme accendono Caps Word (`BOTH_SHIFTS_TURNS_ON_CAPS_WORD`).
