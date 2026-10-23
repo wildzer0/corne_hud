@@ -4,7 +4,7 @@ Registro dei progressi per riprendere il lavoro tra una sessione e l'altra.
 Specifica completa: [docs/PROMPT_HUD.md](docs/PROMPT_HUD.md). Protocollo: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Aggiorna questo file alla fine di ogni sessione.
 
-_Ultimo aggiornamento: 2026-10-23. Release **v1.1.0** (finestra Impostazioni stile VS Code: voci, layer, etichette e file di testo; scelte del menu nel TOML; icone ⌫/⌦ ridimensionate)._
+_Ultimo aggiornamento: 2026-10-23. Release **v1.1.1** (la v1.1.0 non è stata pubblicata: test fallito su Windows; finestra Impostazioni stile VS Code: voci, layer, etichette e file di testo; scelte del menu nel TOML; icone ⌫/⌦ ridimensionate)._
 
 ---
 
@@ -159,6 +159,8 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`, `settings.rs` (finestra Impostazioni), `diagnostics.rs`, `keycast.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-23**: la CI del tag `v1.1.0` è fallita su Windows (`config_edit::tests::example_config_survives`): il checkout di Windows mette `\r\n` e `toml_edit` riscrive tutto con `\n`. Era anche un difetto vero, perché un file salvato con il Blocco note avrebbe cambiato tutte le terminazioni di riga alla prima modifica dall'app. Ora `config_edit::with_line_endings_of` conserva `\r\n`, e la scheda di testo modifica con `\n` e salva come il file originale. La release esce come **v1.1.1**; il tag `v1.1.0` resta su GitHub senza release.
 
 - **2026-10-23**: release **v1.1.0**. Finestra Impostazioni stile VS Code chiesta dall'utente, fatta in quattro fasi: (1) voci semplici con ricerca, "diversa dal predefinito", ripristino, *Apri come testo* (`Ctrl+,`, `Ctrl+Shift+,`, menu, tray), sola lettura con il file non valido; le scelte del menu passano nel TOML (vedi decisioni); (2) layer con selettore di colore; (3) etichette a schede con validazione; (4) scheda *File di testo* con evidenziazione dei commenti, salvata solo se valida. `config_edit` gestisce chiavi, campi di `[[...]]`, aggiunte e rimozioni. Su segnalazione dell'utente, `⌫` e `⌦` (1,4 em in DejaVu) non sono più larghi di un quadrato. 141 test. Verificato con screenshot e, per la prima volta, con clic veri in WSLg/X11 (XTest via ctypes, cattura con `XGetImage`): aggiunta di un layer, neutro → colore, trascinamento nel selettore (una sola scrittura al rilascio), passaggio di un'etichetta da keycode a posizione, eliminazione con i commenti spostati, migrazione del vecchio file di stato. Non provati col clic: la scheda di testo (serve digitare, e WSLg non dà il focus alle finestre nuove), `Ctrl+,`, l'apertura del file nell'editor su Windows/macOS.
 
