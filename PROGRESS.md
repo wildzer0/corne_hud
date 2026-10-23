@@ -4,7 +4,7 @@ Registro dei progressi per riprendere il lavoro tra una sessione e l'altra.
 Specifica completa: [docs/PROMPT_HUD.md](docs/PROMPT_HUD.md). Protocollo: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Aggiorna questo file alla fine di ogni sessione.
 
-_Ultimo aggiornamento: 2026-10-22. Release **v1.0.0** (prima release stabile: finestra Diagnostica, keycast, interfaccia in inglese)._
+_Ultimo aggiornamento: 2026-10-23. Release **v1.1.0** (finestra Impostazioni stile VS Code: voci, layer, etichette e file di testo; scelte del menu nel TOML; icone ⌫/⌦ ridimensionate)._
 
 ---
 
@@ -96,7 +96,8 @@ Idee rimandate: modalità allenamento, esportazione PNG/SVG della keymap, finest
 - Font di ripiego DejaVu Sans incorporato, per i simboli dei tasti. Il lucchetto è disegnato a mano perché nessun font ha il glifo.
 - Il crate è dichiarato GPL-2.0-or-later, per i dati derivati da vial-qmk e vial-gui.
 - Layer "tenuto" o "bloccato" vengono dedotti dai tasti premuti (`model::classify_layers`), tranne quelli bloccati con Layer Lock (`QK_LLCK`): per quelli il firmware lo dice nel byte 9 (`locked_layers`, layer 0-7) e il dato vince sulla deduzione, anche col tasto del layer ancora premuto. `TG`/`TO` restano dedotti.
-- Lo stato della finestra sta in `keyboard-hud-state.toml`, separato da `keyboard-hud.toml`, che non viene mai riscritto.
+- Da v1.1.0 `keyboard-hud.toml` è la fonte di verità anche per le scelte del menu (scala, opacità, vista, tema, lingua, stile, tasti, heads-up, combo, keycast): l'app lo modifica solo con `config_edit` (`toml_edit`), che riscrive le chiavi toccate e conserva commenti e formattazione, e non scrive mai un file che non si analizza. `keyboard-hud-state.toml` tiene solo la posizione; le scelte che la 1.0 teneva lì vengono spostate nel TOML al primo avvio (vincono loro, erano quelle in uso). Scelta dell'utente del 2026-10-23 (opzione "a").
+- Finestra Impostazioni (`ui/settings.rs`): schema dichiarativo `GROUPS` con chiave, testi, tipo di controllo; intervalli condivisi con `Config::sanitize` (costanti in `config.rs` e `style.rs`). Slider, numeri e colori sono bozze salvate al rilascio del mouse; i campi di testo al cambio di focus. ↺ scrive il valore predefinito (così resta il commento a fianco), toglie la chiave solo per le voci senza predefinito. Rimuovendo una chiave o un elemento di `[[...]]`, le righe di commento sopra passano a ciò che segue.
 - Click-through: si attiva solo se il firmware ha `HUD_TOG`; si spegne da solo se la tastiera si scollega; non viene ricordato tra un avvio e l'altro.
 - `HUD_TOG`, tocco singolo: con heads-up attivo fissa o libera l'HUD; senza heads-up lo mostra o nasconde. Il doppio tocco (300 ms) gestisce il click-through.
 - Con le statistiche attive, il polling da nascosto è almeno 30 Hz. Le date delle statistiche sono in UTC.
@@ -140,6 +141,10 @@ cargo run -- --offline --layer 4       # layer DEBUG da vial.json + .vil incorpo
 #   con --stats-window/--menu + --screenshot le finestre secondarie vengono incorporate nell'HUD
 #   (in WSLg la cattura di una finestra separata non arriva mai)
 # finestre reali in WSLg: avvia con --x11 e usa `xwininfo -root -tree`
+#   --settings / --settings-page layers|labels|text aprono la finestra Impostazioni
+#   clic veri: XTest via ctypes (libXtst) con coordinate assolute; cattura di una finestra
+#   separata: XGetImage sull'id della finestra (sulla radice dà BadMatch). Attenzione: l'HUD
+#   è sempre in primo piano e ruba i clic se copre l'altra finestra (usa scale = 0.5)
 ```
 
 Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4–6 s Fn2 (NAV), 6–8 s tri-layer (SYS), 8–9,5 s one-shot ACC, 9,5–11 s Ctrl in mod-tap, 11–12,5 s Caps Word, 12,5–15 s DEBUG bloccato. Lo screenshot arriva dopo 2 s, quindi per catturare l'istante T usa `--mock-at T-2000`.
@@ -149,11 +154,13 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `firmware/mia/keymap.c`: sezione 9 (HUD). `vial.json`: `customKeycodes` + `HUD`.
 - `app/src/hid/`: `protocol.rs` (formato), `device.rs` (richieste), `transport.rs` (hidapi, udev), `worker.rs` (thread, riconnessione, pausa Vial), `mock.rs`.
 - `app/src/vial/`: `definition.rs`, `dynamic.rs` (tap dance, combo, key override), `keycode.rs`, `names.rs` (tabelle generate, `parse_keycode`), `legend.rs`, `vil.rs`.
-- `app/src/`: `kle.rs`, `model.rs`, `config.rs`, `screen.rs` (geometria dello schermo), `autostart.rs` (avvio con il sistema), `labels.rs`, `headsup.rs`, `search.rs`, `stats.rs`, `clock.rs`, `logging.rs`, `paths.rs`, `cli.rs`, `i18n.rs` (tutte le stringhe utente).
+- `app/src/`: `kle.rs`, `model.rs`, `config.rs`, `config_edit.rs` (modifiche al TOML che conservano i commenti), `screen.rs` (geometria dello schermo), `autostart.rs` (avvio con il sistema), `labels.rs`, `headsup.rs`, `search.rs`, `stats.rs`, `clock.rs`, `logging.rs`, `paths.rs`, `cli.rs`, `i18n.rs` (tutte le stringhe utente).
 - `app/packaging/`: `icon/` (icona e script che la genera), `macos/Info.plist`.
-- `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`.
+- `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`, `settings.rs` (finestra Impostazioni), `diagnostics.rs`, `keycast.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-23**: release **v1.1.0**. Finestra Impostazioni stile VS Code chiesta dall'utente, fatta in quattro fasi: (1) voci semplici con ricerca, "diversa dal predefinito", ripristino, *Apri come testo* (`Ctrl+,`, `Ctrl+Shift+,`, menu, tray), sola lettura con il file non valido; le scelte del menu passano nel TOML (vedi decisioni); (2) layer con selettore di colore; (3) etichette a schede con validazione; (4) scheda *File di testo* con evidenziazione dei commenti, salvata solo se valida. `config_edit` gestisce chiavi, campi di `[[...]]`, aggiunte e rimozioni. Su segnalazione dell'utente, `⌫` e `⌦` (1,4 em in DejaVu) non sono più larghi di un quadrato. 141 test. Verificato con screenshot e, per la prima volta, con clic veri in WSLg/X11 (XTest via ctypes, cattura con `XGetImage`): aggiunta di un layer, neutro → colore, trascinamento nel selettore (una sola scrittura al rilascio), passaggio di un'etichetta da keycode a posizione, eliminazione con i commenti spostati, migrazione del vecchio file di stato. Non provati col clic: la scheda di testo (serve digitare, e WSLg non dà il focus alle finestre nuove), `Ctrl+,`, l'apertura del file nell'editor su Windows/macOS.
 
 - **2026-10-22**: release **v1.0.0** pubblicata (tag su `51e339d`, CI verde prima del tag) con tutti gli asset; `sha256sum -c SHA256SUMS.txt` sui file scaricati: tutti OK. Il push del tag ha avviato due esecuzioni del workflow (39820612961 e 39820619683), entrambe verdi, entrambe hanno pubblicato: causa non indagata.
 
