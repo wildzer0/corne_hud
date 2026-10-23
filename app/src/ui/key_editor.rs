@@ -168,6 +168,13 @@ impl KeyEditor {
         *self = KeyEditor { target: Some(target), catalog, focus_query: true, ..KeyEditor::default() };
     }
 
+    /// Starts with `code` chosen (e.g. the key as it was in a backup).
+    pub fn preselect(&mut self, code: u16) {
+        self.query = qmk_name(code);
+        self.selected = Some(code);
+        self.focus_query = false;
+    }
+
     /// Development aid: searches for `query` and picks the first result.
     pub fn search_and_pick(&mut self, query: &str) {
         self.query = query.to_string();

@@ -24,6 +24,7 @@ Uso: keyboard-hud [opzioni]
   --settings            sviluppo: apre la finestra delle impostazioni
   --settings-page P     sviluppo: la apre su layers, labels o text
   --menu                sviluppo: apre il menu contestuale all'avvio
+  --history             sviluppo: apre lo storico dei backup
   --edit-key L,R,C[,T]  sviluppo: apre «Cambia tasto» su layer L, riga R, colonna C (e cerca T)
   --verbose             log dettagliato
   --version             versione
@@ -50,6 +51,7 @@ pub struct Options {
     pub settings_page: Option<String>,
     pub menu: bool,
     pub edit_key: Option<((u8, u8, u8), String)>,
+    pub history: bool,
     pub print_udev_rule: bool,
     pub verbose: bool,
     pub version: bool,
@@ -106,6 +108,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                 o.settings_page = Some(v);
             }
             "--menu" => o.menu = true,
+            "--history" => o.history = true,
             "--edit-key" => {
                 let v = value("--edit-key")?;
                 let bad = || "--edit-key: usa L,R,C oppure L,R,C,TESTO".to_string();

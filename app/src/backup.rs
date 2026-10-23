@@ -103,19 +103,62 @@ fn stamp_of(path: &Path) -> Option<String> {
     ok.then(|| stamp.to_string())
 }
 
-/// Backups of the keyboard `uid`, oldest first.
-fn entries(dir: &Path, uid: u64) -> Vec<Entry> {
+/// Every backup in `dir`, oldest first.
+fn read_all(dir: &Path) -> Vec<Entry> {
     let Ok(read) = std::fs::read_dir(dir) else { return Vec::new() };
     let mut out: Vec<Entry> = read
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter_map(|path| {
             let stamp = stamp_of(&path)?;
             let content: Value = serde_json::from_str(&std::fs::read_to_string(&path).ok()?).ok()?;
-            (content.get("uid").and_then(Value::as_u64) == Some(uid)).then_some(Entry { path, stamp, content })
+            Some(Entry { path, stamp, content })
         })
         .collect();
     out.sort_by(|a, b| a.stamp.cmp(&b.stamp).then(a.path.cmp(&b.path)));
     out
+}
+
+/// Backups of the keyboard `uid`, oldest first.
+fn entries(dir: &Path, uid: u64) -> Vec<Entry> {
+    let mut all = read_all(dir);
+    all.retain(|e| e.content.get("uid").and_then(Value::as_u64) == Some(uid));
+    all
+}
+
+/// A backup on disk, for the history window.
+#[derive(Debug, Clone)]
+pub struct BackupFile {
+    pub path: PathBuf,
+    /// When it was written, e.g. "2026-10-22 08:15:30 UTC".
+    pub when: String,
+    pub uid: Option<u64>,
+    pub content: Value,
+}
+
+/// Every backup in `dir`, newest first.
+pub fn history(dir: &Path) -> Vec<BackupFile> {
+    let mut out: Vec<BackupFile> = read_all(dir)
+        .into_iter()
+        .map(|e| BackupFile {
+            when: stamp_display(&e.stamp),
+            uid: e.content.get("uid").and_then(Value::as_u64),
+            path: e.path,
+            content: e.content,
+        })
+        .collect();
+    out.reverse();
+    out
+}
+
+/// `2026-10-22T081530Z-2` → `2026-10-22 08:15:30 UTC (2)`.
+fn stamp_display(stamp: &str) -> String {
+    let (core, n) = stamp.split_once("Z-").map_or((stamp.trim_end_matches('Z'), None), |(c, n)| (c, Some(n)));
+    let t = |a: usize, b: usize| core.get(a..b).unwrap_or("");
+    let base = format!("{} {}:{}:{} UTC", t(0, 10), t(11, 13), t(13, 15), t(15, 17));
+    match n {
+        Some(n) => format!("{base} ({n})"),
+        None => base,
+    }
 }
 
 /// Last backup of `uid`: path and content.
@@ -230,6 +273,28 @@ mod tests {
         std::fs::write(dir.join("mine.vil"), "{}").unwrap();
         save_if_changed(&s, "Corne v4", &v2, 4000).unwrap().unwrap();
         assert!(dir.join("mine.vil").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn history_lists_every_keyboard_newest_first() {
+        let dir = std::env::temp_dir().join(format!("keyboard-hud-history-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let settings = Settings { dir: dir.clone(), keep: 10 };
+        save_if_changed(&settings, "Corne", &json!({"uid": 1, "n": 1}), 1_000).unwrap();
+        save_if_changed(&settings, "Corne", &json!({"uid": 1, "n": 2}), 2_000).unwrap();
+        save_if_changed(&settings, "Other", &json!({"uid": 2, "n": 1}), 2_000).unwrap();
+        std::fs::write(dir.join("notes.txt"), "not a backup").unwrap();
+        let h = history(&dir);
+        assert_eq!(h.len(), 3);
+        assert!(
+            h[0].when >= h[1].when && h[1].when >= h[2].when,
+            "{:?}",
+            h.iter().map(|b| &b.when).collect::<Vec<_>>()
+        );
+        assert_eq!(h.last().map(|b| b.uid), Some(Some(1)));
+        assert_eq!(stamp_display("2026-10-22T081530Z"), "2026-10-22 08:15:30 UTC");
+        assert_eq!(stamp_display("2026-10-22T081530Z-2"), "2026-10-22 08:15:30 UTC (2)");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

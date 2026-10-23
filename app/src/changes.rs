@@ -203,21 +203,22 @@ pub fn summary(cur: &Value) -> String {
     )
 }
 
-/// Changes from `prev` to `cur`, one line each, in a stable order.
-pub fn describe(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
-    let (td_prev, td_cur) = (tap_dances(prev), tap_dances(cur));
-    let ctx_prev =
-        LegendContext { layer_names: names.layer_names, custom: names.custom, tap_dances: &td_prev, macros: &[] };
-    let ctx_cur =
-        LegendContext { layer_names: names.layer_names, custom: names.custom, tap_dances: &td_cur, macros: &[] };
-    let mut out = Vec::new();
+/// One key that differs between two backups.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyChange {
+    pub layer: u8,
+    pub row: u8,
+    pub col: u8,
+    pub before: u16,
+    pub after: u16,
+}
 
-    // keymap
+/// Keys that differ, by layer, row and column (positions without a key and
+/// layers missing in `prev` are skipped).
+pub fn key_changes(prev: &Value, cur: &Value) -> Vec<KeyChange> {
     let (lp, lc) = (list(prev, "layout"), list(cur, "layout"));
-    if lp.len() != lc.len() {
-        out.push(tr_format!("Numero di layer: {} → {}", "Number of layers: {} → {}", lp.len(), lc.len()));
-    }
     let cell = |layout: &[Value], l: usize, r: usize, c: usize| layout.get(l)?.get(r)?.get(c).cloned();
+    let mut out = Vec::new();
     for (l, rows) in lc.iter().enumerate() {
         for (r, cols) in rows.as_array().map(Vec::as_slice).unwrap_or(&[]).iter().enumerate() {
             for (c, now) in cols.as_array().map(Vec::as_slice).unwrap_or(&[]).iter().enumerate() {
@@ -226,23 +227,73 @@ pub fn describe(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
                 }
                 let Some(before) = cell(lp, l, r, c) else { continue };
                 let (a, b) = (code(&before), code(now));
-                if a == b {
-                    continue;
+                if a != b && l < 32 && r < 256 && c < 256 {
+                    out.push(KeyChange { layer: l as u8, row: r as u8, col: c as u8, before: a, after: b });
                 }
-                // where: the key as printed on the base layer
-                let base = cell(lc, 0, r, c).map_or(0, |v| code(&v));
-                let place = match base {
-                    KC_NO | KC_TRNS => tr_format!("riga {r}, colonna {c}", "row {r}, column {c}"),
-                    _ => tr_format!(
-                        "tasto {} (riga {r}, colonna {c})",
-                        "key {} (row {r}, column {c})",
-                        key(base, &ctx_cur)
-                    ),
-                };
-                out.push(format!("{} · {place}: {} → {}", names.layer(l), key(a, &ctx_prev), key(b, &ctx_cur)));
             }
         }
     }
+    out
+}
+
+/// Legend context for the keys of a backup.
+fn contexts<'a>(
+    names: &'a Context,
+    td_prev: &'a [TapDance],
+    td_cur: &'a [TapDance],
+) -> (LegendContext<'a>, LegendContext<'a>) {
+    let ctx =
+        |tap_dances| LegendContext { layer_names: names.layer_names, custom: names.custom, tap_dances, macros: &[] };
+    (ctx(td_prev), ctx(td_cur))
+}
+
+fn key_line(k: &KeyChange, cur: &Value, names: &Context, ctx_prev: &LegendContext, ctx_cur: &LegendContext) -> String {
+    let (r, c) = (k.row, k.col);
+    // where: the key as printed on the base layer
+    let base = list(cur, "layout").first().and_then(|l| l.get(r as usize)?.get(c as usize)).map_or(0, code);
+    let place = match base {
+        KC_NO | KC_TRNS => tr_format!("riga {r}, colonna {c}", "row {r}, column {c}"),
+        _ => tr_format!("tasto {} (riga {r}, colonna {c})", "key {} (row {r}, column {c})", key(base, ctx_cur)),
+    };
+    format!("{} · {place}: {} → {}", names.layer(k.layer as usize), key(k.before, ctx_prev), key(k.after, ctx_cur))
+}
+
+/// One key change in words, e.g. "NAV · tasto B (riga 2, colonna 5): Redo → Ctrl+Y".
+pub fn describe_key(k: &KeyChange, prev: &Value, cur: &Value, names: &Context) -> String {
+    let (td_prev, td_cur) = (tap_dances(prev), tap_dances(cur));
+    let (ctx_prev, ctx_cur) = contexts(names, &td_prev, &td_cur);
+    key_line(k, cur, names, &ctx_prev, &ctx_cur)
+}
+
+/// Changes from `prev` to `cur`, one line each, in a stable order.
+pub fn describe(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
+    let (td_prev, td_cur) = (tap_dances(prev), tap_dances(cur));
+    let (ctx_prev, ctx_cur) = contexts(names, &td_prev, &td_cur);
+    let mut out = layer_count(prev, cur);
+    out.extend(key_changes(prev, cur).iter().map(|k| key_line(k, cur, names, &ctx_prev, &ctx_cur)));
+    out.extend(others(prev, cur, names));
+    out
+}
+
+/// Every change except single keys (they come from [`key_changes`]).
+pub fn describe_others(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
+    let mut out = layer_count(prev, cur);
+    out.extend(others(prev, cur, names));
+    out
+}
+
+fn layer_count(prev: &Value, cur: &Value) -> Vec<String> {
+    let (lp, lc) = (list(prev, "layout"), list(cur, "layout"));
+    if lp.len() == lc.len() {
+        return Vec::new();
+    }
+    vec![tr_format!("Numero di layer: {} → {}", "Number of layers: {} → {}", lp.len(), lc.len())]
+}
+
+fn others(prev: &Value, cur: &Value, names: &Context) -> Vec<String> {
+    let (td_prev, td_cur) = (tap_dances(prev), tap_dances(cur));
+    let (ctx_prev, ctx_cur) = contexts(names, &td_prev, &td_cur);
+    let mut out = Vec::new();
 
     // encoders: [layer][index] = [ccw, cw]
     let (ep, ec) = (list(prev, "encoder_layout"), list(cur, "encoder_layout"));
@@ -445,6 +496,23 @@ mod tests {
             "tapping term: 200 → 180",
         ];
         assert_eq!(lines, expected);
+    }
+
+    #[test]
+    fn keys_apart_from_the_rest() {
+        let n = names();
+        let ctx = Context { layer_names: &n, custom: &[] };
+        let mut cur = base();
+        cur["layout"][1][0][1] = json!(0x29);
+        cur["settings"]["7"] = json!(180);
+        let keys = key_changes(&base(), &cur);
+        assert_eq!(keys, vec![KeyChange { layer: 1, row: 0, col: 1, before: KC_TRNS, after: 0x29 }]);
+        let others = describe_others(&base(), &cur, &ctx);
+        assert_eq!(others, vec!["tapping term: 200 → 180".to_string()]);
+        // together they make the changelog lines
+        let mut all = vec![describe_key(&keys[0], &base(), &cur, &ctx)];
+        all.extend(others);
+        assert_eq!(all, describe(&base(), &cur, &ctx));
     }
 
     #[test]

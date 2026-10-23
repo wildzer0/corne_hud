@@ -4,6 +4,7 @@
 pub mod diagnostics;
 pub mod frameless;
 pub mod header;
+pub mod history;
 pub mod key_editor;
 pub mod keyboard;
 pub mod keycast;
@@ -251,6 +252,7 @@ pub struct DevOptions {
     pub menu: bool,
     /// Opens the key editor on `(layer, row, col)`, searching for the text.
     pub edit_key: Option<((u8, u8, u8), String)>,
+    pub history: bool,
 }
 
 /// Development aid: capture the window to a PPM file, then quit.
@@ -535,6 +537,7 @@ pub struct HudApp {
     /// Key under the pointer when the menu was opened: `(layer, row, col)`.
     menu_key: Option<(u8, u8, u8)>,
     key_editor: key_editor::KeyEditor,
+    history: history::HistoryWindow,
     /// Last key written from the HUD, with the keycode it replaced (for undo).
     last_write: Option<(KeyWrite, u16)>,
     /// Undo sent, answer not come yet.
@@ -636,6 +639,7 @@ impl HudApp {
             menu: None,
             menu_key: None,
             key_editor: key_editor::KeyEditor::default(),
+            history: history::HistoryWindow::default(),
             last_write: None,
             undoing: None,
             dev_menu: s.dev.menu,
@@ -659,11 +663,19 @@ impl HudApp {
         };
         app.report.open = s.dev.stats_window;
         app.diagnostics.open = s.dev.diagnostics;
+        if s.dev.history {
+            app.history.open(&app.backup_dir());
+        }
         if s.dev.settings {
             app.open_settings();
             app.settings.open_page(s.dev.settings_page.as_deref());
         }
-        if (s.dev.stats_window || s.dev.diagnostics || s.dev.settings || s.dev.menu || s.dev.edit_key.is_some())
+        if (s.dev.stats_window
+            || s.dev.diagnostics
+            || s.dev.settings
+            || s.dev.menu
+            || s.dev.edit_key.is_some()
+            || s.dev.history)
             && app.screenshot.is_some()
         {
             // capture the other windows inside the HUD window
@@ -1545,6 +1557,41 @@ impl HudApp {
         }
     }
 
+    fn show_history(&mut self, ctx: &egui::Context, palette: &Palette) {
+        if !self.history.open {
+            return;
+        }
+        let dir = self.backup_dir();
+        let layout = self.live.as_ref().or(self.offline.as_ref());
+        let colors = self.layer_colors.clone();
+        let layer_color = |l: u8| colors.get(l as usize).copied().flatten();
+        let input = history::HistoryInput {
+            lang: self.lang,
+            dir: &dir,
+            keys: layout.map(|l| l.keys.as_slice()),
+            rows: layout.map_or(0, |l| l.definition.rows),
+            cols: layout.map_or(0, |l| l.definition.cols),
+            layer_names: &self.layer_names,
+            layer_color: &layer_color,
+            custom: layout.map_or(&[], |l| l.definition.custom.as_slice()),
+            labels: &self.labels,
+            palette,
+            can_restore: self.can_write_keys(),
+        };
+        match self.history.show(ctx, &input) {
+            history::Action::None => {}
+            history::Action::OpenFolder => {
+                if let Err(e) = backup::open_folder(&dir) {
+                    self.notify(format!("{}: {e}", dir.display()));
+                }
+            }
+            history::Action::Restore(k) => {
+                self.open_key_editor((k.layer, k.row, k.col));
+                self.key_editor.preselect(k.before);
+            }
+        }
+    }
+
     fn write_error_text(&self, e: &WriteError) -> String {
         match e {
             WriteError::NotConnected => tr(self.lang, Msg::WriteNotConnected).to_string(),
@@ -1950,6 +1997,10 @@ impl HudApp {
                 ui.selectable_value(&mut self.heat, HeatMode::All, tr(lang, Msg::HeatAll));
             });
         });
+        if ui.button(tr(lang, Msg::MenuHistory)).clicked() {
+            self.history.open(&self.backup_dir());
+            self.close_menu();
+        }
         if ui.button(tr(lang, Msg::MenuBackups)).on_hover_text(self.backup_dir().display().to_string()).clicked() {
             if let Err(e) = backup::open_folder(&self.backup_dir()) {
                 self.notify(format!("{}: {e}", self.backup_dir().display()));
@@ -2377,6 +2428,7 @@ impl eframe::App for HudApp {
             csv_path: paths::base_dir().join("keyboard-hud-stats.csv"),
         };
         self.report.show(&ctx, self.stats.as_mut(), &input);
+        self.show_history(&ctx, &palette);
         self.show_key_editor(&ctx);
         if self.diagnostics.open {
             let sections = self.diagnostics_sections();

@@ -4,7 +4,7 @@ Registro dei progressi per riprendere il lavoro tra una sessione e l'altra.
 Specifica completa: [docs/PROMPT_HUD.md](docs/PROMPT_HUD.md). Protocollo: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Aggiorna questo file alla fine di ogni sessione.
 
-_Ultimo aggiornamento: 2026-10-23. Editor leggero della keymap (funzione 1 del piano 6, da provare sulla tastiera). Ombra di sistema tolta dalle finestre trasparenti (da provare su Windows). Release **v1.1.1** (la v1.1.0 non è stata pubblicata: test fallito su Windows; finestra Impostazioni stile VS Code: voci, layer, etichette e file di testo; scelte del menu nel TOML; icone ⌫/⌦ ridimensionate)._
+_Ultimo aggiornamento: 2026-10-23. Editor leggero della keymap e storico dei backup (funzioni 1 e 2 del piano 6, da provare sulla tastiera). Ombra di sistema tolta dalle finestre trasparenti (da provare su Windows). Release **v1.1.1** (la v1.1.0 non è stata pubblicata: test fallito su Windows; finestra Impostazioni stile VS Code: voci, layer, etichette e file di testo; scelte del menu nel TOML; icone ⌫/⌦ ridimensionate)._
 
 ---
 
@@ -82,7 +82,7 @@ Tutto è committato e pubblicato. Prima release: tag `v0.1.0`.
 
 6. **Dopo v1.1.1** (proposte di Claude, scelte dall'utente il 2026-10-23; la 2, layer automatici per applicazione, scartata dall'utente), in quest'ordine:
    1. ✅ **editor leggero della keymap** (`keymap_guard.rs`, `ui/key_editor.rs`, `KeyWrite`/`Event::KeyWritten` nel worker, VIA `0x04`/`0x05` in `protocol.rs`/`device.rs`): da provare con la tastiera vera;
-   2. [ ] **storico dei backup con confronto**: finestra con i `.vil` di `backups/`, due a scelta confrontati con `changes.rs`, tasti cambiati evidenziati sulla tastiera disegnata; ripristino di singoli tasti con l'editor;
+   2. ✅ **storico dei backup con confronto** (`ui/history.rs`, `backup::history`, `changes::key_changes`/`describe_key`/`describe_others`): menu → *Storico dei backup…*; *Rimetti com'era* apre l'editor con `KeyEditor::preselect`;
    3. [ ] **esportazione della keymap** in PNG/SVG o pagina stampabile (tutti i layer, colori, etichette, combo, tap dance);
    4. [ ] **modalità allenamento**: l'HUD chiede un simbolo o una scorciatoia e controlla la combinazione premuta, con punteggio e tempi; prima i tasti meno usati o sbagliati.
 
@@ -146,7 +146,7 @@ cargo run -- --offline --layer 4       # layer DEBUG da vial.json + .vil incorpo
 
 # screenshot senza interazione (PPM; convertibile in PNG con un piccolo script Python + zlib)
 ./target/debug/keyboard-hud --mock --mock-at 11500 --screenshot /tmp/x.ppm   # DEBUG bloccato
-#   altre opzioni: --search "(" , --heatmap all|layer, --stats-window, --menu, --edit-key L,R,C[,TESTO], --screenshot-after MS
+#   altre opzioni: --search "(" , --heatmap all|layer, --stats-window, --menu, --edit-key L,R,C[,TESTO], --history, --screenshot-after MS
 #   con --stats-window/--menu + --screenshot le finestre secondarie vengono incorporate nell'HUD
 #   (in WSLg la cattura di una finestra separata non arriva mai)
 # finestre reali in WSLg: avvia con --x11 e usa `xwininfo -root -tree`
@@ -165,9 +165,11 @@ Scenario di `--mock` (ciclo di 16 s): 0–2 s digitazione, 2–4 s Fn1 (SYM), 4�
 - `app/src/vial/`: `definition.rs`, `dynamic.rs` (tap dance, combo, key override), `keycode.rs`, `names.rs` (tabelle generate, `parse_keycode`), `legend.rs`, `vil.rs`.
 - `app/src/`: `kle.rs`, `model.rs`, `keymap_guard.rs` (controlli prima di scrivere un tasto), `config.rs`, `config_edit.rs` (modifiche al TOML che conservano i commenti), `screen.rs` (geometria dello schermo), `autostart.rs` (avvio con il sistema), `labels.rs`, `headsup.rs`, `search.rs`, `stats.rs`, `clock.rs`, `logging.rs`, `paths.rs`, `cli.rs`, `i18n.rs` (tutte le stringhe utente).
 - `app/packaging/`: `icon/` (icona e script che la genera), `macos/Info.plist`.
-- `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`, `settings.rs` (finestra Impostazioni), `key_editor.rs` (Cambia tasto), `diagnostics.rs`, `keycast.rs`.
+- `app/src/ui/`: `mod.rs` (app, overlay, menu), `header.rs`, `keyboard.rs`, `search_panel.rs`, `report.rs`, `theme.rs`, `settings.rs` (finestra Impostazioni), `key_editor.rs` (Cambia tasto), `history.rs` (storico dei backup), `diagnostics.rs`, `keycast.rs`.
 
 ## Registro delle sessioni
+
+- **2026-10-23**: funzione 2 del piano 6, **storico dei backup**. `changes.rs` ora separa i tasti cambiati (strutturati, `KeyChange`) dalle altre modifiche, con il `CHANGELOG.md` identico a prima (test). 151 test. Verificato col mock in WSLg/X11 con due `.vil` di prova in `target/debug/backups/` (la cartella dell'eseguibile è la base in modalità portable): confronto, tasto evidenziato su BASE, schede BASE (1) e NAV (2), elenco con *Rimetti com'era* e "tapping term: 200 → 180"; clic vero su *Rimetti com'era* → editor aperto sul tasto con il valore di prima. Nuova opzione di sviluppo `--history`.
 
 - **2026-10-23**: su richiesta dell'utente, 5 proposte di funzioni e un parere sull'integrare la configurazione di Vial nell'HUD (sì, ma solo un editor leggero dei tasti). L'utente ha scelto 1, 4, 5 e 3 (non la 2). Fatta la **1, editor leggero della keymap**: 149 test (codifica VIA, mock che accetta le scritture, controlli di sicurezza, catalogo e ricerca, scrittura via worker con i casi rifiutati). Verificato col mock in WSLg/X11: screenshot dell'editor (ricerca, avvisi togliendo TL_LOWR dal layer base) e clic vero su *Scrivi sulla tastiera* (log `tasto scritto ... 0x00e2 → 0x0029`, keymap riletto, avviso nel piè di pagina, finestra chiusa). Nuova opzione di sviluppo `--edit-key L,R,C[,TESTO]`. Non provati: annulla dal menu col clic, la tastiera vera.
 
