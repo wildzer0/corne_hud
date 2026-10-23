@@ -27,6 +27,7 @@ mod style;
 mod training;
 mod tray;
 mod ui;
+mod update;
 mod vial;
 
 use cli::Options;

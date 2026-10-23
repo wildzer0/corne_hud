@@ -44,6 +44,9 @@ style = ""
 # key_radius = 0.12   # 0 (spigoli vivi) – 0.5 della dimensione del tasto
 # Combo configurate in Vial disegnate sopra i tasti. Anche dal menu.
 combos = false
+# Con una finestra a schermo intero in primo piano (gioco, video, presentazione)
+# HUD e mini indicatore si nascondono; il keycast resta. Windows e X11.
+hide_in_fullscreen = true
 
 # Nomi e colori dei layer, nell'ordine del firmware (0, 1, 2, ...).
 # color: "#RRGGBB", oppure "" per un layer neutro.
@@ -76,6 +79,8 @@ color = "#EBC828"   # giallo
 # BASE (anche solo tenendo Fn1/Fn2), è in attesa un one-shot, oppure un
 # modificatore resta premuto a lungo. Con DEBUG bloccato resta visibile.
 enabled = true
+layer_delay_ms = 250      # layer (Fn1, Fn2...) attivo almeno così a lungo:
+                          # le combinazioni rapide non fanno comparire l'HUD
 modifier_delay_ms = 400   # Ctrl/Shift/Alt/Gui tenuto almeno così a lungo
 hide_delay_ms = 800       # scompare dopo questo tempo dal ritorno a BASE
 hidden_opacity = 0.0      # 0 = invisibile, 0.15 = appena visibile
@@ -123,6 +128,14 @@ unused_days = 30          # report: tasti mai usati negli ultimi N giorni
 enabled = true
 dir = ""                  # vuoto = cartella "backups" accanto alla configurazione
 keep = 30                 # backup da tenere per tastiera; i più vecchi vengono cancellati
+
+[update]
+# Una volta al giorno guarda su GitHub se c'è una versione nuova e lo dice
+# (nel footer e nel mini indicatore). Con false solo da menu → Generale o
+# dalla tray. L'installazione parte sempre e solo da un tuo clic: scarica il
+# file del tuo sistema, controlla il checksum, sostituisce l'eseguibile dove si
+# trova e riavvia. Si collega solo a github.com, con il curl del sistema.
+auto_check = true
 
 # Etichette personalizzate. Ogni voce vale per un keycode (eventualmente solo
 # su un layer) oppure per una posizione precisa (layer + row + col, come

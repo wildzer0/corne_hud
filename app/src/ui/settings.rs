@@ -103,6 +103,7 @@ pub static GROUPS: &[Group] = &[
                 Kind::StylePercent(style::KEY_RADIUS, |l| l.key_radius),
             ),
             s("appearance.combos", Msg::MenuCombos, Msg::SetCombosHint, Kind::Toggle),
+            s("appearance.hide_in_fullscreen", Msg::SetFullscreen, Msg::SetFullscreenHint, Kind::Toggle),
             s("appearance.tray", Msg::SetTray, Msg::SetTrayHint, Kind::Toggle),
             s("appearance.snap_distance", Msg::SetSnap, Msg::SetSnapHint, Kind::Float(config::SCREEN_DISTANCE, " px")),
             s(
@@ -117,6 +118,12 @@ pub static GROUPS: &[Group] = &[
         title: Msg::GroupHeadsUp,
         settings: &[
             s("headsup.enabled", Msg::SetEnabled, Msg::SetHeadsUpHint, Kind::Toggle),
+            s(
+                "headsup.layer_delay_ms",
+                Msg::SetLayerDelay,
+                Msg::SetLayerDelayHint,
+                Kind::Int(range_i64(config::MODIFIER_DELAY_MS), " ms"),
+            ),
             s(
                 "headsup.modifier_delay_ms",
                 Msg::SetModifierDelay,
@@ -146,6 +153,10 @@ pub static GROUPS: &[Group] = &[
             s("headsup.oneshot", Msg::SetOneshot, Msg::SetOneshotHint, Kind::Choice(SHOWN_IN)),
             s("headsup.modifiers", Msg::SetModifiers, Msg::SetModifiersHint, Kind::Choice(SHOWN_IN)),
         ],
+    },
+    Group {
+        title: Msg::GroupUpdate,
+        settings: &[s("update.auto_check", Msg::UpdateAuto, Msg::UpdateAutoHint, Kind::Toggle)],
     },
     Group {
         title: Msg::GroupIndicator,

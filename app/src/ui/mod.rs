@@ -541,6 +541,11 @@ pub struct HudApp {
     marker_since: Option<Instant>,
     /// Light or dark background behind the marker.
     backdrop: crate::backdrop::Backdrop,
+    /// A full screen window is in the foreground and the HUD hides for it.
+    fullscreen_hidden: bool,
+    updater: crate::update::Updater,
+    /// The update state already told to the user.
+    update_seen: crate::update::State,
     /// Combos drawn over the keys.
     show_combos: bool,
     keycast_on: bool,
@@ -663,6 +668,9 @@ impl HudApp {
             marker_on,
             marker_since: None,
             backdrop: crate::backdrop::Backdrop::new(),
+            fullscreen_hidden: false,
+            updater: crate::update::Updater::new(),
+            update_seen: crate::update::State::Idle,
             show_combos,
             keycast_on,
             keycast: keycast::Keycast::default(),
@@ -758,6 +766,50 @@ impl HudApp {
         if let Some(first) = errors.first() {
             self.notify(format!("{} ({}): {first}", tr(self.lang, Msg::LabelErrors), errors.len()));
         }
+    }
+
+    fn open_url(&mut self, url: &str) {
+        if let Err(e) = backup::open_path(Path::new(url)) {
+            self.notify(format!("{url}: {e}"));
+        }
+    }
+
+    /// Automatic check, and what the updater has to say.
+    fn handle_update(&mut self, ctx: &egui::Context) {
+        use crate::update::State;
+        self.updater.tick(ctx, self.config.update.auto_check);
+        let state = self.updater.state();
+        if state == self.update_seen {
+            return;
+        }
+        let manual = self.updater.manual;
+        match &state {
+            State::Available(r) => {
+                let text = crate::tr_format!(
+                    "Nuova versione {}: menu → Generale",
+                    "New version {}: menu → General",
+                    r.version
+                );
+                self.flash(text.clone());
+                self.notify(text);
+            }
+            State::UpToDate if manual => self.notify(tr(self.lang, Msg::UpdateUpToDate).to_string()),
+            State::Failed(e) => {
+                log::warn!("aggiornamento: {e}");
+                if manual {
+                    self.notify(format!("{}: {e}", tr(self.lang, Msg::UpdateFailed)));
+                }
+            }
+            State::Installed => match self.updater.relaunch() {
+                Ok(()) => {
+                    log::info!("aggiornato: riavvio");
+                    root_cmd(ctx, ViewportCommand::Close);
+                }
+                Err(e) => self.notify(format!("{}: {e}", tr(self.lang, Msg::UpdateFailed))),
+            },
+            _ => {}
+        }
+        self.update_seen = state;
     }
 
     fn notify(&mut self, text: String) {
@@ -1012,13 +1064,22 @@ impl HudApp {
                     self.open_settings();
                     ctx.request_repaint();
                 }
+                crate::tray::Action::Update => match self.updater.state() {
+                    crate::update::State::Available(r) if r.installable() => self.updater.install(ctx),
+                    crate::update::State::Available(r) => self.open_url(&r.page),
+                    _ => self.updater.check(ctx, true),
+                },
                 crate::tray::Action::Quit => root_cmd(ctx, ViewportCommand::Close),
             }
         }
         let (visible, paused) = (self.on_screen(), self.worker().is_some_and(Worker::is_paused));
         let autostart = matches!(self.autostart, Ok(autostart::State::On));
+        let update = match self.updater.state() {
+            crate::update::State::Available(r) => Some(r.version),
+            _ => None,
+        };
         if let Some(t) = &mut self.tray {
-            t.sync(visible, paused, autostart);
+            t.sync(visible, paused, autostart, update.as_deref());
         }
     }
 
@@ -2310,6 +2371,59 @@ impl HudApp {
         if ui.checkbox(&mut on, tr(lang, Msg::MenuAutostart)).on_hover_text(hint).changed() {
             self.set_autostart(on);
         }
+
+        // updates
+        use crate::update::State;
+        ui.separator();
+        let state = self.updater.state();
+        ui.horizontal(|ui| {
+            ui.label(format!("Keyboard HUD {}", env!("CARGO_PKG_VERSION")));
+            if ui.add_enabled(!self.updater.busy(), egui::Button::new(tr(lang, Msg::MenuCheckUpdates))).clicked() {
+                self.updater.check(ctx, true);
+            }
+        });
+        match &state {
+            State::Checking | State::Installing(_) | State::Installed => {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(tr(
+                        lang,
+                        if state == State::Checking { Msg::UpdateChecking } else { Msg::UpdateInstalling },
+                    ));
+                });
+            }
+            State::UpToDate => {
+                ui.label(tr(lang, Msg::UpdateUpToDate));
+            }
+            State::Available(r) => {
+                ui.horizontal(|ui| {
+                    ui.strong(crate::tr_format!("Versione {} disponibile", "Version {} available", r.version));
+                    if ui.link(tr(lang, Msg::UpdateNotes)).clicked() {
+                        self.open_url(&r.page);
+                    }
+                });
+                if r.installable() {
+                    let b = ui.button(tr(lang, Msg::UpdateInstall)).on_hover_text(tr(lang, Msg::UpdateInstallHint));
+                    if b.clicked() {
+                        self.updater.install(ctx);
+                    }
+                } else {
+                    ui.label(tr(lang, Msg::UpdateManual));
+                }
+            }
+            State::Failed(e) => {
+                ui.colored_label(ui.visuals().warn_fg_color, format!("{}: {e}", tr(lang, Msg::UpdateFailed)));
+            }
+            State::Idle => {}
+        }
+        let mut auto = self.config.update.auto_check;
+        if ui.checkbox(&mut auto, tr(lang, Msg::UpdateAuto)).on_hover_text(tr(lang, Msg::UpdateAutoHint)).changed() {
+            let edit = Edit::Key("update.auto_check", Some(toml::Value::Boolean(auto)));
+            self.edit_config(ctx, &[edit]);
+        }
+        if self.updater.busy() {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
     }
 }
 
@@ -2355,6 +2469,16 @@ impl eframe::App for HudApp {
             }
         }
         self.handle_tray(ctx);
+        self.handle_update(ctx);
+        let fullscreen = self.config.appearance.hide_in_fullscreen && self.foreground.fullscreen();
+        if fullscreen != self.fullscreen_hidden {
+            self.fullscreen_hidden = fullscreen;
+            log::info!("schermo intero in primo piano: {fullscreen}");
+            ctx.request_repaint();
+        }
+        if self.config.appearance.hide_in_fullscreen {
+            ctx.request_repaint_after(Duration::from_millis(500));
+        }
         // per-application labels
         if self.labels.has_app_labels() {
             let app = self.foreground.poll().map(str::to_owned);
@@ -2459,13 +2583,16 @@ impl eframe::App for HudApp {
             }
             _ => 1.0,
         };
+        // a game, a video or a slide show in full screen: out of the way
+        let level = if self.fullscreen_hidden { 0.0 } else { level };
         let faded = level <= 0.01;
         let passthrough = self.click_through || faded;
         if passthrough != self.passthrough {
             self.passthrough = passthrough;
             ctx.send_viewport_cmd(ViewportCommand::MousePassthrough(passthrough));
         }
-        ui.multiply_opacity(hu.hidden_opacity + (1.0 - hu.hidden_opacity) * level);
+        let hidden_opacity = if self.fullscreen_hidden { 0.0 } else { hu.hidden_opacity };
+        ui.multiply_opacity(hidden_opacity + (1.0 - hidden_opacity) * level);
 
         let painter = ui.painter_at(full);
         painter.rect_filled(full, palette.look.window_radius, palette.background);
@@ -2628,7 +2755,7 @@ impl eframe::App for HudApp {
         );
 
         // heads-up marker: where the HUD shows up, while it is faded out
-        if faded && self.headsup_on && self.marker_on && live_state.is_some() {
+        if faded && self.headsup_on && self.marker_on && live_state.is_some() && !self.fullscreen_hidden {
             if self.marker_since.is_none() {
                 self.marker_since = Some(now);
                 self.backdrop.reset();
@@ -2708,7 +2835,7 @@ impl eframe::App for HudApp {
                 split_lost: self.split_lost(),
                 time: self.started.elapsed().as_secs_f64(),
             };
-            let shown = (!self.visible || faded) && header::indicator_needed(&view);
+            let shown = (!self.visible || faded) && !self.fullscreen_hidden && header::indicator_needed(&view);
             self.show_indicator(&ctx, shown.then_some(&view), &palette);
         }
         if self.keycast_on && self.live.is_some() && self.started.elapsed() > Duration::from_secs(1) {
@@ -2767,6 +2894,9 @@ impl eframe::App for HudApp {
 
         if self.headsup.animating() {
             ctx.request_repaint();
+        } else if self.headsup.waiting() {
+            // a delay may run out without a new state from the keyboard
+            ctx.request_repaint_after(Duration::from_millis(50));
         }
         if self.fade.animating(now) || animating_header {
             ctx.request_repaint();

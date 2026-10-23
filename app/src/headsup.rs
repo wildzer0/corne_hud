@@ -1,6 +1,8 @@
 //! Heads-up mode: the HUD stays hidden and fades in when it is useful
-//! (a layer above the default one, a pending one-shot, a modifier held for
-//! a while), then fades out shortly after the keyboard is back to normal.
+//! (a layer above the default one or a modifier held for a while, a pending
+//! one-shot), then fades out shortly after the keyboard is back to normal.
+//! A layer key released before its delay (a combination known by heart)
+//! does not bring the HUD up.
 
 use crate::config::{HeadsUp as Settings, ShownIn};
 use crate::hid::protocol::HudState;
@@ -12,6 +14,7 @@ const FADE_OUT: Duration = Duration::from_millis(300);
 
 #[derive(Debug)]
 pub struct HeadsUp {
+    layers_since: Option<Instant>,
     mods_since: Option<Instant>,
     /// A modifier has been held past the delay.
     mods_long: bool,
@@ -24,7 +27,14 @@ pub struct HeadsUp {
 impl Default for HeadsUp {
     fn default() -> Self {
         // start visible: the first states decide quickly
-        HeadsUp { mods_since: None, mods_long: false, last_wanted: None, level: 1.0, last_update: None }
+        HeadsUp {
+            layers_since: None,
+            mods_since: None,
+            mods_long: false,
+            last_wanted: None,
+            level: 1.0,
+            last_update: None,
+        }
     }
 }
 
@@ -50,17 +60,27 @@ pub fn without_indicator_states(state: &HudState, layers: &[(u8, LayerHold)], se
 impl HeadsUp {
     /// Does this state call for the HUD right now?
     pub fn wants(&mut self, state: &HudState, settings: &Settings, now: Instant) -> bool {
-        let above_default = state.layer_state & !(state.default_layer_state as u32) != 0;
         let one_shot = state.oneshot_layer.is_some() || state.oneshot_mods != 0 || state.oneshot_locked_mods != 0;
-        let mods = if state.mods != 0 {
-            let since = *self.mods_since.get_or_insert(now);
-            now.duration_since(since) >= Duration::from_millis(settings.modifier_delay_ms)
-        } else {
-            self.mods_since = None;
-            false
+        let held_long = |since: &mut Option<Instant>, held: bool, delay_ms: u64| {
+            if held {
+                let t = *since.get_or_insert(now);
+                now.duration_since(t) >= Duration::from_millis(delay_ms)
+            } else {
+                *since = None;
+                false
+            }
         };
+        let layer_up = state.layer_state & !(state.default_layer_state as u32) != 0;
+        let above_default = held_long(&mut self.layers_since, layer_up, settings.layer_delay_ms);
+        let mods = held_long(&mut self.mods_since, state.mods != 0, settings.modifier_delay_ms);
         self.mods_long = mods;
         above_default || one_shot || (mods && settings.modifiers == ShownIn::Hud)
+    }
+
+    /// A layer or a modifier is held, but not for long enough yet: the
+    /// state may not change when the delay runs out, so check again soon.
+    pub fn waiting(&self) -> bool {
+        self.layers_since.is_some() || (self.mods_since.is_some() && !self.mods_long)
     }
 
     /// A modifier is held past the delay (for the mini indicator).
@@ -115,7 +135,16 @@ mod tests {
         let mut h = HeadsUp::default();
         let base = HudState { default_layer_state: 1, ..Default::default() };
         assert!(!h.wants(&base, &s, t0));
-        assert!(h.wants(&HudState { layer_state: 0b10, ..base }, &s, t0));
+        // a layer counts only after its delay: a quick Fn1 + key does not bring the HUD up
+        let sym = HudState { layer_state: 0b10, ..base };
+        assert!(!h.wants(&sym, &s, t0));
+        assert!(h.waiting());
+        assert!(h.wants(&sym, &s, t0 + Duration::from_millis(s.layer_delay_ms)));
+        assert!(!h.wants(&base, &s, t0 + Duration::from_millis(400)));
+        assert!(!h.wants(&sym, &s, t0 + Duration::from_millis(450)));
+        // without delay: at once
+        let now = Settings { layer_delay_ms: 0, ..settings() };
+        assert!(HeadsUp::default().wants(&sym, &now, t0));
         assert!(h.wants(&HudState { oneshot_layer: Some(5), ..base }, &s, t0));
         assert!(h.wants(&HudState { oneshot_mods: 0x02, ..base }, &s, t0));
         // a modifier counts only after the delay
@@ -135,7 +164,7 @@ mod tests {
         let layers = [(5, LayerHold::OneShot)];
         // default: the one-shot brings up the HUD
         assert_eq!(without_indicator_states(&osl, &layers, &settings()), osl);
-        let s = Settings { oneshot: ShownIn::Indicator, ..settings() };
+        let s = Settings { oneshot: ShownIn::Indicator, layer_delay_ms: 0, ..settings() };
         let mut h = HeadsUp::default();
         assert!(!h.wants(&without_indicator_states(&osl, &layers, &s), &s, Instant::now()));
         // the one-shot layer key still held: that is a held layer, the HUD comes up

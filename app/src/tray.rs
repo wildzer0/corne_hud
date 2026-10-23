@@ -15,6 +15,8 @@ pub enum Action {
     Backups,
     Stats,
     Settings,
+    /// Check for a new version, or install the one found.
+    Update,
     Quit,
 }
 
@@ -46,9 +48,10 @@ pub struct Tray {
     backups: MenuItem,
     stats: MenuItem,
     settings: MenuItem,
+    update: MenuItem,
     quit: MenuItem,
     /// Last state shown, to touch the menu only on changes.
-    shown: Option<(bool, bool, bool)>,
+    shown: Option<(bool, bool, bool, Option<String>)>,
     lang: Lang,
 }
 
@@ -73,6 +76,7 @@ impl Tray {
         let backups = MenuItem::new(t(Msg::MenuBackups), true, None);
         let stats = MenuItem::new(t(Msg::MenuStats), true, None);
         let settings = MenuItem::new(format!("{}…", t(Msg::SettingsTitle)), true, None);
+        let update = MenuItem::new(format!("{}…", t(Msg::MenuCheckUpdates)), true, None);
         let quit = MenuItem::new(t(Msg::MenuQuit), true, None);
         let menu = Menu::new();
         menu.append_items(&[
@@ -85,6 +89,7 @@ impl Tray {
             &stats,
             &settings,
             &autostart,
+            &update,
             &PredefinedMenuItem::separator(),
             &quit,
         ])
@@ -98,7 +103,7 @@ impl Tray {
             .with_menu_on_left_click(false)
             .build()
             .map_err(|e| e.to_string())?;
-        Ok(Tray { _icon: tray, show, pause, autostart, backups, stats, settings, quit, shown: None, lang })
+        Ok(Tray { _icon: tray, show, pause, autostart, backups, stats, settings, update, quit, shown: None, lang })
     }
 
     /// Actions requested since the last call.
@@ -114,6 +119,7 @@ impl Tray {
                     (self.backups.id(), Action::Backups),
                     (self.stats.id(), Action::Stats),
                     (self.settings.id(), Action::Settings),
+                    (self.update.id(), Action::Update),
                     (self.quit.id(), Action::Quit),
                 ]
                 .into_iter()
@@ -123,12 +129,16 @@ impl Tray {
             .collect()
     }
 
-    /// Mirrors the app state in the menu.
-    pub fn sync(&mut self, visible: bool, paused: bool, autostart: bool) {
-        let now = (visible, paused, autostart);
-        if self.shown == Some(now) {
+    /// Mirrors the app state in the menu; `update` is a new version found.
+    pub fn sync(&mut self, visible: bool, paused: bool, autostart: bool, update: Option<&str>) {
+        let now = (visible, paused, autostart, update.map(str::to_owned));
+        if self.shown.as_ref() == Some(&now) {
             return;
         }
+        self.update.set_text(match update {
+            Some(v) => crate::tr_format!("Aggiorna alla versione {v}", "Update to version {v}"),
+            None => format!("{}…", tr(self.lang, Msg::MenuCheckUpdates)),
+        });
         self.shown = Some(now);
         self.show.set_text(tr(self.lang, if visible { Msg::TrayHide } else { Msg::TrayShow }));
         self.pause.set_checked(paused);

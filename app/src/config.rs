@@ -101,6 +101,9 @@ pub struct Appearance {
     pub key_radius: Option<f32>,
     /// Combos drawn over the keys.
     pub combos: bool,
+    /// HUD and mini indicator hidden while a full screen window is in the
+    /// foreground (Windows and X11).
+    pub hide_in_fullscreen: bool,
 }
 
 impl Default for Appearance {
@@ -120,6 +123,7 @@ impl Default for Appearance {
             key_opacity: None,
             key_radius: None,
             combos: false,
+            hide_in_fullscreen: true,
         }
     }
 }
@@ -165,6 +169,8 @@ impl Default for LogConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct HeadsUp {
     pub enabled: bool,
+    /// A layer must be held this long before the HUD appears.
+    pub layer_delay_ms: u64,
     /// A modifier must be held this long before the HUD appears.
     pub modifier_delay_ms: u64,
     /// The HUD fades out this long after the keyboard is back to the base state.
@@ -186,6 +192,7 @@ impl Default for HeadsUp {
     fn default() -> Self {
         HeadsUp {
             enabled: true,
+            layer_delay_ms: 250,
             modifier_delay_ms: 400,
             hide_delay_ms: 800,
             hidden_opacity: 0.0,
@@ -269,6 +276,20 @@ impl Default for KeycastConfig {
     }
 }
 
+/// New versions from the GitHub releases (update.rs).
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct UpdateConfig {
+    /// Look for a new version once a day; otherwise only from the menu.
+    pub auto_check: bool,
+}
+
+impl Default for UpdateConfig {
+    fn default() -> Self {
+        UpdateConfig { auto_check: true }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct BackupConfig {
@@ -346,6 +367,7 @@ pub struct Config {
     pub labels: Vec<LabelConfig>,
     pub stats: StatsConfig,
     pub backup: BackupConfig,
+    pub update: UpdateConfig,
     pub polling: Polling,
     pub log: LogConfig,
 }
@@ -389,6 +411,7 @@ impl Config {
         let h = &mut self.headsup;
         h.hidden_opacity = clamp_f32(h.hidden_opacity, &HIDDEN_OPACITY, 0.0);
         h.marker_opacity = clamp_f32(h.marker_opacity, &MARKER_OPACITY, 0.85);
+        h.layer_delay_ms = clamp(h.layer_delay_ms, &MODIFIER_DELAY_MS);
         h.modifier_delay_ms = clamp(h.modifier_delay_ms, &MODIFIER_DELAY_MS);
         h.hide_delay_ms = clamp(h.hide_delay_ms, &HIDE_DELAY_MS);
         self.stats.unused_days = clamp(self.stats.unused_days, &UNUSED_DAYS);

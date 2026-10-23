@@ -51,6 +51,14 @@ Dalla pagina **Releases** del repository:
 
 Ogni release contiene anche `SHA256SUMS.txt` e `keyboard-hud.example.toml`.
 
+**Aggiornamenti.** Una volta al giorno l'HUD guarda se c'è una versione nuova e lo dice nel footer e nel mini indicatore (`[update] auto_check = false` per farlo solo a mano). Da menu → Generale → *Cerca aggiornamenti*, o dalla voce della tray, si controlla quando si vuole; se c'è una versione nuova, *Installa e riavvia*:
+- scarica il file del tuo sistema dalla release e lo confronta con `SHA256SUMS.txt` (se non coincide lo scarta);
+- **Windows**: rinomina l'`.exe` in uso in `<nome>.exe.old` (un eseguibile in uso si può rinominare, non sovrascrivere), mette il nuovo con lo stesso nome e riavvia; il `.old` sparisce all'avvio successivo;
+- **Linux**: sostituisce il file con il nuovo (stesso nome, eseguibile) e riavvia;
+- **macOS**: estrae lo zip con `ditto` e sostituisce l'intero `Keyboard HUD.app` nella sua cartella, poi lo riapre.
+
+Configurazione, statistiche e backup restano dove sono. Serve che la cartella dell'eseguibile sia scrivibile: altrimenti l'HUD lo dice, e si scarica a mano dalla pagina della release (*Novità…*). L'installazione parte solo da un tuo clic. Le richieste passano dal `curl` del sistema (presente in Windows 10 e 11, macOS e quasi tutte le distribuzioni Linux) e vanno solo a github.com.
+
 ## Primo avvio
 
 1. Flasha il firmware con il supporto HUD su **entrambe** le metà (vedi [Firmware](#firmware)).
@@ -58,7 +66,7 @@ Ogni release contiene anche `SHA256SUMS.txt` e `keyboard-hud.example.toml`.
    - **Windows**: doppio clic. Se SmartScreen avvisa (l'eseguibile non è firmato), scegli *Ulteriori informazioni → Esegui comunque*, oppure sblocca il file una volta per tutte (vedi [Windows: SmartScreen](#windows-smartscreen)).
    - **macOS**: estrai lo zip. La prima volta fai clic destro su `Keyboard HUD.app` → *Apri* (l'app è firmata ad-hoc, non da uno sviluppatore Apple registrato). In alternativa: `xattr -dr com.apple.quarantine "Keyboard HUD.app"`. L'app non compare nel Dock: si chiude dal menu contestuale dell'HUD.
    - **Linux**: `chmod +x keyboard-hud-linux-x86_64 && ./keyboard-hud-linux-x86_64`. Serve una regola udev, una sola volta (vedi [Linux](#linux-regola-udev)).
-3. L'HUD compare in sovrimpressione. Con l'**heads-up** attivo (default) resta a schermo per un attimo, poi si nasconde da solo e ricompare quando tieni Fn1/Fn2, quando un one-shot è in attesa o quando tieni un modificatore. Mentre è nascosto, sul suo lato più vicino ai bordi dello schermo resta un piccolo **segno**: la tastiera dell'icona, con Fn1 e Fn2 nei colori dei loro layer.
+3. L'HUD compare in sovrimpressione. Con l'**heads-up** attivo (default) resta a schermo per un attimo, poi si nasconde da solo e ricompare quando tieni Fn1/Fn2 per più di un quarto di secondo (le combinazioni rapide, che sai già, non lo fanno lampeggiare), quando un one-shot è in attesa o quando tieni un modificatore. Mentre è nascosto, sul suo lato più vicino ai bordi dello schermo resta un piccolo **segno**: la tastiera dell'icona, con Fn1 e Fn2 nei colori dei loro layer.
 
 **Dove finiscono i file.** Se la cartella dell'eseguibile è scrivibile, o contiene già `keyboard-hud.toml` (modalità portable), tutto sta lì accanto. Altrimenti si usa la cartella di configurazione dell'utente (`%APPDATA%\keyboard-hud\config`, `~/Library/Application Support/keyboard-hud`, `~/.config/keyboard-hud`). I file sono:
 
@@ -132,6 +140,8 @@ Il click-through si attiva solo se la tastiera collegata ha il tasto HUD_TOG, co
 - **Allenamento** (menu → Strumenti → *Allenamento…*): l'HUD chiede un simbolo o una scorciatoia (`{`, `Ctrl+Z`, `F5`) e aspetta che tu la prema, 20 domande per giro. Dopo 6 secondi mostra come si fa (`Fn1 + D`) e illumina il tasto sull'HUD. Escono più spesso i tasti dei layer superiori che usi poco (dalle [statistiche](#statistiche-e-privacy), se attive) e quelli sbagliati; alla fine ci sono i risultati e i tasti da ripassare. Vale anche Shift + tasto per un simbolo con Shift. Serve il firmware HUD.
 - **Diagnostica** (menu → Strumenti → *Diagnostica…*): tastiera, protocollo del firmware, letture al secondo, latenza delle risposte, errori e riconnessioni, OS rilevato, altra metà, percorsi dei file, ultimo backup. *Copia tutto* la mette negli appunti, pronta per una segnalazione.
 - **Mini indicatore**: quando l'HUD è nascosto (heads-up o HUD_TOG), un piccolo badge in un angolo dello schermo ricorda gli stati che restano dopo aver rilasciato i tasti: layer bloccato (per esempio DEBUG con il lucchetto), one-shot in attesa, modificatori bloccati, Caps Lock, Caps Word. Mostra anche perché manca la tastiera (non trovata, in pausa per Vial) e, per due secondi, cosa è appena cambiato: QWERTY/Colemak-DH, OS rilevato o forzato, HUD nascosto da HUD_TOG. Non intercetta i clic. Con `locked_layer = "indicator"` un layer bloccato non tiene più su l'HUD intero, ma solo il badge; con `oneshot = "indicator"` vale lo stesso per i one-shot in attesa (layer e modificatori), con `modifiers = "indicator"` per i modificatori tenuti a lungo.
+- **Ritardo dei layer**: con l'heads-up, un layer tenuto (Fn1, Fn2, tri-layer) fa comparire l'HUD solo dopo `layer_delay_ms` (default 250 ms). Fn1 + un tasto battuti di fila, perché sai già dov'è, non fanno lampeggiare l'HUD; se esiti, compare. Con 0 compare subito come prima. I one-shot in attesa compaiono sempre subito.
+- **Schermo intero**: con una finestra a schermo intero in primo piano (un gioco, un video, una presentazione) l'HUD, il segno e il mini indicatore si nascondono e tornano quando esci; il keycast resta, perché serve proprio nelle presentazioni. Si disattiva con `[appearance] hide_in_fullscreen = false` o dalle Impostazioni. Su Windows (finestra che copre esattamente il suo monitor, non solo massimizzata) e X11 (`_NET_WM_STATE_FULLSCREEN`); su Wayland e macOS non si può sapere.
 - **Segno dell'heads-up**: con l'HUD nascosto dall'heads-up resta, nel punto in cui ricompare, una piccola tastiera come quella dell'icona, sul lato dell'HUD più vicino ai bordi dello schermo (sopra con l'HUD in alto, nell'angolo con l'HUD in un angolo, al centro con l'HUD al centro; una posizione libera vale come la più vicina delle nove del menu *Posizione*): dice che l'app è attiva, dove comparirà l'HUD e quali tasti lo richiamano (Fn1 e Fn2, colorati come i layer SYM e NAV). Diventa scura su uno sfondo chiaro e chiara su uno scuro, leggendo i pixel attorno al segno ogni 2 secondi (vedi [privacy](#statistiche-e-privacy)). Su Windows e su Linux X11; su Wayland e macOS il sistema non lo permette senza permessi speciali, e il segno resta chiaro con un alone scuro, leggibile su qualunque sfondo. Non intercetta i clic. Si toglie con `[headsup] marker = false` o dal menu (*Segno quando è nascosto*); l'opacità si regola con `marker_opacity` (default 85%) o nelle Impostazioni. Non compare con l'HUD nascosto da HUD_TOG.
 - **Tap dance, combo e key override** configurati in Vial, letti dalla tastiera a ogni connessione (quindi anche quando l'HUD riprende dopo la pausa per Vial) oppure dal `.vil` in modalità offline:
   - un tasto tap dance mostra in grande l'azione al tocco e in piccolo quella tenendolo premuto (o il doppio tocco); il tooltip le elenca tutte;
@@ -207,14 +217,15 @@ Slider, numeri e colori si salvano quando rilasci il mouse; i campi di testo qua
 | Sezione | Cosa regola |
 |---|---|
 | `[device]` | `vid` / `pid` per scegliere la tastiera (default: la prima che risponde al protocollo HUD) |
-| `[appearance]` | icona nella tray (`tray`), opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale, distanza di aggancio ai bordi (`snap_distance`, 16) e margine dai bordi (`screen_margin`, 8), stile (`style`), opacità e arrotondamento dei tasti (`key_opacity`, `key_radius`), combo sopra i tasti (`combos`), lingua (`language`: `auto`, `it`, `en`) |
-| `[headsup]` | attivo, ritardo dei modificatori (400 ms), ritardo di scomparsa (800 ms), opacità da nascosto, cosa mostra un layer bloccato (`locked_layer`: `hud` o `indicator`) un one-shot in attesa (`oneshot`) e un modificatore tenuto (`modifiers`), sempre `hud` o `indicator`; segno quando è nascosto (`marker`, default sì) e sua opacità (`marker_opacity`, 85%) |
+| `[appearance]` | icona nella tray (`tray`), opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale, distanza di aggancio ai bordi (`snap_distance`, 16) e margine dai bordi (`screen_margin`, 8), stile (`style`), opacità e arrotondamento dei tasti (`key_opacity`, `key_radius`), combo sopra i tasti (`combos`), lingua (`language`: `auto`, `it`, `en`), nascondersi con una finestra a schermo intero (`hide_in_fullscreen`, default sì) |
+| `[headsup]` | attivo, ritardo dei layer (`layer_delay_ms`, 250 ms) e dei modificatori (400 ms), ritardo di scomparsa (800 ms), opacità da nascosto, cosa mostra un layer bloccato (`locked_layer`: `hud` o `indicator`) un one-shot in attesa (`oneshot`) e un modificatore tenuto (`modifiers`), sempre `hud` o `indicator`; segno quando è nascosto (`marker`, default sì) e sua opacità (`marker_opacity`, 85%) |
 | `[keycast]` | keycast attivo (default no), posizione sullo schermo (`position`, default `bottom`) |
 | `[indicator]` | mini indicatore attivo, angolo dello schermo (`position`, default `top-right`) |
 | `[[layers]]` | nome e colore di ogni layer, in ordine |
 | `[[labels]]` | etichette personalizzate, per keycode (anche limitato a un layer) o per posizione, anche solo per un'applicazione |
 | `[stats]` | statistiche attive, file, periodo del report "mai usati" |
 | `[backup]` | backup automatico attivo, cartella, quanti tenerne (default 30) |
+| `[update]` | controllo automatico delle nuove versioni, una volta al giorno (`auto_check`, default sì) |
 | `[polling]` | frequenze di lettura (60 Hz visibile, 10 Hz nascosto) e timeout |
 | `[log]` | livello del log |
 
@@ -315,6 +326,7 @@ L'HUD salva da solo la configurazione della tastiera come file `.vil`, lo stesso
 - **Heatmap** (menu → Sui tasti → Heatmap): pressioni sul layer mostrato, oppure su tutti i layer insieme.
 - **Finestra delle statistiche** (menu → Strumenti → Statistiche): utilizzo dei layer, distribuzione tra le mani, le dita e le righe (quanto lavori sulla home row), tasti più usati con la combinazione per raggiungerli, attività giornaliera, tasti mai usati negli ultimi N giorni, esportazione CSV (`keyboard-hud-stats.csv`).
 - **Suggerimenti**: se un tasto molto usato di un layer superiore sta in una posizione faticosa (mignolo, righe alta e bassa, colonne di allungamento), la finestra propone di scambiarlo con una posizione comoda e poco usata dello stesso layer, con il risparmio stimato. Segnala anche se una mano lavora molto più dell'altra. Il layer base non viene toccato: la disposizione delle lettere è una scelta di layout. Il modello di fatica è semplice (dito, riga, allungamento) e va preso come uno spunto, non come una regola.
+- **Aggiornamenti**: l'unica connessione in uscita dell'app. Una richiesta a `api.github.com` per sapere l'ultima versione (una volta al giorno, o mai con `[update] auto_check = false` finché non lo chiedi dal menu) e, solo se installi, il download da github.com. Non viene inviato nient'altro.
 - **Segno dell'heads-up**: per scegliere se disegnarlo chiaro o scuro l'app legge, ogni 2 secondi e solo con l'HUD nascosto, i pixel di una piccola area attorno al segno (circa 50×40). Ne calcola la luminosità media e li scarta subito: niente viene salvato o trasmesso. Con `[headsup] marker = false` lo schermo non viene mai letto.
 - Il conteggio si basa sugli stati letti dalla tastiera. Con l'HUD visibile la lettura è a 60 Hz, da nascosto almeno a 30 Hz se le statistiche sono attive. Un tocco più breve di circa 16 ms può sfuggire.
 
@@ -397,7 +409,8 @@ Le tabelle dei keycode sono **generate** da `build.rs` a partire dai file hjson 
 | L'HUD non resta sopra le altre finestre (Linux) | Wayland: avvia con `--x11` |
 | Non riesco più a cliccare l'HUD | Il click-through è attivo: doppio tocco di HUD_TOG. Riavviare l'app lo disattiva comunque |
 | L'HUD è fuori dallo schermo | All'avvio torna da solo sullo schermo più vicino (anche se il monitor dove stava è scollegato). Altrimenti menu → Finestra → Posizione |
-| L'HUD è sparito | Heads-up: ricompare tenendo Fn1/Fn2. Oppure è nascosto: tocca HUD_TOG |
+| L'HUD è sparito | Heads-up: ricompare tenendo Fn1/Fn2. Oppure è nascosto: tocca HUD_TOG. Con una finestra a schermo intero in primo piano si nasconde da solo (`hide_in_fullscreen`) |
+| L'aggiornamento non riesce | La cartella dell'eseguibile deve essere scrivibile, e serve `curl`. Il motivo è nel menu → Generale; si può sempre scaricare a mano dalla release |
 | Legende sbagliate dopo una modifica in Vial | Si aggiornano da sole entro un secondo. Altrimenti metti in pausa e riprendi dal menu |
 | Dettagli | `keyboard-hud.log`, con `--verbose` per il livello debug |
 
