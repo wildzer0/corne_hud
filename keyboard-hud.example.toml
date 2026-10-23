@@ -80,8 +80,10 @@ modifier_delay_ms = 400   # Ctrl/Shift/Alt/Gui tenuto almeno così a lungo
 hide_delay_ms = 800       # scompare dopo questo tempo dal ritorno a BASE
 hidden_opacity = 0.0      # 0 = invisibile, 0.15 = appena visibile
 # Con l'HUD nascosto resta, dove compare, una piccola tastiera con Fn1 e Fn2
-# colorati. Chiara o scura secondo lo sfondo (Windows e X11). Anche dal menu.
+# colorati. Chiara o scura secondo lo sfondo (Windows e X11). Sta sul lato
+# dell'HUD più vicino ai bordi dello schermo. Anche dal menu.
 marker = true
+marker_opacity = 0.85     # 0.1 – 1.0
 # Un layer bloccato (TG, Layer Lock) tiene su l'HUD intero ("hud") oppure solo
 # il mini indicatore ("indicator").
 locked_layer = "hud"

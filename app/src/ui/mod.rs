@@ -148,7 +148,6 @@ fn cursor_on_screen() -> Option<egui::Pos2> {
 
 /// The heads-up marker fades in this fast once the HUD is gone.
 const MARKER_FADE: Duration = Duration::from_millis(250);
-const MARKER_OPACITY: f32 = 0.85;
 /// Fn1 and Fn2 in the marker when their layers have no colour (the icon's).
 const MARKER_FN: [Color32; 2] = [Color32::from_rgb(0x00, 0xB9, 0xD7), Color32::from_rgb(0x3C, 0xC8, 0x5A)];
 
@@ -2635,7 +2634,11 @@ impl eframe::App for HudApp {
                 self.backdrop.reset();
             }
             let since = self.marker_since.unwrap_or(now);
-            let at = marker::rect(full);
+            // on the side of the HUD closest to the screen edges; on top when the screen is not known
+            let anchor = root_outer_rect(&ctx)
+                .and_then(|window| work_area(&ctx, window).map(|area| marker::anchor(window, area)))
+                .unwrap_or([1, 0]);
+            let at = marker::rect(full, anchor);
             let light_background = ctx.input(|i| i.viewport().inner_rect).and_then(|inner| {
                 let ppp = ctx.pixels_per_point();
                 let on_screen = |r: Rect| {
@@ -2648,7 +2651,7 @@ impl eframe::App for HudApp {
             });
             let appear = (now.duration_since(since).as_secs_f32() / MARKER_FADE.as_secs_f32()).min(1.0);
             let mut p = ui.painter_at(full);
-            p.set_opacity(MARKER_OPACITY * appear);
+            p.set_opacity(self.config.headsup.marker_opacity * appear);
             let fn_keys = [colors(1).unwrap_or(MARKER_FN[0]), colors(2).unwrap_or(MARKER_FN[1])];
             marker::draw(&p, at, &marker::Colors { light_background, fn_keys });
             if appear < 1.0 {

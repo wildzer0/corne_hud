@@ -14,6 +14,7 @@ pub const SCALE: RangeInclusive<f32> = 0.5..=2.0;
 /// Snap distance and screen margin, logical pixels.
 pub const SCREEN_DISTANCE: RangeInclusive<f32> = 0.0..=200.0;
 pub const HIDDEN_OPACITY: RangeInclusive<f32> = 0.0..=1.0;
+pub const MARKER_OPACITY: RangeInclusive<f32> = 0.1..=1.0;
 pub const MODIFIER_DELAY_MS: RangeInclusive<u64> = 0..=10_000;
 pub const HIDE_DELAY_MS: RangeInclusive<u64> = 0..=60_000;
 pub const POLL_HZ: RangeInclusive<u32> = 1..=250;
@@ -178,6 +179,7 @@ pub struct HeadsUp {
     pub modifiers: ShownIn,
     /// A small keyboard where the HUD shows up, while it is faded out.
     pub marker: bool,
+    pub marker_opacity: f32,
 }
 
 impl Default for HeadsUp {
@@ -191,6 +193,7 @@ impl Default for HeadsUp {
             oneshot: ShownIn::Hud,
             modifiers: ShownIn::Hud,
             marker: true,
+            marker_opacity: 0.85,
         }
     }
 }
@@ -385,6 +388,7 @@ impl Config {
         p.timeout_ms = clamp(p.timeout_ms, &TIMEOUT_MS);
         let h = &mut self.headsup;
         h.hidden_opacity = clamp_f32(h.hidden_opacity, &HIDDEN_OPACITY, 0.0);
+        h.marker_opacity = clamp_f32(h.marker_opacity, &MARKER_OPACITY, 0.85);
         h.modifier_delay_ms = clamp(h.modifier_delay_ms, &MODIFIER_DELAY_MS);
         h.hide_delay_ms = clamp(h.hide_delay_ms, &HIDE_DELAY_MS);
         self.stats.unused_days = clamp(self.stats.unused_days, &UNUSED_DAYS);

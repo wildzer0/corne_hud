@@ -1,13 +1,15 @@
 //! Heads-up marker: while the HUD is faded out, a small copy of the app
 //! icon (a split keyboard with column stagger) stays where the HUD shows up.
 //! The two coloured keys are Fn1 and Fn2, the keys that bring the HUD up.
+//! It sits on the side of the HUD closest to the screen edges: on top for
+//! an HUD at the top, in the corner for an HUD in a corner.
 
 use egui::{Color32, CornerRadius, Painter, Pos2, Rect, Vec2};
 
 /// Height of the marker (points).
 pub const HEIGHT: f32 = 24.0;
-/// Space between the marker and the bottom of the HUD (points).
-pub const MARGIN: f32 = 6.0;
+/// Space between the marker and the edges of the HUD (points).
+pub const MARGIN: f32 = 8.0;
 /// Halo around the keys, which keeps them readable on busy backgrounds.
 const HALO: f32 = 0.75;
 
@@ -39,10 +41,38 @@ fn keys() -> Vec<(f32, f32, Option<usize>)> {
     out
 }
 
-/// Where the marker goes in a HUD of rectangle `hud`.
-pub fn rect(hud: Rect) -> Rect {
+/// Column and row (0, 1, 2) of the 3×3 grid of the menu → Position where
+/// the HUD `window` sits in the work `area`. Measured on the room the HUD
+/// has to move, not on the whole screen, so that a wide HUD at the left
+/// still counts as left; a free position counts as the closest of the nine.
+pub fn anchor(window: Rect, area: Rect) -> [u8; 2] {
+    let third = |offset: f32, room: f32| {
+        if room <= 0.0 {
+            return 1;
+        }
+        match offset / room {
+            t if t < 1.0 / 3.0 => 0,
+            t if t > 2.0 / 3.0 => 2,
+            _ => 1,
+        }
+    };
+    [
+        third(window.left() - area.left(), area.width() - window.width()),
+        third(window.top() - area.top(), area.height() - window.height()),
+    ]
+}
+
+/// Where the marker goes in a HUD of rectangle `hud` placed at `anchor`.
+pub fn rect(hud: Rect, anchor: [u8; 2]) -> Rect {
     let size = SIZE * (HEIGHT / SIZE.y);
-    Rect::from_center_size(Pos2::new(hud.center().x, hud.bottom() - MARGIN - HEIGHT / 2.0), size)
+    let place = |a: u8, min: f32, max: f32, len: f32| match a {
+        0 => min + MARGIN + len / 2.0,
+        2 => max - MARGIN - len / 2.0,
+        _ => (min + max) / 2.0,
+    };
+    let center =
+        Pos2::new(place(anchor[0], hud.left(), hud.right(), size.x), place(anchor[1], hud.top(), hud.bottom(), size.y));
+    Rect::from_center_size(center, size)
 }
 
 /// Colours of the marker: on a light background (`Some(true)`) dark keys,
@@ -90,5 +120,27 @@ mod tests {
         let right = keys.iter().map(|k| k.0 + KEY).fold(0.0, f32::max);
         let bottom = keys.iter().map(|k| k.1 + KEY).fold(0.0, f32::max);
         assert_eq!((right, bottom), (SIZE.x, SIZE.y));
+    }
+
+    #[test]
+    fn follows_the_position_of_the_hud() {
+        let area = Rect::from_min_size(Pos2::ZERO, Vec2::new(1920.0, 1080.0));
+        let hud = |x: f32, y: f32| Rect::from_min_size(Pos2::new(x, y), Vec2::new(900.0, 400.0));
+        assert_eq!(anchor(hud(8.0, 8.0), area), [0, 0]);
+        assert_eq!(anchor(hud(510.0, 8.0), area), [1, 0]);
+        assert_eq!(anchor(hud(1012.0, 672.0), area), [2, 2]);
+        assert_eq!(anchor(hud(510.0, 340.0), area), [1, 1]);
+        // a free position: the closest of the nine
+        assert_eq!(anchor(hud(200.0, 600.0), area), [0, 2]);
+        // wider than the screen: in the middle
+        let small = Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0));
+        assert_eq!(anchor(hud(0.0, 0.0), small), [1, 0]);
+
+        let r = Rect::from_min_size(Pos2::ZERO, Vec2::new(900.0, 400.0));
+        let top = rect(r, [1, 0]);
+        assert_eq!((top.center().x, top.top()), (450.0, MARGIN));
+        let corner = rect(r, [2, 2]);
+        assert_eq!((corner.right(), corner.bottom()), (900.0 - MARGIN, 400.0 - MARGIN));
+        assert_eq!(rect(r, [1, 1]).center(), r.center());
     }
 }
