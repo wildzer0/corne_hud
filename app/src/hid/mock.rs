@@ -123,6 +123,8 @@ pub struct MockKeyboard {
     pending: VecDeque<Report>,
     /// Fixed time for tests; `None` = real clock.
     frozen_ms: Option<u64>,
+    /// Grows at every key written, like the firmware's `keymap_version`.
+    keymap_version: u8,
 }
 
 /// Macro buffer of the simulated keyboard: "hi" + Enter, then three empty macros.
@@ -164,6 +166,7 @@ impl MockKeyboard {
             dynamic: mock_dynamic(),
             pending: VecDeque::new(),
             frozen_ms: None,
+            keymap_version: 0,
         }
     }
 
@@ -176,7 +179,7 @@ impl MockKeyboard {
         self.frozen_ms.unwrap_or_else(|| self.start.elapsed().as_millis() as u64)
     }
 
-    fn answer(&self, req: &Report) -> Option<Report> {
+    fn answer(&mut self, req: &Report) -> Option<Report> {
         let mut r = *req;
         match req[0] {
             p::HUD_CMD => self.answer_hud(&mut r),
@@ -252,6 +255,11 @@ impl MockKeyboard {
                     r[4 + i] = MOCK_MACROS.get(offset + i).copied().unwrap_or(0);
                 }
             }
+            p::VIA_GET_KEYCODE => r[4..6].copy_from_slice(&self.keymap.get(req[1], req[2], req[3]).to_be_bytes()),
+            p::VIA_SET_KEYCODE => {
+                self.keymap.set(req[1], req[2], req[3], u16::from_be_bytes([req[4], req[5]]));
+                self.keymap_version = self.keymap_version.wrapping_add(1);
+            }
             0x12 => {
                 let offset = u16::from_be_bytes([req[1], req[2]]) as usize;
                 let size = req[3] as usize;
@@ -297,6 +305,7 @@ impl MockKeyboard {
                 r[24] = 2; // Windows
                 r[25] = 0;
                 r[26] = 1;
+                r[28] = self.keymap_version;
             }
             0x03 => {
                 let (layer, offset, count) = (args[0], u16::from_le_bytes([args[1], args[2]]), args[3]);
@@ -404,6 +413,18 @@ mod tests {
         let vil = Vil::parse(&dump.to_vil().to_string(), 8, 7).unwrap();
         assert_eq!(vil.keymap, dump.keymap);
         assert_eq!(vil.dynamic, Dynamic { macros: dump.macros.clone(), ..mock_dynamic() });
+    }
+
+    #[test]
+    fn keys_written_over_the_protocol() {
+        let mut d = device_at(0);
+        let info = d.info().unwrap();
+        let before = d.state().unwrap().keymap_version;
+        assert_eq!(d.keycode(0, 1, 1).unwrap(), d.keymap(&info).unwrap().get(0, 1, 1));
+        d.set_keycode(0, 1, 1, 0x29).unwrap();
+        assert_eq!(d.keycode(0, 1, 1).unwrap(), 0x29);
+        assert_eq!(d.keymap(&info).unwrap().get(0, 1, 1), 0x29);
+        assert_ne!(d.state().unwrap().keymap_version, before);
     }
 
     #[test]

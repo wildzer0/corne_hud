@@ -375,6 +375,22 @@ impl Device {
         })
     }
 
+    /// Stored keycode of one key (VIA, no Colemak remap).
+    pub fn keycode(&mut self, layer: u8, row: u8, col: u8) -> Result<u16, DeviceError> {
+        let req = p::get_keycode_request(layer, row, col);
+        Ok(p::decode_keycode(&req, &self.via(&req, Some(p::VIA_GET_KEYCODE))?)?)
+    }
+
+    /// Writes one key and reads it back.
+    pub fn set_keycode(&mut self, layer: u8, row: u8, col: u8, code: u16) -> Result<(), DeviceError> {
+        let req = p::set_keycode_request(layer, row, col, code);
+        p::check_set_keycode(&req, &self.via(&req, Some(p::VIA_SET_KEYCODE))?)?;
+        if self.keycode(layer, row, col)? != code {
+            return Err(ProtocolError::Invalid("tasto non scritto").into());
+        }
+        Ok(())
+    }
+
     pub fn layer_count(&mut self) -> Result<u8, DeviceError> {
         let r = self.via(&p::layer_count_request(), Some(p::VIA_GET_LAYER_COUNT))?;
         let n = p::decode_layer_count(&r)?;

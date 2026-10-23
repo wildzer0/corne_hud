@@ -18,6 +18,8 @@ pub const MAX_KEYMAP_CHUNK: u8 = 12;
 pub const VIA_GET_KEYBOARD_VALUE: u8 = 0x02;
 pub const VIA_LAYOUT_OPTIONS: u8 = 0x02;
 pub const VIA_GET_LAYER_COUNT: u8 = 0x11;
+pub const VIA_GET_KEYCODE: u8 = 0x04;
+pub const VIA_SET_KEYCODE: u8 = 0x05;
 pub const VIAL_PREFIX: u8 = 0xFE;
 pub const VIAL_GET_KEYBOARD_ID: u8 = 0x00;
 pub const VIAL_GET_SIZE: u8 = 0x01;
@@ -327,6 +329,39 @@ pub fn decode_layout_options(resp: &Report) -> Result<u32, ProtocolError> {
     Ok(u32::from_be_bytes([resp[2], resp[3], resp[4], resp[5]]))
 }
 
+/// VIA `dynamic_keymap_get_keycode`: the stored keycode (no Colemak remap).
+pub fn get_keycode_request(layer: u8, row: u8, col: u8) -> Report {
+    via_request(&[VIA_GET_KEYCODE, layer, row, col])
+}
+
+pub fn decode_keycode(req: &Report, resp: &Report) -> Result<u16, ProtocolError> {
+    if resp[0] == ID_UNHANDLED {
+        return Err(ProtocolError::Unsupported);
+    }
+    if resp[..4] != req[..4] {
+        return Err(ProtocolError::Mismatch);
+    }
+    Ok(u16::from_be_bytes([resp[4], resp[5]]))
+}
+
+/// VIA `dynamic_keymap_set_keycode`: writes one key to the keyboard's memory.
+/// Vial does not ask for the unlock, except for `QK_BOOT`.
+pub fn set_keycode_request(layer: u8, row: u8, col: u8, code: u16) -> Report {
+    let c = code.to_be_bytes();
+    via_request(&[VIA_SET_KEYCODE, layer, row, col, c[0], c[1]])
+}
+
+/// VIA echoes the request.
+pub fn check_set_keycode(req: &Report, resp: &Report) -> Result<(), ProtocolError> {
+    if resp[0] == ID_UNHANDLED {
+        return Err(ProtocolError::Unsupported);
+    }
+    if resp[..6] != req[..6] {
+        return Err(ProtocolError::Mismatch);
+    }
+    Ok(())
+}
+
 pub fn layer_count_request() -> Report {
     via_request(&[VIA_GET_LAYER_COUNT])
 }
@@ -540,6 +575,26 @@ mod tests {
         id[0] = 6;
         id[4..12].copy_from_slice(&[0x89, 0x36, 0x2A, 0xC7, 0xFA, 0xD8, 0x89, 0x45]);
         assert_eq!(decode_vial_id(&id), (6, 5010774632021243529));
+    }
+
+    #[test]
+    fn keycode_read_and_write() {
+        let req = get_keycode_request(2, 3, 4);
+        assert_eq!(&req[..4], &[0x04, 2, 3, 4]);
+        let mut r = req;
+        r[4..6].copy_from_slice(&[0x52, 0x64]);
+        assert_eq!(decode_keycode(&req, &r), Ok(0x5264));
+        r[3] = 5;
+        assert_eq!(decode_keycode(&req, &r), Err(ProtocolError::Mismatch));
+        r[0] = ID_UNHANDLED;
+        assert_eq!(decode_keycode(&req, &r), Err(ProtocolError::Unsupported));
+
+        let req = set_keycode_request(1, 0, 6, 0x7E12);
+        assert_eq!(&req[..6], &[0x05, 1, 0, 6, 0x7E, 0x12]);
+        assert_eq!(check_set_keycode(&req, &req), Ok(()));
+        let mut r = req;
+        r[5] = 0;
+        assert_eq!(check_set_keycode(&req, &r), Err(ProtocolError::Mismatch));
     }
 
     #[test]

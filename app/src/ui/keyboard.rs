@@ -164,6 +164,18 @@ fn rotate(v: Vec2, angle: f32) -> Vec2 {
     Vec2::new(v.x * c - v.y * s, v.x * s + v.y * c)
 }
 
+/// Matrix position of the key under `p`, with the keyboard drawn in `rect`.
+pub fn key_at(keys: &[KleKey], rect: Rect, p: Pos2) -> Option<(u8, u8)> {
+    let tf = Transform::fit(keys, rect)?;
+    keys.iter().find_map(|key| match key.role() {
+        Some(KeyRole::Matrix { row, col }) => {
+            let poly: Vec<Pos2> = inset(key).corners().iter().map(|&c| tf.pos(c)).collect();
+            contains(&poly, p).then_some((row, col))
+        }
+        _ => None,
+    })
+}
+
 /// Draws the keyboard in `rect`. Returns the tooltip of the hovered key.
 pub fn draw(
     painter: &Painter,

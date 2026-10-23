@@ -4,6 +4,7 @@
 pub mod diagnostics;
 pub mod frameless;
 pub mod header;
+pub mod key_editor;
 pub mod keyboard;
 pub mod keycast;
 pub mod report;
@@ -20,7 +21,7 @@ use crate::config::{
 use crate::config_edit::{self, Edit};
 use crate::headsup::{self, HeadsUp};
 use crate::hid::protocol::{caps, flags, HudInfo, HudState, OsKind};
-use crate::hid::worker::{Event, PauseReason, Status, Worker};
+use crate::hid::worker::{Event, KeyWrite, PauseReason, Status, Worker, WriteError};
 use crate::i18n::{tr, Lang, Msg};
 use crate::kle::{KeyRole, KleKey};
 use crate::labels::Labels;
@@ -248,6 +249,8 @@ pub struct DevOptions {
     pub settings: bool,
     pub settings_page: Option<String>,
     pub menu: bool,
+    /// Opens the key editor on `(layer, row, col)`, searching for the text.
+    pub edit_key: Option<((u8, u8, u8), String)>,
 }
 
 /// Development aid: capture the window to a PPM file, then quit.
@@ -529,8 +532,17 @@ pub struct HudApp {
     heat: HeatMode,
     heat_cache: Option<(Instant, Totals)>,
     menu: Option<MenuWindow>,
+    /// Key under the pointer when the menu was opened: `(layer, row, col)`.
+    menu_key: Option<(u8, u8, u8)>,
+    key_editor: key_editor::KeyEditor,
+    /// Last key written from the HUD, with the keycode it replaced (for undo).
+    last_write: Option<(KeyWrite, u16)>,
+    /// Undo sent, answer not come yet.
+    undoing: Option<KeyWrite>,
     /// `--menu`: open the menu as soon as the window position is known.
     dev_menu: bool,
+    /// `--edit-key`: open the key editor once the keyboard is connected.
+    dev_edit_key: Option<((u8, u8, u8), String)>,
 }
 
 impl HudApp {
@@ -622,7 +634,12 @@ impl HudApp {
             heat: HeatMode::Off,
             heat_cache: None,
             menu: None,
+            menu_key: None,
+            key_editor: key_editor::KeyEditor::default(),
+            last_write: None,
+            undoing: None,
             dev_menu: s.dev.menu,
+            dev_edit_key: s.dev.edit_key.clone(),
         };
         // what the file says, except where an older version remembered a menu
         // choice in the state file: that is moved into the config at the first save
@@ -646,7 +663,9 @@ impl HudApp {
             app.open_settings();
             app.settings.open_page(s.dev.settings_page.as_deref());
         }
-        if (s.dev.stats_window || s.dev.diagnostics || s.dev.settings || s.dev.menu) && app.screenshot.is_some() {
+        if (s.dev.stats_window || s.dev.diagnostics || s.dev.settings || s.dev.menu || s.dev.edit_key.is_some())
+            && app.screenshot.is_some()
+        {
             // capture the other windows inside the HUD window
             ctx.set_embed_viewports(true);
         }
@@ -764,6 +783,7 @@ impl HudApp {
                     }
                     self.search_stale = true;
                 }
+                Event::KeyWritten { write, result } => self.key_written(write, result),
                 Event::State(s) => {
                     let presses = self.fade.new_presses(&s.matrix);
                     let layer = highest_layer(s.active_mask());
@@ -1459,6 +1479,130 @@ impl HudApp {
         self.menu = None;
     }
 
+    /// Keys can be written: connected to a keyboard, not paused.
+    fn can_write_keys(&self) -> bool {
+        self.live.is_some()
+            && self.worker().is_some_and(|w| !w.is_paused())
+            && matches!(self.status, Some(Status::Connected { .. } | Status::NoHudFirmware { .. }))
+    }
+
+    fn layer_label(&self, layer: u8) -> String {
+        self.layer_names.get(layer as usize).cloned().unwrap_or_else(|| format!("L{layer}"))
+    }
+
+    fn open_key_editor(&mut self, (layer, row, col): (u8, u8, u8)) {
+        let Some(l) = &self.live else { return };
+        let legends = l.legend_context(&self.layer_names);
+        let catalog =
+            key_editor::catalog(l.keymap.layers(), l.dynamic.tap_dances.len(), l.dynamic.macros.len(), &legends);
+        let place = crate::tr_format!(
+            "{} · riga {row}, colonna {col}",
+            "{} · row {row}, column {col}",
+            self.layer_label(layer)
+        );
+        let target = key_editor::Target { layer, row, col, shown: l.keymap.get(layer, row, col), place };
+        self.key_editor.open(target, catalog);
+    }
+
+    fn show_key_editor(&mut self, ctx: &egui::Context) {
+        if self.live.is_some() {
+            if let Some((key, query)) = self.dev_edit_key.take() {
+                self.open_key_editor(key);
+                self.key_editor.search_and_pick(&query);
+            }
+        }
+        if !self.key_editor.is_open() {
+            return;
+        }
+        let Some(l) = &self.live else {
+            self.key_editor.close();
+            return;
+        };
+        // the keymap may have changed since the window opened
+        if let Some(t) = &mut self.key_editor.target {
+            t.shown = l.keymap.get(t.layer, t.row, t.col);
+        }
+        let present = positions(&l.keys);
+        let default_layer = self.state.map_or(0, |s| (s.default_layer_state as u32).trailing_zeros().min(31) as u8);
+        let hud_tog = self.info.filter(|i| i.capabilities & caps::HUD_TOG != 0).map(|i| i.hud_tog_keycode);
+        let target = self.key_editor.target.clone();
+        let check = |code: u16| {
+            let t = target.as_ref().ok_or(crate::keymap_guard::Refusal::Unchanged)?;
+            let change = crate::keymap_guard::Change { layer: t.layer, row: t.row, col: t.col, code };
+            crate::keymap_guard::check(&l.keymap, &present, &l.dynamic, default_layer, hud_tog, change)
+        };
+        let names = self.layer_names.clone();
+        let layer_name = |n: u8| names.get(n as usize).cloned().unwrap_or_else(|| format!("L{n}"));
+        let legends = l.legend_context(&self.layer_names);
+        let available = self.can_write_keys();
+        let backups = self.config.backup.enabled && !self.is_mock();
+        let action = self.key_editor.show(ctx, self.lang, &legends, available, backups, &check, &layer_name);
+        if let key_editor::Action::Write(w) = action {
+            match self.worker() {
+                Some(worker) => worker.write_key(w),
+                None => self.key_editor.writing = None,
+            }
+        }
+    }
+
+    fn write_error_text(&self, e: &WriteError) -> String {
+        match e {
+            WriteError::NotConnected => tr(self.lang, Msg::WriteNotConnected).to_string(),
+            WriteError::Remapped => tr(self.lang, Msg::WriteRemapped).to_string(),
+            WriteError::Backup => tr(self.lang, Msg::WriteBackup).to_string(),
+            WriteError::Bootloader => tr(self.lang, Msg::EditKeyBootloader).to_string(),
+            WriteError::Device(d) => d.clone(),
+        }
+    }
+
+    /// "Esc → Ctrl+Z" with the legends of the layer's keys.
+    fn change_text(&self, from: u16, to: u16) -> String {
+        let name = |code: u16| match &self.live {
+            Some(l) => crate::vial::legend::legend(code, &l.legend_context(&self.layer_names)).tap.text,
+            None => crate::vial::keycode::qmk_name(code),
+        };
+        format!("{} → {}", name(from), name(to))
+    }
+
+    fn key_written(&mut self, write: KeyWrite, result: Result<u16, WriteError>) {
+        let undo = self.undoing.take_if(|u| *u == write).is_some();
+        let edit = self.key_editor.writing.take_if(|w| *w == write).is_some();
+        match result {
+            Ok(previous) => {
+                let what = self.change_text(previous, write.code);
+                if undo {
+                    self.last_write = None;
+                    self.notify(crate::tr_format!("Modifica annullata: {what}", "Change undone: {what}"));
+                } else {
+                    self.last_write = Some((write, previous));
+                    if edit {
+                        self.key_editor.close();
+                    }
+                    let place = self.layer_label(write.layer);
+                    self.notify(crate::tr_format!("Tasto scritto ({place}): {what}", "Key written ({place}): {what}"));
+                }
+            }
+            Err(e) => {
+                let text = self.write_error_text(&e);
+                log::warn!("scrittura del tasto non riuscita: {text}");
+                if edit {
+                    self.key_editor.error = Some(text);
+                } else {
+                    self.notify(crate::tr_format!("Tasto non scritto: {text}", "Key not written: {text}"));
+                }
+            }
+        }
+    }
+
+    fn undo_key(&mut self) {
+        let Some((done, previous)) = self.last_write else { return };
+        let w = KeyWrite { code: previous, shown: done.code, ..done };
+        if let Some(worker) = self.worker() {
+            worker.write_key(w);
+            self.undoing = Some(w);
+        }
+    }
+
     fn open_settings(&mut self) {
         self.style_names = style::names();
         self.settings.show_window();
@@ -1486,6 +1630,7 @@ impl HudApp {
     }
 
     fn open_menu(&mut self, ctx: &egui::Context, hud: Rect, pointer: egui::Pos2) {
+        self.menu_key = None;
         self.refresh_autostart();
         self.style_names = style::names();
         let anchor = ctx.input(|i| i.viewport().inner_rect).map(|inner| inner.min + pointer.to_vec2());
@@ -1640,6 +1785,28 @@ impl HudApp {
             });
         });
         ui.separator();
+        let can_write = self.can_write_keys();
+        if let Some(key) = self.menu_key.filter(|_| self.live.is_some()) {
+            let r = ui
+                .add_enabled(can_write, egui::Button::new(tr(lang, Msg::MenuEditKey)))
+                .on_hover_text(tr(lang, Msg::MenuEditKeyHint))
+                .on_disabled_hover_text(tr(lang, Msg::EditKeyUnavailable));
+            if r.clicked() {
+                self.open_key_editor(key);
+                self.close_menu();
+            }
+        }
+        if let Some((done, previous)) = self.last_write {
+            let what = self.change_text(done.code, previous);
+            let r = ui.add_enabled(can_write && self.undoing.is_none(), egui::Button::new(tr(lang, Msg::MenuUndoKey)));
+            if r.on_hover_text(format!("{} · {what}", self.layer_label(done.layer))).clicked() {
+                self.undo_key();
+                self.close_menu();
+            }
+        }
+        if self.menu_key.is_some() || self.last_write.is_some() {
+            ui.separator();
+        }
         ui.horizontal(|ui| {
             ui.label(tr(lang, Msg::MenuOpacity));
             let mut pct = (self.opacity * 100.0).round();
@@ -2046,6 +2213,7 @@ impl eframe::App for HudApp {
             full.max - Vec2::new(pad - 2.0, footer_h + 4.0),
         );
         let mut browse_layers = None;
+        let mut key_under_pointer = None;
         if self.heat != HeatMode::Off && self.heat_cache.as_ref().is_none_or(|(t, _)| t.elapsed() >= HEAT_REFRESH) {
             self.heat_cache = self.stats.as_ref().map(|s| {
                 let from = crate::clock::today() - self.config.stats.unused_days as i64 + 1;
@@ -2103,6 +2271,7 @@ impl eframe::App for HudApp {
                     combos,
                 };
                 let hover = if self.click_through { None } else { response.hover_pos() };
+                key_under_pointer = hover.and_then(|p| keyboard::key_at(&l.keys, body, p)).map(|(r, c)| (layer, r, c));
                 if let Some(tip) = keyboard::draw(&painter, body, &view, &palette, hover) {
                     response.clone().on_hover_text(tip);
                 }
@@ -2146,6 +2315,7 @@ impl eframe::App for HudApp {
         if !passthrough && response.secondary_clicked() {
             if let Some(p) = response.interact_pointer_pos() {
                 self.open_menu(&ctx, full, p);
+                self.menu_key = key_under_pointer;
             }
         } else if response.clicked() || passthrough {
             self.close_menu();
@@ -2207,6 +2377,7 @@ impl eframe::App for HudApp {
             csv_path: paths::base_dir().join("keyboard-hud-stats.csv"),
         };
         self.report.show(&ctx, self.stats.as_mut(), &input);
+        self.show_key_editor(&ctx);
         if self.diagnostics.open {
             let sections = self.diagnostics_sections();
             match self.diagnostics.show(&ctx, self.lang, &sections) {

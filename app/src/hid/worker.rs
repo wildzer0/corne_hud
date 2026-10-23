@@ -12,6 +12,7 @@ use crate::paths;
 use crate::vial::definition::Definition;
 use crate::vial::dynamic::Dynamic;
 use hidapi::HidApi;
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -67,6 +68,31 @@ pub enum Status {
     Error(String),
 }
 
+/// One key to write to the keyboard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyWrite {
+    pub layer: u8,
+    pub row: u8,
+    pub col: u8,
+    pub code: u16,
+    /// The keycode the HUD shows there now: the write goes ahead only if the
+    /// keyboard stores the same one (not with the Colemak remap in between,
+    /// nor after a change made elsewhere).
+    pub shown: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WriteError {
+    /// No session with the keyboard (paused, disconnected).
+    NotConnected,
+    /// The keyboard stores another keycode at that position.
+    Remapped,
+    /// Backups are on and the one before the write failed.
+    Backup,
+    Bootloader,
+    Device(String),
+}
+
 #[derive(Debug, Clone)]
 pub enum Event {
     Status(Status),
@@ -80,6 +106,11 @@ pub enum Event {
     },
     Keymap(Keymap),
     State(HudState),
+    /// Outcome of a [`KeyWrite`]: the keycode stored before it, for undo.
+    KeyWritten {
+        write: KeyWrite,
+        result: Result<u16, WriteError>,
+    },
     /// A backup was written: the new file, its content and the previous
     /// backup's content (none for the first one).
     Backup {
@@ -144,6 +175,7 @@ struct Control {
     /// Automatic backups; `None` = off.
     backup: Mutex<Option<backup::Settings>>,
     link: Mutex<LinkStats>,
+    writes: Mutex<VecDeque<KeyWrite>>,
 }
 
 pub struct Worker {
@@ -162,6 +194,7 @@ impl Worker {
             timeout_ms: AtomicU64::new(timeout_ms),
             backup: Mutex::new(None),
             link: Mutex::new(LinkStats::default()),
+            writes: Mutex::new(VecDeque::new()),
         });
         let ctx = Ctx { tx, wake: Box::new(wake), control: control.clone() };
         thread::Builder::new().name("hid".into()).spawn(move || run(source, ctx)).expect("spawn HID thread");
@@ -184,6 +217,13 @@ impl Worker {
     pub fn set_backup(&self, settings: Option<backup::Settings>) {
         if let Ok(mut b) = self.control.backup.lock() {
             *b = settings;
+        }
+    }
+
+    /// Queues a key to write; the outcome comes back as [`Event::KeyWritten`].
+    pub fn write_key(&self, write: KeyWrite) {
+        if let Ok(mut w) = self.control.writes.lock() {
+            w.push_back(write);
         }
     }
 
@@ -231,6 +271,17 @@ impl Ctx {
             l.errors += 1;
             l.last_error = Some((e.to_string(), Instant::now()));
         });
+    }
+
+    fn take_writes(&self) -> Vec<KeyWrite> {
+        self.control.writes.lock().map(|mut w| w.drain(..).collect()).unwrap_or_default()
+    }
+
+    /// Writes asked while there is no session fail at once.
+    fn refuse_writes(&self) -> bool {
+        self.take_writes()
+            .into_iter()
+            .all(|write| self.send(Event::KeyWritten { write, result: Err(WriteError::NotConnected) }))
     }
 
     fn timeout(&self) -> Duration {
@@ -324,6 +375,9 @@ fn run(source: Source, ctx: Ctx) {
     let mut reporter = Reporter { last: None };
 
     while !ctx.stopped() {
+        if !ctx.refuse_writes() {
+            return;
+        }
         if let Some(reason) = pause_reason(&ctx, &mut vial) {
             if !reporter.report(&ctx, Status::Paused(reason)) {
                 return;
@@ -496,6 +550,23 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
             log::info!("HID: dispositivo chiuso (pausa)");
             return SessionEnd::Paused;
         }
+        for write in ctx.take_writes() {
+            let result = write_key(&mut conn, &definition, ctx, write);
+            if result.is_ok() {
+                match read_keymap(&mut conn, &definition) {
+                    Ok(km) => {
+                        if !ctx.send(Event::Keymap(km)) {
+                            return SessionEnd::Lost(Status::Searching);
+                        }
+                    }
+                    Err(e) => log::warn!("rilettura del keymap fallita: {e}"),
+                }
+            }
+            if !ctx.send(Event::KeyWritten { write, result }) {
+                return SessionEnd::Lost(Status::Searching);
+            }
+            conn.device.take_foreign();
+        }
         let idle = last.is_none_or(|s| s.matrix == [0; 8]) && last_activity.elapsed() >= BACKUP_IDLE;
         if (backup_due || backup_checked.elapsed() >= BACKUP_INTERVAL) && (idle || conn.info.is_none()) {
             run_backup(&mut conn, &definition, ctx);
@@ -565,16 +636,36 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
     SessionEnd::Lost(Status::Searching)
 }
 
+/// Writes one key, after a backup of the configuration as it is now.
+/// Returns the keycode stored before.
+fn write_key(conn: &mut Connection, def: &Definition, ctx: &Ctx, w: KeyWrite) -> Result<u16, WriteError> {
+    let device = |e: DeviceError| WriteError::Device(e.to_string());
+    if w.code == crate::keymap_guard::QK_BOOT {
+        return Err(WriteError::Bootloader);
+    }
+    let stored = conn.device.keycode(w.layer, w.row, w.col).map_err(device)?;
+    if stored != w.shown {
+        return Err(WriteError::Remapped);
+    }
+    if !run_backup(conn, def, ctx) {
+        return Err(WriteError::Backup);
+    }
+    conn.device.set_keycode(w.layer, w.row, w.col, w.code).map_err(device)?;
+    log::info!("tasto scritto: layer {}, riga {}, colonna {}: {stored:#06x} → {:#06x}", w.layer, w.row, w.col, w.code);
+    Ok(stored)
+}
+
 /// Reads the whole configuration and writes a `.vil` if it differs from the
-/// last backup. Failures are logged only: the HUD keeps working.
-fn run_backup(conn: &mut Connection, def: &Definition, ctx: &Ctx) {
-    let Some(settings) = ctx.control.backup.lock().ok().and_then(|b| b.clone()) else { return };
+/// last backup. Failures are logged only: the HUD keeps working. Returns
+/// false if the backup failed (true when backups are off).
+fn run_backup(conn: &mut Connection, def: &Definition, ctx: &Ctx) -> bool {
+    let Some(settings) = ctx.control.backup.lock().ok().and_then(|b| b.clone()) else { return true };
     let started = Instant::now();
     let dump = match conn.device.dump(def) {
         Ok(d) => d,
         Err(e) => {
             log::warn!("backup: lettura della configurazione fallita: {e}");
-            return;
+            return false;
         }
     };
     let vil = dump.to_vil();
@@ -582,9 +673,16 @@ fn run_backup(conn: &mut Connection, def: &Definition, ctx: &Ctx) {
         Ok(Some((path, previous))) => {
             log::info!("backup salvato: {} ({} ms)", path.display(), started.elapsed().as_millis());
             ctx.send(Event::Backup { path, current: vil, previous, keyboard: def.name.clone() });
+            true
         }
-        Ok(None) => log::debug!("backup: nessuna modifica ({} ms)", started.elapsed().as_millis()),
-        Err(e) => log::warn!("backup in {}: {e}", settings.dir.display()),
+        Ok(None) => {
+            log::debug!("backup: nessuna modifica ({} ms)", started.elapsed().as_millis());
+            true
+        }
+        Err(e) => {
+            log::warn!("backup in {}: {e}", settings.dir.display());
+            false
+        }
     }
 }
 
@@ -673,6 +771,48 @@ mod tests {
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
         drop(w);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn keys_are_written_only_when_shown_and_connected() {
+        let w = Worker::start(Source::Mock(0), 100, 50, || {});
+        let next = |pred: &dyn Fn(&Event) -> bool| {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < deadline {
+                if let Ok(e) = w.events.recv_timeout(Duration::from_millis(100)) {
+                    if pred(&e) {
+                        return Some(e);
+                    }
+                }
+            }
+            None
+        };
+        let Some(Event::Layout { keymap, .. }) = next(&|e| matches!(e, Event::Layout { .. })) else {
+            panic!("no layout")
+        };
+        let shown = keymap.get(0, 1, 1);
+        let write = KeyWrite { layer: 0, row: 1, col: 1, code: 0x29, shown };
+        w.write_key(write);
+        let Some(Event::Keymap(km)) = next(&|e| matches!(e, Event::Keymap(_))) else { panic!("no keymap") };
+        assert_eq!(km.get(0, 1, 1), 0x29);
+        let Some(Event::KeyWritten { result, .. }) = next(&|e| matches!(e, Event::KeyWritten { .. })) else {
+            panic!("no answer")
+        };
+        assert_eq!(result, Ok(shown));
+        // the HUD shows something else than the keyboard stores: refused
+        w.write_key(KeyWrite { code: 0x2A, ..write });
+        let Some(Event::KeyWritten { result, .. }) = next(&|e| matches!(e, Event::KeyWritten { .. })) else {
+            panic!("no answer")
+        };
+        assert_eq!(result, Err(WriteError::Remapped));
+        // paused: refused at once
+        w.set_paused(true);
+        next(&|e| matches!(e, Event::Status(Status::Paused(_)))).expect("not paused");
+        w.write_key(KeyWrite { code: 0x2A, shown: 0x29, ..write });
+        let Some(Event::KeyWritten { result, .. }) = next(&|e| matches!(e, Event::KeyWritten { .. })) else {
+            panic!("no answer")
+        };
+        assert_eq!(result, Err(WriteError::NotConnected));
     }
 
     #[test]

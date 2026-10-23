@@ -24,6 +24,7 @@ Uso: keyboard-hud [opzioni]
   --settings            sviluppo: apre la finestra delle impostazioni
   --settings-page P     sviluppo: la apre su layers, labels o text
   --menu                sviluppo: apre il menu contestuale all'avvio
+  --edit-key L,R,C[,T]  sviluppo: apre «Cambia tasto» su layer L, riga R, colonna C (e cerca T)
   --verbose             log dettagliato
   --version             versione
   -h, --help            questo aiuto";
@@ -48,6 +49,7 @@ pub struct Options {
     pub settings: bool,
     pub settings_page: Option<String>,
     pub menu: bool,
+    pub edit_key: Option<((u8, u8, u8), String)>,
     pub print_udev_rule: bool,
     pub verbose: bool,
     pub version: bool,
@@ -104,6 +106,14 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                 o.settings_page = Some(v);
             }
             "--menu" => o.menu = true,
+            "--edit-key" => {
+                let v = value("--edit-key")?;
+                let bad = || "--edit-key: usa L,R,C oppure L,R,C,TESTO".to_string();
+                let mut parts = v.splitn(4, ',');
+                let mut num = || parts.next().and_then(|n| n.trim().parse::<u8>().ok()).ok_or_else(bad);
+                let key = (num()?, num()?, num()?);
+                o.edit_key = Some((key, parts.next().unwrap_or_default().to_string()));
+            }
             "--print-udev-rule" => o.print_udev_rule = true,
             "--verbose" | "-v" => o.verbose = true,
             "--version" => o.version = true,

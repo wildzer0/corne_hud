@@ -13,6 +13,7 @@ mod foreground;
 mod headsup;
 mod hid;
 mod i18n;
+mod keymap_guard;
 mod kle;
 mod labels;
 mod logging;
@@ -181,6 +182,7 @@ fn run(opts: Options) -> ExitCode {
                     settings: opts.settings,
                     settings_page: opts.settings_page,
                     menu: opts.menu,
+                    edit_key: opts.edit_key,
                 },
                 config,
                 watcher,
