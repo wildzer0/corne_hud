@@ -4,6 +4,8 @@
 # portable) oppure nella cartella di configurazione dell'utente. Le modifiche
 # vengono applicate entro un secondo, senza riavviare l'app.
 # Tutte le voci sono facoltative: se mancano si usano i valori qui sotto.
+# Si modifica anche dalla finestra Impostazioni (menu, tray o Ctrl+, sull'HUD)
+# e dal menu: l'app riscrive solo le voci che cambi, i commenti restano.
 
 [device]
 # Usa solo la tastiera con questi ID (esadecimali). Se li ometti, l'HUD usa il
@@ -40,6 +42,8 @@ style = ""
 # Opacità e arrotondamento dei tasti; se mancano decide lo stile.
 # key_opacity = 1.0   # 0.2 – 1.0: le legende restano piene
 # key_radius = 0.12   # 0 (spigoli vivi) – 0.5 della dimensione del tasto
+# Combo configurate in Vial disegnate sopra i tasti. Anche dal menu.
+combos = false
 
 # Nomi e colori dei layer, nell'ordine del firmware (0, 1, 2, ...).
 # color: "#RRGGBB", oppure "" per un layer neutro.

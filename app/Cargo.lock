@@ -1388,6 +1388,7 @@ dependencies = [
  "serde_json",
  "sysinfo",
  "toml",
+ "toml_edit",
  "tray-icon",
  "windows-sys 0.61.2",
  "winresource",
@@ -2779,6 +2780,7 @@ dependencies = [
  "indexmap",
  "toml_datetime",
  "toml_parser",
+ "toml_writer",
  "winnow",
 ]
 

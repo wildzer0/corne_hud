@@ -21,6 +21,7 @@ Uso: keyboard-hud [opzioni]
   --heatmap layer|all   sviluppo: mostra la heatmap all'avvio
   --stats-window        sviluppo: apre la finestra delle statistiche
   --diagnostics         sviluppo: apre la finestra di diagnostica
+  --settings            sviluppo: apre la finestra delle impostazioni
   --menu                sviluppo: apre il menu contestuale all'avvio
   --verbose             log dettagliato
   --version             versione
@@ -43,6 +44,7 @@ pub struct Options {
     pub heatmap: Option<String>,
     pub stats_window: bool,
     pub diagnostics: bool,
+    pub settings: bool,
     pub menu: bool,
     pub print_udev_rule: bool,
     pub verbose: bool,
@@ -90,6 +92,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             }
             "--stats-window" => o.stats_window = true,
             "--diagnostics" => o.diagnostics = true,
+            "--settings" => o.settings = true,
             "--menu" => o.menu = true,
             "--print-udev-rule" => o.print_udev_rule = true,
             "--verbose" | "-v" => o.verbose = true,

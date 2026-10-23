@@ -65,7 +65,7 @@ Ogni release contiene anche `SHA256SUMS.txt` e `keyboard-hud.example.toml`.
 | File | Contenuto |
 |---|---|
 | `keyboard-hud.toml` | la tua configurazione (facoltativa) |
-| `keyboard-hud-state.toml` | posizione, scala, opacità, vista, tema dell'ultima sessione |
+| `keyboard-hud-state.toml` | posizione della finestra nell'ultima sessione |
 | `keyboard-hud-stats.json` | contatori delle statistiche |
 | `backups/` | backup automatici della configurazione della tastiera (`.vil`) |
 | `keyboard-hud.log` (+ `.log.1`) | log, massimo 1 MB per file |
@@ -96,13 +96,14 @@ Il firmware funziona identico anche senza HUD collegato. Risponde solo alle rich
 | Spostare l'HUD | trascinalo con il mouse. Su Windows si aggancia ai bordi, agli angoli e al centro dello schermo |
 | Metterlo in un angolo, a metà di un bordo o al centro | menu → Posizione (griglia 3×3) |
 | Ingrandire / rimpicciolire (50–200%) | Ctrl + rotellina sull'HUD, oppure menu → Scala |
-| Menu (opacità, scala, vista, posizione, tema, heads-up, combo, heatmap, statistiche, ricerca, click-through, pausa, avvio con il sistema, esci) | clic destro sull'HUD |
+| Menu (opacità, scala, vista, posizione, tema, heads-up, combo, heatmap, statistiche, ricerca, impostazioni, click-through, pausa, avvio con il sistema, esci) | clic destro sull'HUD |
 | Mostrare / nascondere | un tocco di **HUD_TOG**. Con l'heads-up attivo il tocco *fissa* l'HUD a schermo, e un altro tocco lo restituisce all'heads-up |
 | Click-through (i clic passano alle finestre sotto) | menu, oppure **doppio tocco** di HUD_TOG. Si disattiva solo con il doppio tocco |
 | Cercare un tasto | Ctrl+F o `/` con l'HUD in primo piano, oppure menu → Cerca. Frecce per scegliere, Invio/Esc per chiudere. Trova anche combo, tap dance e key override |
 | Vedere le combo | menu → Mostra le combo |
 | Avviare l'HUD all'accesso | menu → Avvia con il sistema (vedi sotto) |
-| Icona nella tray | clic sinistro: mostra/nasconde l'HUD; clic destro: menu con pausa, backup, statistiche, avvio con il sistema, esci |
+| Icona nella tray | clic sinistro: mostra/nasconde l'HUD; clic destro: menu con pausa, backup, statistiche, impostazioni, avvio con il sistema, esci |
+| Impostazioni | Ctrl+, con l'HUD in primo piano, menu → Impostazioni…, oppure la tray; Ctrl+Shift+, apre il file di testo |
 | Sfogliare i layer (solo offline) | rotellina o tasti 0–9 |
 
 Il menu si apre in una piccola finestra separata accanto al punto del clic, così resta leggibile anche con l'HUD rimpicciolito o in vista compatta. Si chiude con ✕, con Esc, con un clic sull'HUD o con un clic altrove. Su Wayland è il compositor a decidere dove compare.
@@ -189,10 +190,12 @@ L'HUD si accorge comunque dei cambi di keymap fatti da Vial. Il firmware rileva 
 
 Copia [`keyboard-hud.example.toml`](keyboard-hud.example.toml) accanto all'eseguibile con il nome `keyboard-hud.toml`, oppure nella cartella di configurazione dell'utente. Ogni voce è facoltativa. Le modifiche valgono **entro un secondo, senza riavviare**; solo `[device]` richiede un riavvio.
 
+**Finestra Impostazioni** (menu → *Impostazioni…*, icona nella tray, oppure **Ctrl+,** con l'HUD in primo piano), come in VS Code: tutte le voci del file divise per sezione, con la descrizione, una casella di ricerca, un pallino sulle voci diverse dal predefinito e ↺ per ripristinarlo. Ogni modifica si salva subito in `keyboard-hud.toml` toccando solo quella voce: commenti e ordine del file restano. *Apri come testo* (o **Ctrl+Shift+,**) apre il file nell'editor di sistema; se il file contiene un errore la finestra lo mostra e resta in sola lettura finché non lo correggi. Nomi e colori dei layer ed etichette per ora si modificano nel testo.
+
 | Sezione | Cosa regola |
 |---|---|
 | `[device]` | `vid` / `pid` per scegliere la tastiera (default: la prima che risponde al protocollo HUD) |
-| `[appearance]` | icona nella tray (`tray`), opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale, distanza di aggancio ai bordi (`snap_distance`, 16) e margine dai bordi (`screen_margin`, 8), stile (`style`), opacità e arrotondamento dei tasti (`key_opacity`, `key_radius`), lingua (`language`: `auto`, `it`, `en`) |
+| `[appearance]` | icona nella tray (`tray`), opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale, distanza di aggancio ai bordi (`snap_distance`, 16) e margine dai bordi (`screen_margin`, 8), stile (`style`), opacità e arrotondamento dei tasti (`key_opacity`, `key_radius`), combo sopra i tasti (`combos`), lingua (`language`: `auto`, `it`, `en`) |
 | `[headsup]` | attivo, ritardo dei modificatori (400 ms), ritardo di scomparsa (800 ms), opacità da nascosto, cosa mostra un layer bloccato (`locked_layer`: `hud` o `indicator`) un one-shot in attesa (`oneshot`) e un modificatore tenuto (`modifiers`), sempre `hud` o `indicator` |
 | `[keycast]` | keycast attivo (default no), posizione sullo schermo (`position`, default `bottom`) |
 | `[indicator]` | mini indicatore attivo, angolo dello schermo (`position`, default `top-right`) |
@@ -236,7 +239,7 @@ label = "Step over"
 
 Il nome è quello del processo, senza `.exe` e senza distinguere maiuscole: `code` vale per `Code.exe` su Windows e per `code` su Linux; su macOS è il nome dell'app. Il footer dell'HUD mostra quale insieme di etichette è attivo. Su Wayland l'applicazione in primo piano non si può sapere: valgono solo le etichette generiche.
 
-Posizione, scala, opacità, vista, tema, stile, opacità e arrotondamento dei tasti e heads-up scelti dal menu vengono ricordati in `keyboard-hud-state.toml`. Il tuo `keyboard-hud.toml`, con i suoi commenti, non viene mai riscritto.
+Le scelte fatte dal menu (scala, opacità, vista, tema, lingua, stile, opacità e arrotondamento dei tasti, heads-up, combo, keycast) e con Ctrl + rotellina vengono scritte in `keyboard-hud.toml`, creato se manca, toccando solo quelle voci: i commenti restano. `keyboard-hud-state.toml` ricorda solo la posizione della finestra; le scelte che le versioni precedenti tenevano lì passano nella configurazione al primo avvio.
 
 ## Stili
 
@@ -268,7 +271,7 @@ Colori disponibili: `background`, `key`, `key_empty`, `key_border`, `pressed`, `
 
 **Salva come stile** (menu) scrive `styles/personale.toml` (o `personale-2.toml`, mai sopra un file esistente) con tutti i valori attuali, colori compresi: il modo più semplice per partire. Le modifiche al file dello stile in uso si vedono entro un secondo; se il file non è valido compare l'errore e resta lo stile di prima.
 
-Precedenza per opacità e arrotondamento dei tasti: il valore scelto dal menu, poi quello di `[appearance]`, poi quello dello stile. Scegliere uno stile dal menu riparte dai suoi valori.
+Opacità e arrotondamento dei tasti: il valore di `[appearance]` se c'è, altrimenti quello dello stile. Scegliere uno stile dal menu riparte dai suoi valori (toglie `key_opacity` e `key_radius` e applica l'opacità della finestra dello stile); cambiando `style` nel file o nelle Impostazioni le altre voci restano come sono.
 
 ## Backup automatico
 
@@ -325,7 +328,7 @@ L'HUD salva da solo la configurazione della tastiera come file `.vil`, lo stesso
 --version, -h/--help
 ```
 
-Ci sono anche opzioni di sviluppo, che servono a catturare gli stati dell'interfaccia: `--mock-at`, `--screenshot`, `--screenshot-after`, `--search`, `--heatmap`, `--stats-window`.
+Ci sono anche opzioni di sviluppo, che servono a catturare gli stati dell'interfaccia: `--mock-at`, `--screenshot`, `--screenshot-after`, `--search`, `--heatmap`, `--stats-window`, `--settings`.
 
 Su Windows l'eseguibile release è un'applicazione grafica senza console, quindi l'output di `--help` non si vede: le opzioni sono comunque quelle elencate qui.
 

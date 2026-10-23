@@ -85,9 +85,13 @@ impl Default for Look {
     }
 }
 
+/// Accepted ranges of the key shape, also offered by the settings window.
+pub const KEY_OPACITY: std::ops::RangeInclusive<f32> = 0.2..=1.0;
+pub const KEY_RADIUS: std::ops::RangeInclusive<f32> = 0.0..=0.5;
+
 pub fn clamp_key_opacity(v: f32) -> f32 {
     if v.is_finite() {
-        v.clamp(0.2, 1.0)
+        v.clamp(*KEY_OPACITY.start(), *KEY_OPACITY.end())
     } else {
         1.0
     }
@@ -95,7 +99,7 @@ pub fn clamp_key_opacity(v: f32) -> f32 {
 
 pub fn clamp_key_radius(v: f32) -> f32 {
     if v.is_finite() {
-        v.clamp(0.0, 0.5)
+        v.clamp(*KEY_RADIUS.start(), *KEY_RADIUS.end())
     } else {
         0.0
     }

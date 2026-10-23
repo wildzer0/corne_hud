@@ -8,6 +8,7 @@ mod changes;
 mod cli;
 mod clock;
 mod config;
+mod config_edit;
 mod foreground;
 mod headsup;
 mod hid;
@@ -177,6 +178,7 @@ fn run(opts: Options) -> ExitCode {
                     heatmap: opts.heatmap,
                     stats_window: opts.stats_window,
                     diagnostics: opts.diagnostics,
+                    settings: opts.settings,
                     menu: opts.menu,
                 },
                 config,

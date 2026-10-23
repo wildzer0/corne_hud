@@ -49,6 +49,12 @@ pub fn append_changelog(dir: &Path, keyboard: &str, file: &Path, now_secs: u64, 
 /// Opens `dir` in the file manager (created if missing).
 pub fn open_folder(dir: &Path) -> io::Result<()> {
     std::fs::create_dir_all(dir)?;
+    open_path(dir)
+}
+
+/// Opens a folder in the file manager, or a file with the program the system
+/// associates to it (Windows asks which one when there is none).
+pub fn open_path(path: &Path) -> io::Result<()> {
     let program = if cfg!(windows) {
         "explorer"
     } else if cfg!(target_os = "macos") {
@@ -56,7 +62,7 @@ pub fn open_folder(dir: &Path) -> io::Result<()> {
     } else {
         "xdg-open"
     };
-    std::process::Command::new(program).arg(dir).spawn().map(|_| ())
+    std::process::Command::new(program).arg(path).spawn().map(|_| ())
 }
 
 /// `Corne v4` → `corne-v4`.

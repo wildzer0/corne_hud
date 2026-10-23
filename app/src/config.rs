@@ -1,10 +1,44 @@
-//! Configuration (`keyboard-hud.toml`, reloaded on change) and remembered
-//! window state (`keyboard-hud-state.toml`, written by the app so that the
-//! user's commented config file is never rewritten).
+//! Configuration (`keyboard-hud.toml`, reloaded on change; the app edits it
+//! only through `config_edit`, which keeps the comments) and remembered
+//! window position (`keyboard-hud-state.toml`).
 
 use serde::{Deserialize, Serialize};
+use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
+
+/// Accepted ranges, shared by the parser (values outside are clamped) and
+/// the settings window.
+pub const OPACITY: RangeInclusive<f32> = 0.2..=1.0;
+pub const SCALE: RangeInclusive<f32> = 0.5..=2.0;
+/// Snap distance and screen margin, logical pixels.
+pub const SCREEN_DISTANCE: RangeInclusive<f32> = 0.0..=200.0;
+pub const HIDDEN_OPACITY: RangeInclusive<f32> = 0.0..=1.0;
+pub const MODIFIER_DELAY_MS: RangeInclusive<u64> = 0..=10_000;
+pub const HIDE_DELAY_MS: RangeInclusive<u64> = 0..=60_000;
+pub const POLL_HZ: RangeInclusive<u32> = 1..=250;
+pub const TIMEOUT_MS: RangeInclusive<u64> = 5..=1000;
+pub const UNUSED_DAYS: RangeInclusive<u32> = 1..=3650;
+pub const BACKUP_KEEP: RangeInclusive<usize> = 1..=1000;
+
+fn clamp<T: PartialOrd + Copy>(v: T, range: &RangeInclusive<T>) -> T {
+    if v < *range.start() {
+        *range.start()
+    } else if v > *range.end() {
+        *range.end()
+    } else {
+        v
+    }
+}
+
+/// `v` clamped, or `default` when it is not a number.
+fn clamp_f32(v: f32, range: &RangeInclusive<f32>, default: f32) -> f32 {
+    if v.is_finite() {
+        clamp(v, range)
+    } else {
+        default
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -33,7 +67,7 @@ pub enum ViewMode {
     Compact,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct DeviceConfig {
     /// Vendor ID, e.g. "0x4653". Empty = any keyboard answering GET_INFO.
@@ -41,7 +75,7 @@ pub struct DeviceConfig {
     pub pid: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Appearance {
     pub opacity: f32,
@@ -64,6 +98,8 @@ pub struct Appearance {
     pub key_opacity: Option<f32>,
     /// Corner radius of the keys, 0–0.5 of their size; unset = from the style.
     pub key_radius: Option<f32>,
+    /// Combos drawn over the keys.
+    pub combos: bool,
 }
 
 impl Default for Appearance {
@@ -82,11 +118,12 @@ impl Default for Appearance {
             language: LanguageChoice::Auto,
             key_opacity: None,
             key_radius: None,
+            combos: false,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct LayerConfig {
     pub name: String,
@@ -94,7 +131,7 @@ pub struct LayerConfig {
     pub color: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Polling {
     /// While the HUD is visible (or in heads-up mode).
@@ -110,7 +147,7 @@ impl Default for Polling {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct LogConfig {
     /// error, warn, info, debug
@@ -123,7 +160,7 @@ impl Default for LogConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct HeadsUp {
     pub enabled: bool,
@@ -155,7 +192,7 @@ impl Default for HeadsUp {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ShownIn {
     /// The whole HUD stays on screen.
@@ -166,7 +203,7 @@ pub enum ShownIn {
 }
 
 /// Screen corner, edge middle or centre.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ScreenPlace {
     TopLeft,
@@ -199,7 +236,7 @@ impl ScreenPlace {
 }
 
 /// Mini indicator shown while the HUD is hidden.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct IndicatorConfig {
     pub enabled: bool,
@@ -213,7 +250,7 @@ impl Default for IndicatorConfig {
 }
 
 /// Shortcuts shown on screen, for videos and presentations.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct KeycastConfig {
     pub enabled: bool,
@@ -226,7 +263,7 @@ impl Default for KeycastConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct BackupConfig {
     pub enabled: bool,
@@ -242,7 +279,7 @@ impl Default for BackupConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct StatsConfig {
     pub enabled: bool,
@@ -260,7 +297,7 @@ impl Default for StatsConfig {
 
 /// Custom key label, by position (`layer` + `row` + `col`) or by `keycode`
 /// (optionally limited to one `layer`).
-#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct LabelConfig {
     pub layer: Option<u8>,
@@ -275,7 +312,7 @@ pub struct LabelConfig {
 }
 
 /// `app = "code"` or `app = ["code", "idea64"]`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum AppNames {
     One(String),
@@ -291,7 +328,7 @@ impl AppNames {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub device: DeviceConfig,
@@ -332,23 +369,23 @@ impl Config {
 
     fn sanitize(&mut self) {
         let a = &mut self.appearance;
-        a.opacity = if a.opacity.is_finite() { a.opacity.clamp(0.2, 1.0) } else { 0.85 };
-        a.scale = if a.scale.is_finite() { a.scale.clamp(0.5, 2.0) } else { 1.0 };
-        a.snap_distance = if a.snap_distance.is_finite() { a.snap_distance.clamp(0.0, 200.0) } else { 16.0 };
-        a.screen_margin = if a.screen_margin.is_finite() { a.screen_margin.clamp(0.0, 200.0) } else { 8.0 };
+        a.opacity = clamp_f32(a.opacity, &OPACITY, 0.85);
+        a.scale = clamp_f32(a.scale, &SCALE, 1.0);
+        a.snap_distance = clamp_f32(a.snap_distance, &SCREEN_DISTANCE, 16.0);
+        a.screen_margin = clamp_f32(a.screen_margin, &SCREEN_DISTANCE, 8.0);
         a.key_opacity = a.key_opacity.map(crate::style::clamp_key_opacity);
         a.key_radius = a.key_radius.map(crate::style::clamp_key_radius);
         a.style = a.style.trim().to_string();
         let p = &mut self.polling;
-        p.visible_hz = p.visible_hz.clamp(1, 250);
-        p.hidden_hz = p.hidden_hz.clamp(1, 250);
-        p.timeout_ms = p.timeout_ms.clamp(5, 1000);
+        p.visible_hz = clamp(p.visible_hz, &POLL_HZ);
+        p.hidden_hz = clamp(p.hidden_hz, &POLL_HZ);
+        p.timeout_ms = clamp(p.timeout_ms, &TIMEOUT_MS);
         let h = &mut self.headsup;
-        h.hidden_opacity = if h.hidden_opacity.is_finite() { h.hidden_opacity.clamp(0.0, 1.0) } else { 0.0 };
-        h.modifier_delay_ms = h.modifier_delay_ms.min(10_000);
-        h.hide_delay_ms = h.hide_delay_ms.min(60_000);
-        self.stats.unused_days = self.stats.unused_days.clamp(1, 3650);
-        self.backup.keep = self.backup.keep.clamp(1, 1000);
+        h.hidden_opacity = clamp_f32(h.hidden_opacity, &HIDDEN_OPACITY, 0.0);
+        h.modifier_delay_ms = clamp(h.modifier_delay_ms, &MODIFIER_DELAY_MS);
+        h.hide_delay_ms = clamp(h.hide_delay_ms, &HIDE_DELAY_MS);
+        self.stats.unused_days = clamp(self.stats.unused_days, &UNUSED_DAYS);
+        self.backup.keep = clamp(self.backup.keep, &BACKUP_KEEP);
     }
 
     pub fn vid(&self) -> Option<u16> {
@@ -358,6 +395,16 @@ impl Config {
     pub fn pid(&self) -> Option<u16> {
         self.device.pid.as_deref().and_then(parse_hex_id)
     }
+
+    /// As a TOML tree, for lookups by dotted key (settings window).
+    pub fn to_value(&self) -> toml::Value {
+        toml::Value::try_from(self).unwrap_or_else(|_| toml::Value::Table(Default::default()))
+    }
+}
+
+/// The value at a dotted key (`appearance.scale`).
+pub fn lookup<'a>(tree: &'a toml::Value, key: &str) -> Option<&'a toml::Value> {
+    key.split('.').try_fold(tree, |v, part| v.get(part))
 }
 
 /// Watches the config file and reloads it when its modification time changes.
@@ -391,6 +438,11 @@ impl ConfigWatcher {
         &self.path
     }
 
+    /// The app wrote the file itself: no reload for that.
+    pub fn written(&mut self) {
+        self.mtime = mtime(&self.path);
+    }
+
     /// Checks at most once per second.
     pub fn poll(&mut self) -> Reload {
         if self.last_check.elapsed() < Duration::from_secs(1) {
@@ -417,7 +469,9 @@ fn mtime(path: &Path) -> Option<SystemTime> {
     std::fs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
-/// Window state remembered between runs.
+/// Window state remembered between runs. Only the position is written now:
+/// the other fields come from older versions, which kept the menu choices
+/// here; they are read once and moved into the config file.
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct WindowState {
@@ -437,6 +491,36 @@ pub struct WindowState {
 }
 
 impl WindowState {
+    /// Written by an older version, with the menu choices.
+    pub fn has_menu_choices(&self) -> bool {
+        let WindowState {
+            x: _,
+            y: _,
+            scale,
+            opacity,
+            mode,
+            theme,
+            headsup,
+            combos,
+            style,
+            language,
+            keycast,
+            key_opacity,
+            key_radius,
+        } = self;
+        scale.is_some()
+            || opacity.is_some()
+            || mode.is_some()
+            || theme.is_some()
+            || headsup.is_some()
+            || combos.is_some()
+            || style.is_some()
+            || language.is_some()
+            || keycast.is_some()
+            || key_opacity.is_some()
+            || key_radius.is_some()
+    }
+
     pub fn load(path: &Path) -> Self {
         std::fs::read_to_string(path).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
     }
@@ -446,7 +530,7 @@ impl WindowState {
             Ok(t) => t,
             Err(e) => return log::warn!("stato della finestra: {e}"),
         };
-        let header = "# Scritto da Keyboard HUD: posizione e aspetto dell'ultima sessione.\n";
+        let header = "# Scritto da Keyboard HUD: posizione della finestra nell'ultima sessione.\n";
         if let Err(e) = std::fs::write(path, format!("{header}{text}")) {
             log::warn!("{}: {e}", path.display());
         }

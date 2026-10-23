@@ -7,6 +7,7 @@ pub mod keyboard;
 pub mod keycast;
 pub mod report;
 pub mod search_panel;
+pub mod settings;
 pub mod theme;
 
 use crate::autostart;
@@ -15,6 +16,7 @@ use crate::changes;
 use crate::config::{
     Config, ConfigWatcher, LanguageChoice, Reload, ShownIn, StatsConfig, ThemeChoice, ViewMode, WindowState,
 };
+use crate::config_edit::{self, Edit};
 use crate::headsup::{self, HeadsUp};
 use crate::hid::protocol::{caps, flags, HudInfo, HudState, OsKind};
 use crate::hid::worker::{Event, PauseReason, Status, Worker};
@@ -34,6 +36,7 @@ use crate::vial::legend::LegendContext;
 use egui::{Align2, Color32, FontId, Key, Rect, Sense, Vec2, ViewportCommand};
 use report::{ReportInput, ReportWindow};
 use search_panel::SearchPanel;
+use settings::{SettingsInput, SettingsWindow};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -241,6 +244,7 @@ pub struct DevOptions {
     pub heatmap: Option<String>,
     pub stats_window: bool,
     pub diagnostics: bool,
+    pub settings: bool,
     pub menu: bool,
 }
 
@@ -375,6 +379,67 @@ impl HudToggle {
     }
 }
 
+/// Choices made from the menu (and Ctrl + wheel), saved in the config file.
+#[derive(Debug, Clone, PartialEq)]
+struct Prefs {
+    opacity: f32,
+    scale: f32,
+    mode: ViewMode,
+    theme: ThemeChoice,
+    language: LanguageChoice,
+    style: String,
+    key_opacity: Option<f32>,
+    key_radius: Option<f32>,
+    headsup: bool,
+    combos: bool,
+    keycast: bool,
+}
+
+impl Prefs {
+    /// What the config file says.
+    fn from_config(c: &Config) -> Self {
+        let a = &c.appearance;
+        Prefs {
+            opacity: a.opacity,
+            scale: a.scale,
+            mode: a.mode,
+            theme: a.theme,
+            language: a.language,
+            style: if a.style.is_empty() { style::DEFAULT_STYLE.to_string() } else { a.style.clone() },
+            key_opacity: a.key_opacity,
+            key_radius: a.key_radius,
+            headsup: c.headsup.enabled,
+            combos: a.combos,
+            keycast: c.keycast.enabled,
+        }
+    }
+
+    /// The keys to write to go from `old` to `self`.
+    fn edits(&self, old: &Prefs) -> Vec<Edit> {
+        fn value<T: serde::Serialize>(v: &T) -> Option<toml::Value> {
+            toml::Value::try_from(v).ok()
+        }
+        let mut out = Vec::new();
+        let mut put = |changed: bool, key: &'static str, v: Option<toml::Value>| {
+            if changed {
+                out.push((key, v));
+            }
+        };
+        put(self.opacity != old.opacity, "appearance.opacity", value(&self.opacity));
+        put(self.scale != old.scale, "appearance.scale", value(&self.scale));
+        put(self.mode != old.mode, "appearance.mode", value(&self.mode));
+        put(self.theme != old.theme, "appearance.theme", value(&self.theme));
+        put(self.language != old.language, "appearance.language", value(&self.language));
+        put(self.style != old.style, "appearance.style", value(&self.style));
+        put(self.key_opacity != old.key_opacity, "appearance.key_opacity", self.key_opacity.and_then(|v| value(&v)));
+        put(self.key_radius != old.key_radius, "appearance.key_radius", self.key_radius.and_then(|v| value(&v)));
+        put(self.combos != old.combos, "appearance.combos", value(&self.combos));
+        put(self.headsup != old.headsup, "headsup.enabled", value(&self.headsup));
+        put(self.keycast != old.keycast, "keycast.enabled", value(&self.keycast));
+        out
+    }
+}
+
 pub struct HudApp {
     lang: Lang,
     language: LanguageChoice,
@@ -390,6 +455,10 @@ pub struct HudApp {
 
     config: Config,
     watcher: ConfigWatcher,
+    /// The config file does not parse (the last config read stays in use).
+    config_error: Option<String>,
+    /// Menu choices as last written to (or read from) the config file.
+    synced: Prefs,
     verbose: bool,
     window: WindowState,
     window_path: PathBuf,
@@ -403,7 +472,7 @@ pub struct HudApp {
     style_watcher: StyleWatcher,
     /// Style names, read when the menu opens.
     style_names: Vec<String>,
-    /// Set from the menu and remembered; unset = config, then style.
+    /// Unset = from the style.
     key_opacity: Option<f32>,
     key_radius: Option<f32>,
     view: ViewMode,
@@ -450,6 +519,7 @@ pub struct HudApp {
     stats: Option<Stats>,
     report: ReportWindow,
     diagnostics: diagnostics::DiagnosticsWindow,
+    settings: SettingsWindow,
     /// Last backup written in this session, for the diagnostics.
     last_backup: Option<(PathBuf, Instant)>,
     heat: HeatMode,
@@ -466,7 +536,7 @@ impl HudApp {
         let (labels, label_errors) = Labels::from_config(&s.config.labels);
         let stats = s.config.stats.enabled.then(|| Stats::load(stats_path(&s.config.stats)));
         let headsup_on = s.window.headsup.unwrap_or(s.config.headsup.enabled);
-        let show_combos = s.window.combos.unwrap_or(false);
+        let show_combos = s.window.combos.unwrap_or(a.combos);
         let keycast_on = s.window.keycast.unwrap_or(s.config.keycast.enabled);
         let language = s.window.language.unwrap_or(s.config.appearance.language);
         let lang = resolve_language(language);
@@ -495,18 +565,20 @@ impl HudApp {
             browse_layer: s.start_layer,
             layer_names,
             layer_colors,
-            opacity: s.window.opacity.or(style.window_opacity).unwrap_or(a.opacity),
+            opacity: s.window.opacity.unwrap_or(a.opacity),
             scale: s.window.scale.unwrap_or(a.scale),
             style_watcher: StyleWatcher::new(&style_name),
             style_name,
             style,
             style_names: Vec::new(),
-            key_opacity: s.window.key_opacity,
-            key_radius: s.window.key_radius,
+            key_opacity: s.window.key_opacity.or(a.key_opacity),
+            key_radius: s.window.key_radius.or(a.key_radius),
             view: s.window.mode.unwrap_or(a.mode),
             theme: s.window.theme.unwrap_or(a.theme),
+            synced: Prefs::from_config(&s.config),
             config: s.config,
             watcher: s.watcher,
+            config_error: None,
             verbose: s.verbose,
             window: s.window,
             window_path: s.window_path,
@@ -540,12 +612,20 @@ impl HudApp {
             stats,
             report: ReportWindow::default(),
             diagnostics: diagnostics::DiagnosticsWindow::default(),
+            settings: SettingsWindow::default(),
             last_backup: None,
             heat: HeatMode::Off,
             heat_cache: None,
             menu: None,
             dev_menu: s.dev.menu,
         };
+        // what the file says, except where an older version remembered a menu
+        // choice in the state file: that is moved into the config at the first save
+        let legacy = app.window.has_menu_choices();
+        app.synced = if legacy { Prefs::from_config(&app.config) } else { app.prefs() };
+        if legacy {
+            app.mark_dirty();
+        }
         app.report_label_errors(&label_errors);
         if let Some(q) = s.dev.search {
             app.search.open_with(q);
@@ -557,12 +637,16 @@ impl HudApp {
         };
         app.report.open = s.dev.stats_window;
         app.diagnostics.open = s.dev.diagnostics;
-        if (s.dev.stats_window || s.dev.diagnostics || s.dev.menu) && app.screenshot.is_some() {
+        if s.dev.settings {
+            app.open_settings();
+        }
+        if (s.dev.stats_window || s.dev.diagnostics || s.dev.settings || s.dev.menu) && app.screenshot.is_some() {
             // capture the other windows inside the HUD window
             ctx.set_embed_viewports(true);
         }
         if let Some(e) = s.config_error {
             app.notify(format!("{}: {e}", tr(app.lang, Msg::ConfigError)));
+            app.config_error = Some(e);
         }
         if let Some(e) = style_error {
             app.notify(e);
@@ -821,6 +905,10 @@ impl HudApp {
                     self.report.open = true;
                     ctx.request_repaint();
                 }
+                crate::tray::Action::Settings => {
+                    self.open_settings();
+                    ctx.request_repaint();
+                }
                 crate::tray::Action::Quit => root_cmd(ctx, ViewportCommand::Close),
             }
         }
@@ -909,13 +997,16 @@ impl HudApp {
         if config.headsup.enabled != self.config.headsup.enabled {
             self.headsup_on = config.headsup.enabled;
         }
+        if config.appearance.combos != self.config.appearance.combos {
+            self.show_combos = config.appearance.combos;
+        }
         if config.keycast.enabled != self.config.keycast.enabled {
             self.keycast_on = config.keycast.enabled;
         }
         if config.appearance.language != self.config.appearance.language {
             self.set_language(ctx, config.appearance.language);
         }
-        // appearance values edited in the file win over the remembered ones
+        // only what changed in the file: a menu choice not saved yet stays
         let (old, new) = (&self.config.appearance, &config.appearance);
         if new.opacity != old.opacity {
             self.opacity = new.opacity;
@@ -924,10 +1015,10 @@ impl HudApp {
             self.theme = new.theme;
         }
         if new.key_opacity != old.key_opacity {
-            self.key_opacity = None;
+            self.key_opacity = new.key_opacity;
         }
         if new.key_radius != old.key_radius {
-            self.key_radius = None;
+            self.key_radius = new.key_radius;
         }
         let new_style = (new.style != old.style).then(|| {
             if new.style.is_empty() {
@@ -945,8 +1036,12 @@ impl HudApp {
             logging::set_level(logging::parse_level(&config.log.level));
         }
         self.config = config;
+        self.synced = Prefs::from_config(&self.config);
         if let Some(name) = new_style {
-            self.set_style(&name, false);
+            if !self.set_style(&name, false) {
+                // a style that does not load: the file is not "fixed" behind the user's back
+                self.synced.style = self.style_name.clone();
+            }
         }
         self.apply_poll_rate();
         self.apply_backup();
@@ -956,8 +1051,69 @@ impl HudApp {
         if resize {
             self.resize(ctx);
         }
-        self.notify(tr(self.lang, Msg::ConfigReloaded).to_string());
         self.report_label_errors(&errors);
+    }
+
+    /// Menu choices as they are now.
+    fn prefs(&self) -> Prefs {
+        Prefs {
+            opacity: self.opacity,
+            scale: self.scale,
+            mode: self.view,
+            theme: self.theme,
+            language: self.language,
+            style: self.style_name.clone(),
+            key_opacity: self.key_opacity,
+            key_radius: self.key_radius,
+            headsup: self.headsup_on,
+            combos: self.show_combos,
+            keycast: self.keycast_on,
+        }
+    }
+
+    /// Writes keys into the config file; the watcher does not reload it.
+    fn write_config(&mut self, edits: &[Edit]) -> Result<Config, String> {
+        let config = config_edit::write(self.watcher.path(), edits)?;
+        self.watcher.written();
+        self.config_error = None;
+        Ok(config)
+    }
+
+    /// Menu choices changed since the last save go into the config file.
+    fn save_prefs(&mut self) {
+        let prefs = self.prefs();
+        let edits = prefs.edits(&self.synced);
+        if edits.is_empty() {
+            return;
+        }
+        log::debug!("scelte del menu nella configurazione: {:?}", edits.iter().map(|e| e.0).collect::<Vec<_>>());
+        // also on failure: the choice stays for this session, without a notice every second
+        self.synced = prefs;
+        match self.write_config(&edits) {
+            Ok(c) => self.config = c,
+            Err(e) => {
+                let path = self.watcher.path().display().to_string();
+                self.notify(format!("{} ({path}): {e}", tr(self.lang, Msg::ConfigError)));
+            }
+        }
+    }
+
+    /// A change from the settings window: written, then applied like an edit by hand.
+    fn edit_config(&mut self, ctx: &egui::Context, edit: Edit) {
+        self.save_prefs();
+        match self.write_config(&[edit]) {
+            Ok(c) => self.apply_config(ctx, c),
+            Err(e) => self.notify(format!("{}: {e}", tr(self.lang, Msg::ConfigError))),
+        }
+    }
+
+    /// Opens the config file in the system editor, created first if missing.
+    fn open_config_file(&mut self) {
+        let path = self.watcher.path().to_path_buf();
+        let result = if path.exists() { Ok(()) } else { self.write_config(&[]).map(|_| ()) };
+        if let Err(e) = result.and_then(|()| backup::open_path(&path).map_err(|e| e.to_string())) {
+            self.notify(format!("{}: {e}", path.display()));
+        }
     }
 
     fn resize(&mut self, ctx: &egui::Context) {
@@ -995,20 +1151,12 @@ impl HudApp {
         self.window_dirty = Some(Instant::now());
     }
 
+    /// Position into the state file, menu choices into the config file.
     fn save_window(&mut self) {
-        self.window.opacity = Some(self.opacity);
-        self.window.scale = Some(self.scale);
-        self.window.mode = Some(self.view);
-        self.window.theme = Some(self.theme);
-        self.window.headsup = Some(self.headsup_on);
-        self.window.combos = Some(self.show_combos);
-        self.window.keycast = Some(self.keycast_on);
-        self.window.language = Some(self.language);
-        self.window.style = Some(self.style_name.clone());
-        self.window.key_opacity = self.key_opacity;
-        self.window.key_radius = self.key_radius;
+        self.window = WindowState { x: self.window.x, y: self.window.y, ..Default::default() };
         self.window.save(&self.window_path);
         self.window_dirty = None;
+        self.save_prefs();
     }
 
     fn track_position(&mut self, ctx: &egui::Context) {
@@ -1025,30 +1173,34 @@ impl HudApp {
         }
     }
 
-    /// Shape of keys and window: menu, then config, then style.
+    /// Shape of keys and window: the values set, then the style.
     fn look(&self) -> Look {
-        let a = &self.config.appearance;
-        self.style.look_with(self.key_opacity.or(a.key_opacity), self.key_radius.or(a.key_radius))
+        self.style.look_with(self.key_opacity, self.key_radius)
     }
 
-    /// Switches style, applying its window opacity if it has one. From the
-    /// menu the style is shown as it is: the key values set there are dropped.
-    fn set_style(&mut self, name: &str, from_menu: bool) {
+    /// Switches style. From the menu the style is shown as it is: its window
+    /// opacity applies and the key values set before are dropped. From the
+    /// file the other keys there keep their values. False if it does not load.
+    fn set_style(&mut self, name: &str, from_menu: bool) -> bool {
         match style::load(name) {
             Ok(st) => {
                 if from_menu {
                     self.key_opacity = None;
                     self.key_radius = None;
-                }
-                if let Some(o) = st.window_opacity {
-                    self.opacity = o;
+                    if let Some(o) = st.window_opacity {
+                        self.opacity = o;
+                    }
                 }
                 self.style = st;
                 self.style_name = name.to_string();
                 self.style_watcher = StyleWatcher::new(name);
                 self.mark_dirty();
+                true
             }
-            Err(e) => self.notify(e),
+            Err(e) => {
+                self.notify(e);
+                false
+            }
         }
     }
 
@@ -1276,6 +1428,11 @@ impl HudApp {
 
     fn close_menu(&mut self) {
         self.menu = None;
+    }
+
+    fn open_settings(&mut self) {
+        self.style_names = style::names();
+        self.settings.show_window();
     }
 
     /// Opens the menu at the pointer, `hud` being the HUD area in the window.
@@ -1607,6 +1764,10 @@ impl HudApp {
             self.report.open = true;
             self.close_menu();
         }
+        if ui.button(tr(lang, Msg::MenuSettings)).clicked() {
+            self.open_settings();
+            self.close_menu();
+        }
         if ui.button(tr(lang, Msg::MenuDiagnostics)).clicked() {
             self.diagnostics.open = true;
             self.close_menu();
@@ -1678,6 +1839,19 @@ impl eframe::App for HudApp {
             self.search.open();
             root_cmd(ctx, ViewportCommand::Focus);
         }
+        // Ctrl+, settings, Ctrl+Shift+, the file itself, as in VS Code
+        let (settings, file) = ctx.input(|i| {
+            let comma = i.modifiers.command && i.key_pressed(Key::Comma);
+            (comma && !i.modifiers.shift, comma && i.modifiers.shift)
+        });
+        if !self.click_through {
+            if settings {
+                self.open_settings();
+            }
+            if file {
+                self.open_config_file();
+            }
+        }
         self.handle_tray(ctx);
         // per-application labels
         if self.labels.has_app_labels() {
@@ -1692,10 +1866,15 @@ impl eframe::App for HudApp {
         self.poll_style();
         match self.watcher.poll() {
             Reload::Unchanged => {}
-            Reload::Changed(c) => self.apply_config(ctx, *c),
+            Reload::Changed(c) => {
+                self.config_error = None;
+                self.apply_config(ctx, *c);
+                self.notify(tr(self.lang, Msg::ConfigReloaded).to_string());
+            }
             Reload::Error(e) => {
                 let path = self.watcher.path().display().to_string();
                 self.notify(format!("{} ({path}): {e}", tr(self.lang, Msg::ConfigError)));
+                self.config_error = Some(e);
             }
         }
         if !self.checked_on_screen && self.started.elapsed() > Duration::from_millis(500) {
@@ -2007,6 +2186,21 @@ impl eframe::App for HudApp {
                 diagnostics::Action::None => {}
             }
         }
+        if self.settings.open {
+            let input = SettingsInput {
+                lang: self.lang,
+                config: &self.config,
+                path: self.watcher.path(),
+                error: self.config_error.as_deref(),
+                styles: &self.style_names,
+                style_look: self.style.look(),
+            };
+            match self.settings.show(&ctx, &input) {
+                settings::Action::Edit(edit) => self.edit_config(&ctx, edit),
+                settings::Action::OpenFile => self.open_config_file(),
+                settings::Action::None => {}
+            }
+        }
 
         if self.headsup.animating() {
             ctx.request_repaint();
@@ -2022,6 +2216,32 @@ impl eframe::App for HudApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Menu choices written into the config file read back the same.
+    #[test]
+    fn prefs_round_trip_through_the_config() {
+        let old = Prefs::from_config(&Config::default());
+        assert_eq!(old.style, style::DEFAULT_STYLE);
+        assert!(old.edits(&old).is_empty());
+        let new = Prefs {
+            opacity: 0.6,
+            scale: 1.3,
+            mode: ViewMode::Compact,
+            theme: ThemeChoice::Dark,
+            style: "vetro".into(),
+            key_opacity: Some(0.4),
+            combos: true,
+            keycast: true,
+            ..old.clone()
+        };
+        let text = config_edit::apply("# mio\n", &new.edits(&old)).unwrap();
+        assert!(text.starts_with("# mio\n"), "{text}");
+        assert_eq!(Prefs::from_config(&Config::parse(&text).unwrap()), new);
+        // back to the style's value: the key goes away
+        let unset = Prefs { key_opacity: None, ..new.clone() };
+        let text = config_edit::apply(&text, &unset.edits(&new)).unwrap();
+        assert!(!text.contains("key_opacity"));
+    }
 
     #[test]
     fn press_fade() {

@@ -14,6 +14,7 @@ pub enum Action {
     ToggleAutostart,
     Backups,
     Stats,
+    Settings,
     Quit,
 }
 
@@ -44,6 +45,7 @@ pub struct Tray {
     autostart: CheckMenuItem,
     backups: MenuItem,
     stats: MenuItem,
+    settings: MenuItem,
     quit: MenuItem,
     /// Last state shown, to touch the menu only on changes.
     shown: Option<(bool, bool, bool)>,
@@ -70,6 +72,7 @@ impl Tray {
         let autostart = CheckMenuItem::new(t(Msg::MenuAutostart), true, false, None);
         let backups = MenuItem::new(t(Msg::MenuBackups), true, None);
         let stats = MenuItem::new(t(Msg::MenuStats), true, None);
+        let settings = MenuItem::new(format!("{}…", t(Msg::SettingsTitle)), true, None);
         let quit = MenuItem::new(t(Msg::MenuQuit), true, None);
         let menu = Menu::new();
         menu.append_items(&[
@@ -80,6 +83,7 @@ impl Tray {
             &PredefinedMenuItem::separator(),
             &backups,
             &stats,
+            &settings,
             &autostart,
             &PredefinedMenuItem::separator(),
             &quit,
@@ -94,7 +98,7 @@ impl Tray {
             .with_menu_on_left_click(false)
             .build()
             .map_err(|e| e.to_string())?;
-        Ok(Tray { _icon: tray, show, pause, autostart, backups, stats, quit, shown: None, lang })
+        Ok(Tray { _icon: tray, show, pause, autostart, backups, stats, settings, quit, shown: None, lang })
     }
 
     /// Actions requested since the last call.
@@ -109,6 +113,7 @@ impl Tray {
                     (self.autostart.id(), Action::ToggleAutostart),
                     (self.backups.id(), Action::Backups),
                     (self.stats.id(), Action::Stats),
+                    (self.settings.id(), Action::Settings),
                     (self.quit.id(), Action::Quit),
                 ]
                 .into_iter()
