@@ -515,7 +515,7 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
         Vec::new()
     });
     log::info!(
-        "Vial: {} tap dance, {} combo, {} key override, {} macro",
+        "Vial: {} tap dances, {} combos, {} key overrides, {} macros",
         dynamic.tap_dances.iter().filter(|t| !t.is_empty()).count(),
         dynamic.combos.len(),
         dynamic.key_overrides.len(),
