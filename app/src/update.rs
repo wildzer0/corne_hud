@@ -16,7 +16,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-const REPO: &str = "wildzer0/corne_hud";
+const REPO: &str = "wildzer0/keyboard-hud";
 /// The first automatic check waits a little: the start stays quick.
 const FIRST_CHECK: Duration = Duration::from_secs(30);
 const CHECK_EVERY: Duration = Duration::from_secs(24 * 3600);

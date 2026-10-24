@@ -3,7 +3,7 @@ name = "keyboard-hud"
 version = "1.3.0"
 edition = "2021"
 license = "GPL-2.0-or-later"
-description = "Portable on-screen HUD for a Vial/QMK Corne keyboard"
+description = "Portable on-screen HUD for QMK keyboards with Vial"
 build = "build.rs"
 
 [dependencies]
