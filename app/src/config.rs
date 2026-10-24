@@ -558,9 +558,9 @@ impl WindowState {
     pub fn save(&self, path: &Path) {
         let text = match toml::to_string(self) {
             Ok(t) => t,
-            Err(e) => return log::warn!("stato della finestra: {e}"),
+            Err(e) => return log::warn!("window state: {e}"),
         };
-        let header = "# Scritto da Keyboard HUD: posizione della finestra nell'ultima sessione.\n";
+        let header = "# Written by Keyboard HUD: window position in the last session.\n";
         if let Err(e) = std::fs::write(path, format!("{header}{text}")) {
             log::warn!("{}: {e}", path.display());
         }

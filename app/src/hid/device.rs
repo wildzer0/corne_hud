@@ -319,7 +319,7 @@ impl Device {
         let mut settings = BTreeMap::new();
         for id in ids {
             let Some(width) = qmk_setting_width(id) else {
-                log::debug!("impostazione QMK {id}: dimensione sconosciuta, non salvata");
+                log::debug!("QMK setting {id}: unknown size, not saved");
                 continue;
             };
             let q = id.to_le_bytes();
@@ -386,7 +386,7 @@ impl Device {
         let req = p::set_keycode_request(layer, row, col, code);
         p::check_set_keycode(&req, &self.via(&req, Some(p::VIA_SET_KEYCODE))?)?;
         if self.keycode(layer, row, col)? != code {
-            return Err(ProtocolError::Invalid("tasto non scritto").into());
+            return Err(ProtocolError::Invalid("key not written").into());
         }
         Ok(())
     }
@@ -395,7 +395,7 @@ impl Device {
         let r = self.via(&p::layer_count_request(), Some(p::VIA_GET_LAYER_COUNT))?;
         let n = p::decode_layer_count(&r)?;
         if n == 0 || n > 32 {
-            return Err(ProtocolError::Invalid("numero di layer").into());
+            return Err(ProtocolError::Invalid("layer count").into());
         }
         Ok(n)
     }
@@ -415,7 +415,7 @@ impl Device {
         let r = self.via(&p::vial_size_request(), None)?;
         let size = p::decode_vial_size(&r);
         if size == 0 || size > MAX_DEFINITION_SIZE {
-            return Err(ProtocolError::Invalid("dimensione della definizione").into());
+            return Err(ProtocolError::Invalid("definition size").into());
         }
         Ok(size)
     }
@@ -425,7 +425,7 @@ impl Device {
         let pages = size.div_ceil(p::REPORT_SIZE as u32);
         let mut data = Vec::with_capacity(pages as usize * p::REPORT_SIZE);
         for page in 0..pages {
-            let page = u16::try_from(page).map_err(|_| ProtocolError::Invalid("pagina"))?;
+            let page = u16::try_from(page).map_err(|_| ProtocolError::Invalid("page"))?;
             let r = self.via(&p::vial_def_request(page), None)?;
             data.extend_from_slice(&r);
         }

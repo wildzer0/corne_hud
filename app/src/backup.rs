@@ -236,7 +236,7 @@ mod tests {
         let text = std::fs::read_to_string(dir.join(CHANGELOG)).unwrap();
         let b = text.find("`corne-v4_b.vil`").unwrap();
         let a = text.find("`corne-v4_a.vil`").unwrap();
-        assert!(text.starts_with("# Storico"));
+        assert!(text.starts_with("# Keyboard configuration history"));
         assert!(b < a, "{text}");
         assert!(
             text.contains("## 1970-01-01 00:01:00 UTC · Corne v4 · `corne-v4_b.vil`\n\n- uno\n- due\n\n## "),

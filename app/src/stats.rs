@@ -53,7 +53,7 @@ impl Stats {
                 Ok(_) | Err(_) => {
                     let mut bad = path.clone().into_os_string();
                     bad.push(".bad");
-                    log::warn!("statistiche non leggibili: salvate in {}", PathBuf::from(&bad).display());
+                    log::warn!("unreadable statistics: saved as {}", PathBuf::from(&bad).display());
                     let _ = std::fs::rename(&path, bad);
                     StatsFile { version: FORMAT_VERSION, ..Default::default() }
                 }
@@ -496,9 +496,9 @@ mod tests {
         assert_eq!(r.unused, vec![((0, 5, 4), 0x0D), ((1, 5, 4), 0x1E)]);
         let names = vec!["BASE".to_string(), "SYM".to_string()];
         let text = csv(&s, &km, &positions, &names, 30, today);
-        assert!(text.starts_with("layer,nome_layer"));
-        assert!(text.contains("0,BASE,1,1,sinistra,mignolo,\"KC_A\",3,3"), "{text}");
-        assert!(text.contains("1,SYM,5,4,destra,indice,\"KC_1\",1,0"), "{text}");
+        assert!(text.starts_with("layer,layer_name"));
+        assert!(text.contains("0,BASE,1,1,left,pinky,\"KC_A\",3,3"), "{text}");
+        assert!(text.contains("1,SYM,5,4,right,index,\"KC_1\",1,0"), "{text}");
     }
 
     #[test]

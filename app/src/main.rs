@@ -53,7 +53,7 @@ fn layout_from(def_text: &str, vil_text: &str) -> Result<Layout, String> {
         log::info!("offline: {} (uid {uid:016x})", def.name);
     }
     if !vil.unknown.is_empty() {
-        log::warn!("keycode sconosciuti nel .vil: {:?}", vil.unknown);
+        log::warn!("unknown keycodes in the .vil: {:?}", vil.unknown);
     }
     Ok(Layout::new(def, vil.layout_options, vil.keymap, vil.dynamic))
 }
@@ -105,7 +105,7 @@ fn run(opts: Options) -> ExitCode {
     let (watcher, config, config_error) = ConfigWatcher::new(base.join(paths::CONFIG_FILE));
     let level = if opts.verbose { log::LevelFilter::Debug } else { logging::parse_level(&config.log.level) };
     logging::init(&base.join("keyboard-hud.log"), level);
-    log::info!("keyboard-hud {} · cartella {}", env!("CARGO_PKG_VERSION"), base.display());
+    log::info!("keyboard-hud {} · folder {}", env!("CARGO_PKG_VERSION"), base.display());
     if let Some(e) = &config_error {
         log::error!("{}: {e}", watcher.path().display());
     }

@@ -795,14 +795,14 @@ impl HudApp {
             }
             State::UpToDate if manual => self.notify(tr(self.lang, Msg::UpdateUpToDate).to_string()),
             State::Failed(e) => {
-                log::warn!("aggiornamento: {e}");
+                log::warn!("update: {e}");
                 if manual {
                     self.notify(format!("{}: {e}", tr(self.lang, Msg::UpdateFailed)));
                 }
             }
             State::Installed => match self.updater.relaunch() {
                 Ok(()) => {
-                    log::info!("aggiornato: riavvio");
+                    log::info!("updated: restarting");
                     root_cmd(ctx, ViewportCommand::Close);
                 }
                 Err(e) => self.notify(format!("{}: {e}", tr(self.lang, Msg::UpdateFailed))),
@@ -828,7 +828,7 @@ impl HudApp {
         if old.flag(flags::COLEMAK) != new.flag(flags::COLEMAK) {
             self.flash(tr(lang, if new.flag(flags::COLEMAK) { Msg::Colemak } else { Msg::Qwerty }).to_string());
         }
-        if (old.os_mode, old.active_os) != (new.os_mode, new.active_os) {
+        if (old.os_mode, old.active_os) != (new.os_mode, new.active_os) && new.active_os != OsKind::Auto {
             let how = tr(lang, if new.os_mode == OsKind::Auto { Msg::OsAuto } else { Msg::OsForced });
             self.flash(format!("{} · {how}", header::os_name(new.active_os)));
         }
@@ -943,7 +943,7 @@ impl HudApp {
                     }
                     let half = s.flag(flags::SLAVE_OK);
                     if self.split_seen && self.state.is_some_and(|o| o.flag(flags::SLAVE_OK) != half) {
-                        log::warn!("{}", if half { "altra metà ricollegata" } else { tr(self.lang, Msg::SplitLost) });
+                        log::warn!("{}", if half { "other half reconnected" } else { tr(self.lang, Msg::SplitLost) });
                     }
                     self.split_seen |= half;
                     self.state = Some(s);
@@ -998,7 +998,7 @@ impl HudApp {
         match (self.config.appearance.tray, self.tray.is_some()) {
             (true, false) => match crate::tray::Tray::new(ctx, self.lang) {
                 Ok(t) => self.tray = Some(t),
-                Err(e) => log::warn!("icona nella tray non disponibile: {e}"),
+                Err(e) => log::warn!("tray icon not available: {e}"),
             },
             (false, true) => self.tray = None,
             _ => {}
@@ -1105,7 +1105,7 @@ impl HudApp {
             log::warn!("{}: {e}", dir.join(backup::CHANGELOG).display());
         }
         for l in &lines {
-            log::info!("modifica: {l}");
+            log::info!("change: {l}");
         }
         let what = match (&previous, lines.len()) {
             (None, _) => tr(self.lang, Msg::BackupFirst).to_string(),
@@ -1122,7 +1122,7 @@ impl HudApp {
         self.visible = visible;
         root_cmd(ctx, ViewportCommand::Visible(visible));
         self.apply_poll_rate();
-        log::info!("{}", if visible { "HUD visibile" } else { tr(self.lang, Msg::HudHidden) });
+        log::info!("{}", if visible { "HUD visible" } else { tr(self.lang, Msg::HudHidden) });
         if visible {
             self.flash = None;
         } else {
@@ -1142,7 +1142,7 @@ impl HudApp {
     /// Applies a new configuration; returns the problems found in the labels.
     fn apply_config(&mut self, ctx: &egui::Context, config: Config) -> Vec<String> {
         if config.device != self.config.device {
-            log::warn!("le impostazioni [device] valgono dal prossimo avvio");
+            log::warn!("the [device] settings apply from the next start");
         }
         let (names, colors) = layer_table(&config.layers);
         self.layer_names = names;
@@ -1261,7 +1261,7 @@ impl HudApp {
         if edits.is_empty() {
             return;
         }
-        log::debug!("scelte del menu nella configurazione: {edits:?}");
+        log::debug!("menu choices in the configuration: {edits:?}");
         // also on failure: the choice stays for this session, without a notice every second
         self.synced = prefs;
         match self.write_config(&edits) {
@@ -1332,7 +1332,7 @@ impl HudApp {
         if let Some(r) = root_outer_rect(ctx) {
             if let Some(area) = work_area(ctx, r) {
                 let pos = screen::anchored(anchor, r.size(), area, self.config.appearance.screen_margin);
-                log::debug!("posizione {anchor:?}: finestra {r:?}, area {area:?} -> {pos:?}");
+                log::debug!("position {anchor:?}: window {r:?}, area {area:?} -> {pos:?}");
                 root_cmd(ctx, ViewportCommand::OuterPosition(pos));
             }
         }
@@ -1650,8 +1650,8 @@ impl HudApp {
         if self.live.is_some() || self.offline.is_some() {
             if let Some(path) = self.dev_export.take() {
                 match self.export_keymap(&path) {
-                    Ok(()) => log::info!("keymap esportata in {}", path.display()),
-                    Err(e) => log::error!("esportazione in {}: {e}", path.display()),
+                    Ok(()) => log::info!("keymap exported to {}", path.display()),
+                    Err(e) => log::error!("export to {}: {e}", path.display()),
                 }
                 root_cmd(ctx, ViewportCommand::Close);
             }
@@ -1843,7 +1843,7 @@ impl HudApp {
             }
             Err(e) => {
                 let text = self.write_error_text(&e);
-                log::warn!("scrittura del tasto non riuscita: {text}");
+                log::warn!("writing the key failed: {text}");
                 if edit {
                     self.key_editor.error = Some(text);
                 } else {
@@ -1883,7 +1883,7 @@ impl HudApp {
             Ok(()) => tr(self.lang, if on { Msg::AutostartOn } else { Msg::AutostartOff }).to_string(),
             Err(e) => format!("{}: {e}", tr(self.lang, Msg::AutostartError)),
         };
-        log::debug!("avvio con il sistema: {}", autostart::location());
+        log::debug!("start with the system: {}", autostart::location());
         self.notify(msg);
         self.refresh_autostart();
     }
@@ -1893,7 +1893,7 @@ impl HudApp {
         self.refresh_autostart();
         self.style_names = style::names();
         let anchor = ctx.input(|i| i.viewport().inner_rect).map(|inner| inner.min + pointer.to_vec2());
-        log::debug!("menu aperto in {anchor:?}");
+        log::debug!("menu opened at {anchor:?}");
         self.menu = Some(MenuWindow {
             anchor,
             left: pointer.x > hud.center().x,
@@ -2473,7 +2473,7 @@ impl eframe::App for HudApp {
         let fullscreen = self.config.appearance.hide_in_fullscreen && self.foreground.fullscreen();
         if fullscreen != self.fullscreen_hidden {
             self.fullscreen_hidden = fullscreen;
-            log::info!("schermo intero in primo piano: {fullscreen}");
+            log::info!("full screen in the foreground: {fullscreen}");
             ctx.request_repaint();
         }
         if self.config.appearance.hide_in_fullscreen {
@@ -2483,7 +2483,7 @@ impl eframe::App for HudApp {
         if self.labels.has_app_labels() {
             let app = self.foreground.poll().map(str::to_owned);
             if self.labels.set_app(app.as_deref()) {
-                log::debug!("etichette per {:?}", self.labels.active_app());
+                log::debug!("labels for {:?}", self.labels.active_app());
                 self.search_stale = true;
                 ctx.request_repaint();
             }
@@ -2634,6 +2634,7 @@ impl eframe::App for HudApp {
                 layer_name: &names,
                 layer_color: &colors,
                 state: live_state.as_ref(),
+                capabilities: self.info.map_or(0, |i| i.capabilities),
                 split_lost: self.split_lost(),
                 compact,
                 time: self.started.elapsed().as_secs_f64(),

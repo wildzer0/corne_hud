@@ -1,5 +1,5 @@
 //! Search: where is "è", "redo", "F10" or "{"? Finds the layer and key, and
-//! the sequence to press (e.g. "Fn1 + D").
+//! the sequence to press (e.g. "Lower + D").
 
 use crate::labels::Labels;
 use crate::model::Keymap;
@@ -19,7 +19,7 @@ pub struct Hit {
     pub code: u16,
     /// What the key shows (label or legend).
     pub shown: String,
-    /// Keys to press, e.g. "Fn1 + D".
+    /// Keys to press, e.g. "Lower + D".
     pub sequence: String,
     pub score: u32,
     /// Other keys of a combo, on the same layer.
@@ -66,8 +66,8 @@ fn key_name(keymap: &Keymap, ctx: &LegendContext, labels: &Labels, row: u8, col:
     let code = keymap.get(0, row, col);
     let (leg, _) = legend_with_label(code, ctx, labels, (0, row, col));
     match decode(code) {
-        Keycode::Layer { op: LayerOp::TriLayerLower, .. } => "Fn1".into(),
-        Keycode::Layer { op: LayerOp::TriLayerUpper, .. } => "Fn2".into(),
+        Keycode::Layer { op: LayerOp::TriLayerLower, .. } => "Lower".into(),
+        Keycode::Layer { op: LayerOp::TriLayerUpper, .. } => "Upper".into(),
         _ if leg.tap.text.is_empty() => format!("{},{}", row, col),
         _ => leg.tap.text,
     }
@@ -98,7 +98,7 @@ fn activator(keymap: &Keymap, ctx: &LegendContext, labels: &Labels, target: u8) 
     best.map(|((r, c), reach)| (key_name(keymap, ctx, labels, r, c), reach))
 }
 
-/// Sequence to press `row,col` on `layer`, e.g. "Fn1 + D", "1×ACC, poi E".
+/// Sequence to press `row,col` on `layer`, e.g. "Lower + D", "1×ACC, poi E".
 pub fn sequence(keymap: &Keymap, ctx: &LegendContext, labels: &Labels, layer: u8, row: u8, col: u8) -> String {
     let key = key_name(keymap, ctx, labels, row, col);
     if layer == 0 {
@@ -330,12 +330,12 @@ mod tests {
         // '(' is on SYM, physical D
         let h = first(&f, "(");
         assert_eq!((h.layer, h.row, h.col), (1, 1, 3));
-        assert_eq!(h.sequence, "Fn1 + D");
+        assert_eq!(h.sequence, "Lower + D");
         // '{' on SYM, physical A
-        assert_eq!(first(&f, "{").sequence, "Fn1 + A");
+        assert_eq!(first(&f, "{").sequence, "Lower + A");
         // è on ACC (one-shot), physical E
         let h = first(&f, "è");
-        assert_eq!((h.layer, h.sequence.as_str()), (5, "1×ACC, poi E"));
+        assert_eq!((h.layer, h.sequence.as_str()), (5, "1×ACC, then E"));
         // a plain letter is on BASE
         assert_eq!(first(&f, "q").sequence, "Q");
     }
@@ -345,15 +345,15 @@ mod tests {
         let f = fixture();
         // Redo: custom keycode on NAV, physical B
         let h = first(&f, "redo");
-        assert_eq!((h.layer, h.sequence.as_str()), (2, "Fn2 + B"));
+        assert_eq!((h.layer, h.sequence.as_str()), (2, "Upper + B"));
         // Step over: semantic label for F10 on DEBUG (toggled with TG)
         let h = first(&f, "step over");
         assert_eq!((h.layer, h.row, h.col), (4, 1, 3));
-        assert!(h.sequence.starts_with("⇄ DEBUG (blocca), poi"), "{}", h.sequence);
-        // F10 by name: the easiest is on SYS (Fn1 + Fn2)
+        assert!(h.sequence.starts_with("⇄ DEBUG (lock), then"), "{}", h.sequence);
+        // F10 by name: the easiest is on SYS (Lower + Upper)
         let h = first(&f, "F10");
         assert_eq!(h.layer, 3);
-        assert_eq!(h.sequence, "Fn1 + Fn2 + E");
+        assert_eq!(h.sequence, "Lower + Upper + E");
     }
 
     #[test]
@@ -370,7 +370,7 @@ mod tests {
         };
         // combo J + K = Esc (mock): both keys marked
         let h = all(&f, "esc").into_iter().find(|h| h.sequence.starts_with("combo")).expect("combo hit");
-        assert_eq!(h.sequence, "combo: J + K insieme");
+        assert_eq!(h.sequence, "combo: J + K together");
         assert_eq!((h.layer, h.row, h.col, h.also.as_slice()), (0, 5, 4, &[(5, 3)][..]));
         // key override Shift + Backspace = Delete, from the .vil
         let h = all(&f, "del").into_iter().find(|h| h.sequence.starts_with("Shift")).expect("override hit");
@@ -380,7 +380,7 @@ mod tests {
         f.dynamic.tap_dances =
             vec![crate::vial::dynamic::TapDance { on_tap: 0x14, on_hold: 0x68, ..Default::default() }];
         let h = all(&f, "f13").into_iter().next().expect("tap dance hit");
-        assert_eq!((h.layer, h.row, h.col, h.sequence.as_str()), (0, 0, 1, "Q (tieni)"));
+        assert_eq!((h.layer, h.row, h.col, h.sequence.as_str()), (0, 0, 1, "Q (hold)"));
     }
 
     #[test]

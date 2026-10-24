@@ -486,13 +486,13 @@ mod tests {
         cur["settings"]["7"] = json!(180);
         let lines = describe(&base(), &cur, &ctx);
         let expected = [
-            "BASE · tasto Esc (tieni Ctrl) (riga 1, colonna 0): Esc → Esc (tieni Ctrl)",
-            "SYM · tasto B (riga 0, colonna 1): trasparente → Ctrl+Z",
-            "BASE · encoder 0, senso orario: Vol+ → Vol−",
-            "Combo aggiunta: A + B insieme → Tab",
-            "Tap dance 0 aggiunto: tocca A, tieni Ctrl",
-            "Key override disattivato: Shift + Bksp → Del (tutti i layer)",
-            "Macro 1: vuota → \"ciao\", Enter",
+            "BASE · key Esc (hold Ctrl) (row 1, column 0): Esc → Esc (hold Ctrl)",
+            "SYM · key B (row 0, column 1): transparent → Ctrl+Z",
+            "BASE · encoder 0, clockwise: Vol+ → Vol−",
+            "Combo added: A + B together → Tab",
+            "Tap dance 0 added: tap A, hold Ctrl",
+            "Key override turned off: Shift + Bksp → Del (all layers)",
+            "Macro 1: empty → \"ciao\", Enter",
             "tapping term: 200 → 180",
         ];
         assert_eq!(lines, expected);
@@ -517,6 +517,6 @@ mod tests {
 
     #[test]
     fn first_backup_summary() {
-        assert_eq!(summary(&base()), "Primo backup: 2 layer, 0 combo, 0 tap dance, 1 key override, 0 macro");
+        assert_eq!(summary(&base()), "First backup: 2 layers, 0 combos, 0 tap dances, 1 key overrides, 0 macros");
     }
 }

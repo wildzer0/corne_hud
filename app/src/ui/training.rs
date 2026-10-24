@@ -17,7 +17,7 @@ const FEEDBACK: Duration = Duration::from_millis(900);
 pub struct TrainingInput<'a> {
     pub lang: Lang,
     pub legends: &'a LegendContext<'a>,
-    /// How to type the current question, e.g. "Fn1 + D".
+    /// How to type the current question, e.g. "Lower + D".
     pub hint: Option<String>,
     /// Live state from a HUD firmware, not paused.
     pub available: bool,

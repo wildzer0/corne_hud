@@ -150,7 +150,8 @@ pub mod flags {
     pub const CAPS_LOCK: u8 = 1 << 0;
     pub const CAPS_WORD: u8 = 1 << 1;
     pub const COLEMAK: u8 = 1 << 2;
-    pub const DEBUG_LOCK: u8 = 1 << 3;
+    /// Free for the keymap (`hud_user_flag()`).
+    pub const USER: u8 = 1 << 3;
     pub const NUM_LOCK: u8 = 1 << 4;
     pub const SLAVE_OK: u8 = 1 << 5;
 }
@@ -180,17 +181,17 @@ pub fn decode_info(resp: &Report, seq: u8) -> Result<HudInfo, ProtocolError> {
         keymap_version: resp[13],
     };
     if info.protocol != HUD_PROTOCOL_VERSION {
-        return Err(ProtocolError::Invalid("versione del protocollo HUD"));
+        return Err(ProtocolError::Invalid("HUD protocol version"));
     }
     if !(1..=8).contains(&info.rows) || !(1..=8).contains(&info.cols) {
         // GET_STATE carries 8 rows of at most 8 columns
-        return Err(ProtocolError::Invalid("dimensioni della matrice"));
+        return Err(ProtocolError::Invalid("matrix size"));
     }
     if !(1..=32).contains(&info.layers) {
-        return Err(ProtocolError::Invalid("numero di layer"));
+        return Err(ProtocolError::Invalid("layer count"));
     }
     if !(1..=MAX_KEYMAP_CHUNK).contains(&info.keymap_chunk) {
-        return Err(ProtocolError::Invalid("dimensione dei blocchi del keymap"));
+        return Err(ProtocolError::Invalid("keymap chunk size"));
     }
     Ok(info)
 }
@@ -304,7 +305,7 @@ pub fn decode_keymap(resp: &Report, seq: u8, layer: u8, offset: u16, count: u8) 
         return Err(ProtocolError::Mismatch);
     }
     if count == 0 || count > MAX_KEYMAP_CHUNK {
-        return Err(ProtocolError::Invalid("numero di keycode"));
+        return Err(ProtocolError::Invalid("keycode count"));
     }
     Ok((0..count as usize).map(|i| u16_le(resp, 8 + 2 * i)).collect())
 }
@@ -490,7 +491,7 @@ mod tests {
                 (20, 0x04),
                 (21, 0x08),
                 (22, 5),
-                (23, flags::CAPS_WORD | flags::DEBUG_LOCK),
+                (23, flags::CAPS_WORD | flags::USER),
                 (24, 3),
                 (25, 2),
                 (26, 2),
@@ -505,7 +506,7 @@ mod tests {
         assert!(!s.is_pressed(9, 0));
         assert_eq!((s.mods, s.weak_mods, s.oneshot_mods, s.oneshot_locked_mods), (1, 2, 4, 8));
         assert_eq!(s.oneshot_layer, Some(5));
-        assert!(s.flag(flags::CAPS_WORD) && s.flag(flags::DEBUG_LOCK) && !s.flag(flags::COLEMAK));
+        assert!(s.flag(flags::CAPS_WORD) && s.flag(flags::USER) && !s.flag(flags::COLEMAK));
         assert_eq!((s.detected_os, s.os_mode, s.active_os), (DetectedOs::MacOs, OsKind::MacOs, OsKind::MacOs));
         assert_eq!((s.hud_toggle_count, s.keymap_version), (200, 4));
     }

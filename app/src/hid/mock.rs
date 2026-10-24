@@ -107,7 +107,7 @@ pub fn frame_at(t_ms: u64) -> MockFrame {
                 f.press(0, 0);
             }
             f.layer_state = 1 << 4;
-            f.flags |= flags::DEBUG_LOCK;
+            f.flags |= flags::USER;
             tap_sequence(&mut f, t, 13_000, &[(1, 3), (1, 3), (1, 4), (1, 2)]);
         }
         _ => {}
@@ -384,7 +384,7 @@ mod tests {
         let osl = device_at(8500).state().unwrap();
         assert_eq!(osl.oneshot_layer, Some(5));
         assert_eq!(device_at(10_000).state().unwrap().mods, 0x01);
-        assert!(device_at(14_000).state().unwrap().flag(flags::DEBUG_LOCK));
+        assert!(device_at(14_000).state().unwrap().flag(flags::USER));
         assert_eq!(device_at(PERIOD_MS + 3000).state().unwrap().layer_state, 1 << 1);
     }
 

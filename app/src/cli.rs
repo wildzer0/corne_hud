@@ -3,34 +3,34 @@
 use std::path::PathBuf;
 
 pub const USAGE: &str = "\
-Uso: keyboard-hud [opzioni]
+Usage: keyboard-hud [options]
 
-  --mock                tastiera simulata (sviluppo dell'interfaccia)
-  --offline             nessuna tastiera: mostra vial.json + .vil dal disco
-  --vial-json PERCORSO  definizione Vial per la modalità offline
-  --vil PERCORSO        backup Vial (.vil) per la modalità offline
-  --vid 0xVVVV          usa solo dispositivi con questo Vendor ID
-  --pid 0xPPPP          usa solo dispositivi con questo Product ID
-  --x11                 Linux: forza XWayland (finestra sempre in primo piano)
-  --print-udev-rule     stampa la regola udev per Linux ed esce
-  --layer N             layer mostrato all'avvio in modalità offline
-  --mock-at MS          sviluppo: fa partire lo scenario simulato da MS millisecondi
-  --screenshot FILE     sviluppo: salva la finestra in FILE (PPM) ed esce
-  --screenshot-after MS sviluppo: attesa prima dello screenshot (default 2000)
-  --search TESTO        sviluppo: apre la ricerca con questo testo
-  --heatmap layer|all   sviluppo: mostra la heatmap all'avvio
-  --stats-window        sviluppo: apre la finestra delle statistiche
-  --diagnostics         sviluppo: apre la finestra di diagnostica
-  --settings            sviluppo: apre la finestra delle impostazioni
-  --settings-page P     sviluppo: la apre su layers, labels o text
-  --menu                sviluppo: apre il menu contestuale all'avvio
-  --history             sviluppo: apre lo storico dei backup
-  --training            sviluppo: apre l'allenamento e fa partire un giro
-  --export FILE         esporta la keymap in FILE (pagina HTML) ed esce
-  --edit-key L,R,C[,T]  sviluppo: apre «Cambia tasto» su layer L, riga R, colonna C (e cerca T)
-  --verbose             log dettagliato
-  --version             versione
-  -h, --help            questo aiuto";
+  --mock                simulated keyboard (UI development)
+  --offline             no keyboard: show vial.json + .vil from disk
+  --vial-json PATH      Vial definition for the offline mode
+  --vil PATH            Vial backup (.vil) for the offline mode
+  --vid 0xVVVV          only use devices with this Vendor ID
+  --pid 0xPPPP          only use devices with this Product ID
+  --x11                 Linux: force XWayland (window always on top)
+  --print-udev-rule     print the Linux udev rule and exit
+  --layer N             layer shown at start in the offline mode
+  --mock-at MS          development: start the simulated scenario at MS milliseconds
+  --screenshot FILE     development: save the window to FILE (PPM) and exit
+  --screenshot-after MS development: wait before the screenshot (default 2000)
+  --search TEXT         development: open the search with this text
+  --heatmap layer|all   development: show the heatmap at start
+  --stats-window        development: open the statistics window
+  --diagnostics         development: open the diagnostics window
+  --settings            development: open the settings window
+  --settings-page P     development: open it on layers, labels or text
+  --menu                development: open the context menu at start
+  --history             development: open the backup history
+  --training            development: open the training and start a round
+  --export FILE         export the keymap to FILE (HTML page) and exit
+  --edit-key L,R,C[,T]  development: open the key editor on layer L, row R, column C (and search T)
+  --verbose             detailed log
+  --version             version
+  -h, --help            this help";
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Options {
@@ -64,14 +64,14 @@ pub struct Options {
 
 fn parse_id(s: &str) -> Result<u16, String> {
     let hex = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
-    u16::from_str_radix(hex, 16).map_err(|_| format!("ID non valido: {s}"))
+    u16::from_str_radix(hex, 16).map_err(|_| format!("invalid ID: {s}"))
 }
 
 pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> {
     let mut o = Options::default();
     let mut args = args.into_iter();
     while let Some(a) = args.next() {
-        let mut value = |name: &str| args.next().ok_or_else(|| format!("{name} richiede un valore"));
+        let mut value = |name: &str| args.next().ok_or_else(|| format!("{name} needs a value"));
         match a.as_str() {
             "--mock" => o.mock = true,
             "--offline" => o.offline = true,
@@ -80,16 +80,16 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--vid" => o.vid = Some(parse_id(&value("--vid")?)?),
             "--pid" => o.pid = Some(parse_id(&value("--pid")?)?),
             "--x11" => o.x11 = true,
-            "--layer" => o.layer = value("--layer")?.parse().map_err(|_| "--layer: numero non valido".to_string())?,
+            "--layer" => o.layer = value("--layer")?.parse().map_err(|_| "--layer: invalid number".to_string())?,
             "--mock-at" => {
-                o.mock_at = value("--mock-at")?.parse().map_err(|_| "--mock-at: numero non valido".to_string())?
+                o.mock_at = value("--mock-at")?.parse().map_err(|_| "--mock-at: invalid number".to_string())?
             }
             "--screenshot" => o.screenshot = Some(value("--screenshot")?.into()),
             "--screenshot-after" => {
                 o.screenshot_after = Some(
                     value("--screenshot-after")?
                         .parse()
-                        .map_err(|_| "--screenshot-after: numero non valido".to_string())?,
+                        .map_err(|_| "--screenshot-after: invalid number".to_string())?,
                 )
             }
             "--search" => o.search = Some(value("--search")?),
@@ -127,11 +127,11 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--verbose" | "-v" => o.verbose = true,
             "--version" => o.version = true,
             "--help" | "-h" => o.help = true,
-            other => return Err(format!("opzione sconosciuta: {other}")),
+            other => return Err(format!("unknown option: {other}")),
         }
     }
     if o.mock && o.offline {
-        return Err("--mock e --offline sono alternativi".into());
+        return Err("--mock and --offline are mutually exclusive".into());
     }
     Ok(o)
 }

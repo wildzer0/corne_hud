@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicU8, Ordering};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Lang {
     #[default]
-    It,
     En,
+    It,
 }
 
 /// Language of the texts built far from the UI (legends, search, changelog).
@@ -18,10 +18,10 @@ pub fn set_current(lang: Lang) {
 }
 
 pub fn current() -> Lang {
-    if CURRENT.load(Ordering::Relaxed) == Lang::En as u8 {
-        Lang::En
-    } else {
+    if CURRENT.load(Ordering::Relaxed) == Lang::It as u8 {
         Lang::It
+    } else {
+        Lang::En
     }
 }
 
@@ -462,7 +462,7 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
         Msg::MenuHeadsUp => ("Heads-up (compare da solo)", "Heads-up (shows up by itself)"),
         Msg::HeadsUpHint => ("L'HUD compare con un layer diverso da BASE, un one-shot o un modificatore tenuto", "The HUD shows up with a layer other than BASE, a one-shot or a held modifier"),
         Msg::MenuMarker => ("Segno quando è nascosto", "Marker while hidden"),
-        Msg::MarkerHint => ("Una piccola tastiera dove compare l'HUD: Fn1 e Fn2 colorati lo richiamano", "A small keyboard where the HUD shows up: the coloured Fn1 and Fn2 bring it up"),
+        Msg::MarkerHint => ("Una piccola tastiera dove compare l'HUD: Lower e Upper colorati lo richiamano", "A small keyboard where the HUD shows up: the coloured Lower and Upper keys bring it up"),
         Msg::MenuSearch => ("Cerca… (Ctrl+F)", "Search… (Ctrl+F)"),
         Msg::MenuPosition => ("Posizione", "Position"),
         Msg::PositionUnavailable => ("Il sistema non permette all'app di spostare la finestra", "The system does not let the app move the window"),
@@ -628,9 +628,9 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
         Msg::SetFullscreen => ("Nascondi a schermo intero", "Hide in full screen"),
         Msg::SetFullscreenHint => ("Con una finestra a schermo intero in primo piano (un gioco, un video, una presentazione) l'HUD e il mini indicatore si nascondono; il keycast resta. Su Windows e X11; su Wayland e macOS non si può sapere.", "With a full screen window in the foreground (a game, a video, a slide show) the HUD and the mini indicator hide; the keycast stays. On Windows and X11; on Wayland and macOS it cannot be known."),
         Msg::SetLayerDelay => ("Ritardo dei layer", "Layer delay"),
-        Msg::SetLayerDelayHint => ("Un layer (Fn1, Fn2) deve restare attivo almeno così a lungo prima che l'HUD compaia: le combinazioni rapide, che sai già, non lo fanno lampeggiare. 0 = subito. I one-shot compaiono sempre subito.", "A layer (Fn1, Fn2) must stay on at least this long before the HUD shows up: quick combinations, which you already know, do not make it flash. 0 = at once. One-shots always show up at once."),
+        Msg::SetLayerDelayHint => ("Un layer (Lower, Upper) deve restare attivo almeno così a lungo prima che l'HUD compaia: le combinazioni rapide, che sai già, non lo fanno lampeggiare. 0 = subito. I one-shot compaiono sempre subito.", "A layer (Lower, Upper) must stay on at least this long before the HUD shows up: quick combinations, which you already know, do not make it flash. 0 = at once. One-shots always show up at once."),
         Msg::SetMarker => ("Segno", "Marker"),
-        Msg::SetMarkerHint => ("Con l'HUD nascosto resta una piccola tastiera nel punto in cui compare, con Fn1 e Fn2 nei colori dei loro layer. Diventa chiara o scura secondo lo sfondo dietro (Windows e X11; su Wayland e macOS resta chiara con un alone scuro).", "While the HUD is hidden a small keyboard stays where it shows up, with Fn1 and Fn2 in the colours of their layers. It turns light or dark with the background behind it (Windows and X11; on Wayland and macOS it stays light with a dark halo)."),
+        Msg::SetMarkerHint => ("Con l'HUD nascosto resta una piccola tastiera nel punto in cui compare, con Lower e Upper nei colori dei loro layer. Diventa chiara o scura secondo lo sfondo dietro (Windows e X11; su Wayland e macOS resta chiara con un alone scuro).", "While the HUD is hidden a small keyboard stays where it shows up, with Lower and Upper in the colours of their layers. It turns light or dark with the background behind it (Windows and X11; on Wayland and macOS it stays light with a dark halo)."),
         Msg::SetMarkerOpacity => ("Opacità del segno", "Marker opacity"),
         Msg::SetMarkerOpacityHint => ("Quanto si vede il segno: 10% = appena accennato, 100% = pieno.", "How much the marker shows: 10% = a hint, 100% = solid."),
         Msg::SetHeadsUpHint => ("L'HUD resta nascosto e compare da solo con un layer diverso da BASE, un one-shot in attesa o un modificatore tenuto a lungo.", "The HUD stays hidden and shows up by itself with a layer other than BASE, a pending one-shot or a modifier held long."),

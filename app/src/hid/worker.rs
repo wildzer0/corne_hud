@@ -415,7 +415,7 @@ fn connect(source: &Source, api: &mut Option<HidApi>, timeout: Duration) -> Resu
         Source::Mock(offset) => {
             let mut device = Device::new(Box::new(MockKeyboard::starting_at(*offset)), timeout);
             let info = device.info().map_err(|e| Status::Error(e.to_string()))?;
-            return Ok(Connection { device, product: "Tastiera simulata".into(), info: Some(info) });
+            return Ok(Connection { device, product: "Simulated keyboard".into(), info: Some(info) });
         }
         Source::Live { vid, pid } => (*vid, *pid),
     };
@@ -466,14 +466,14 @@ fn load_definition(device: &mut Device) -> Result<Definition, DeviceError> {
     if let Ok(text) = std::fs::read_to_string(&cache) {
         match Definition::from_json_str(&text) {
             Ok(d) => return Ok(d),
-            Err(e) => log::warn!("cache {} non valida: {e}", cache.display()),
+            Err(e) => log::warn!("invalid cache {}: {e}", cache.display()),
         }
     }
     let xz = device.definition_xz(size)?;
     let text = Definition::xz_to_json(&xz).map_err(DeviceError::Definition)?;
     let def = Definition::from_json_str(&text).map_err(DeviceError::Definition)?;
     if std::fs::create_dir_all(paths::cache_dir()).and_then(|_| std::fs::write(&cache, &text)).is_err() {
-        log::warn!("impossibile scrivere la cache {}", cache.display());
+        log::warn!("cannot write the cache {}", cache.display());
     }
     Ok(def)
 }
@@ -506,12 +506,12 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
         Ok(d) => d,
         Err(DeviceError::Protocol(ProtocolError::Unsupported)) => Dynamic::default(),
         Err(e) => {
-            log::warn!("tap dance, combo e key override non letti: {e}");
+            log::warn!("tap dances, combos and key overrides not read: {e}");
             Dynamic::default()
         }
     };
     dynamic.macros = conn.device.macros().unwrap_or_else(|e| {
-        log::warn!("macro non lette: {e}");
+        log::warn!("macros not read: {e}");
         Vec::new()
     });
     log::info!(
@@ -547,7 +547,7 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
     while !ctx.stopped() {
         let started = Instant::now();
         if pause_reason(ctx, vial).is_some() {
-            log::info!("HID: dispositivo chiuso (pausa)");
+            log::info!("HID: device closed (paused)");
             return SessionEnd::Paused;
         }
         for write in ctx.take_writes() {
@@ -559,7 +559,7 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
                             return SessionEnd::Lost(Status::Searching);
                         }
                     }
-                    Err(e) => log::warn!("rilettura del keymap fallita: {e}"),
+                    Err(e) => log::warn!("keymap re-read failed: {e}"),
                 }
             }
             if !ctx.send(Event::KeyWritten { write, result }) {
@@ -587,7 +587,7 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
         let latency = asked.elapsed();
         let foreign = conn.device.take_foreign();
         if foreign > 0 {
-            log::info!("risposte di un altro programma ({foreign}): pausa finché la tastiera resta libera");
+            log::info!("answers meant for another program ({foreign}): paused until the keyboard is free");
             return foreign_pause(&mut conn, ctx, vial, reporter);
         }
         match result {
@@ -608,14 +608,14 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
                     return SessionEnd::Lost(Status::Searching);
                 }
                 if keymap_changed {
-                    log::info!("keymap cambiato (versione {}): rilettura", state.keymap_version);
+                    log::info!("keymap changed (version {}): re-reading", state.keymap_version);
                     match read_keymap(&mut conn, &definition) {
                         Ok(km) => {
                             if !ctx.send(Event::Keymap(km)) {
                                 return SessionEnd::Lost(Status::Searching);
                             }
                         }
-                        Err(e) => log::warn!("rilettura del keymap fallita: {e}"),
+                        Err(e) => log::warn!("keymap re-read failed: {e}"),
                     }
                 }
             }
@@ -625,7 +625,7 @@ fn session(mut conn: Connection, ctx: &Ctx, vial: &mut Option<VialWatch>, report
                 ctx.link_error(&e);
                 log::debug!("GET_STATE: {e}");
                 if errors >= MAX_ERRORS {
-                    log::warn!("la tastiera non risponde: riconnessione");
+                    log::warn!("the keyboard does not answer: reconnecting");
                     return SessionEnd::Lost(Status::Searching);
                 }
             }
@@ -651,7 +651,7 @@ fn write_key(conn: &mut Connection, def: &Definition, ctx: &Ctx, w: KeyWrite) ->
         return Err(WriteError::Backup);
     }
     conn.device.set_keycode(w.layer, w.row, w.col, w.code).map_err(device)?;
-    log::info!("tasto scritto: layer {}, riga {}, colonna {}: {stored:#06x} → {:#06x}", w.layer, w.row, w.col, w.code);
+    log::info!("key written: layer {}, row {}, column {}: {stored:#06x} → {:#06x}", w.layer, w.row, w.col, w.code);
     Ok(stored)
 }
 
@@ -664,19 +664,19 @@ fn run_backup(conn: &mut Connection, def: &Definition, ctx: &Ctx) -> bool {
     let dump = match conn.device.dump(def) {
         Ok(d) => d,
         Err(e) => {
-            log::warn!("backup: lettura della configurazione fallita: {e}");
+            log::warn!("backup: reading the configuration failed: {e}");
             return false;
         }
     };
     let vil = dump.to_vil();
     match backup::save_if_changed(&settings, &def.name, &vil, crate::clock::now_secs()) {
         Ok(Some((path, previous))) => {
-            log::info!("backup salvato: {} ({} ms)", path.display(), started.elapsed().as_millis());
+            log::info!("backup saved: {} ({} ms)", path.display(), started.elapsed().as_millis());
             ctx.send(Event::Backup { path, current: vil, previous, keyboard: def.name.clone() });
             true
         }
         Ok(None) => {
-            log::debug!("backup: nessuna modifica ({} ms)", started.elapsed().as_millis());
+            log::debug!("backup: no changes ({} ms)", started.elapsed().as_millis());
             true
         }
         Err(e) => {
@@ -709,7 +709,7 @@ fn foreign_pause(
             Err(_) => return SessionEnd::Lost(Status::Searching),
         }
         if last.elapsed() >= FOREIGN_QUIET {
-            log::info!("tastiera di nuovo libera: ripresa");
+            log::info!("keyboard free again: resuming");
             return SessionEnd::Paused;
         }
     }

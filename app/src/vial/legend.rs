@@ -446,7 +446,7 @@ mod tests {
         let ctx = LegendContext { layer_names: &n, custom: &[], tap_dances: &tds, macros: &[] };
         let l = legend(0x5700, &ctx);
         assert_eq!((l.tap.text.as_str(), l.hold.map(|h| h.text)), ("A", Some("Ctrl".into())));
-        assert_eq!(l.tooltip, "Tap dance 0\ntocca: A\ntieni: Ctrl\ndoppio tocco: Esc");
+        assert_eq!(l.tooltip, "Tap dance 0\ntap: A\nhold: Ctrl\ndouble tap: Esc");
         // unknown or empty: by number
         assert_eq!(legend(0x5701, &ctx).tap.text, "TD1");
     }
@@ -464,11 +464,11 @@ mod tests {
         let m = |i: u16| legend(0x7700 + i, &ctx);
         assert_eq!((m(0).tap.symbol.as_str(), m(0).hold.map(|h| h.text)), ("hi⏎", Some("M0".into())));
         assert_eq!(m(0).tap.text, "hiEnt…");
-        assert_eq!(m(0).tooltip, "Macro 0\nscrive «hi»\ntocca Enter");
+        assert_eq!(m(0).tooltip, "Macro 0\ntypes “hi”\ntaps Enter");
         assert_eq!(m(1).tap.text, "Ctrl+C");
-        assert_eq!(m(1).tooltip, "Macro 1\npreme Ctrl\ntocca C\nrilascia Ctrl");
+        assert_eq!(m(1).tooltip, "Macro 1\npresses Ctrl\ntaps C\nreleases Ctrl");
         assert_eq!(m(2).tap.text, "buong…");
-        assert!(m(2).tooltip.ends_with("attende 50 ms"));
+        assert!(m(2).tooltip.ends_with("waits 50 ms"));
         // empty or unknown: by number
         assert_eq!((m(3).tap.text.as_str(), m(3).hold), ("M3", None));
         assert_eq!(m(9).tap.text, "M9");

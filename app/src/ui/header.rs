@@ -2,7 +2,7 @@
 //! Caps Word, QWERTY / Colemak-DH, host OS.
 
 use super::theme::{mix, text_on, Palette};
-use crate::hid::protocol::{flags, HudState, OsKind};
+use crate::hid::protocol::{caps, flags, HudState, OsKind};
 use crate::i18n::{tr, Lang, Msg};
 use crate::model::{mod_level, LayerHold, ModLevel, Modifier, MODIFIERS};
 use egui::{Align2, Color32, CornerRadius, FontId, Painter, Pos2, Rect, Stroke, StrokeKind, Vec2};
@@ -26,6 +26,8 @@ pub struct HeaderView<'a> {
     pub layer_name: &'a dyn Fn(u8) -> String,
     pub layer_color: &'a dyn Fn(u8) -> Option<Color32>,
     pub state: Option<&'a HudState>,
+    /// `GET_INFO` capabilities: the QWERTY/Colemak chip needs `caps::COLEMAK`.
+    pub capabilities: u16,
     /// The other half of a split keyboard stopped answering.
     pub split_lost: bool,
     pub compact: bool,
@@ -204,10 +206,11 @@ pub fn draw(painter: &Painter, rect: Rect, view: &HeaderView, palette: &Palette)
     }
     if s.flag(flags::COLEMAK) {
         chips.add(tr(lang, Msg::Colemak), ChipStyle::Soft(palette.colemak));
-    } else if !view.compact {
+    } else if !view.compact && view.capabilities & caps::COLEMAK != 0 {
         chips.add(tr(lang, Msg::Qwerty), neutral);
     }
-    if !view.compact {
+    // unknown without OS detection or a keymap that picks one
+    if !view.compact && s.active_os != OsKind::Auto {
         let how = if s.os_mode == OsKind::Auto { tr(lang, Msg::OsAuto) } else { tr(lang, Msg::OsForced) };
         chips.add(&format!("{} · {how}", os_name(s.active_os)), neutral);
     }

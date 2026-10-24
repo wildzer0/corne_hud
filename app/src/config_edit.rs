@@ -30,7 +30,7 @@ fn to_edit(v: &toml::Value) -> Result<Value, String> {
         toml::Value::Float(f) => Value::from((f * 10_000.0).round() / 10_000.0),
         toml::Value::Boolean(b) => Value::from(*b),
         toml::Value::Array(a) => Value::Array(a.iter().map(to_edit).collect::<Result<_, _>>()?),
-        other => return Err(format!("valore non supportato: {other}")),
+        other => return Err(format!("unsupported value: {other}")),
     })
 }
 
@@ -47,7 +47,7 @@ pub fn apply(text: &str, edits: &[Edit]) -> Result<String, String> {
             Edit::Field { list, index, field, value } => {
                 let table = list_mut(&mut doc, list)?
                     .get_mut(*index)
-                    .ok_or_else(|| format!("{list}: elemento {} mancante", index + 1))?;
+                    .ok_or_else(|| format!("{list}: missing item {}", index + 1))?;
                 match value {
                     Some(v) => set(table, field, to_edit(v)?),
                     None => remove(table, field),
@@ -101,7 +101,7 @@ fn set_key(doc: &mut DocumentMut, key: &str, value: Option<&toml::Value>) -> Res
             return Ok(()); // nothing to remove
         }
         let item = table.entry(part).or_insert_with(|| Item::Table(Table::new()));
-        table = item.as_table_like_mut().ok_or_else(|| format!("{key}: {part} non è una tabella"))?;
+        table = item.as_table_like_mut().ok_or_else(|| format!("{key}: {part} is not a table"))?;
     }
     match value {
         Some(v) => set(table, leaf, to_edit(v)?),
@@ -113,14 +113,14 @@ fn set_key(doc: &mut DocumentMut, key: &str, value: Option<&toml::Value>) -> Res
 fn list_mut<'a>(doc: &'a mut DocumentMut, list: &str) -> Result<&'a mut ArrayOfTables, String> {
     doc.get_mut(list)
         .and_then(Item::as_array_of_tables_mut)
-        .ok_or_else(|| format!("{list}: non è una lista di tabelle [[{list}]]"))
+        .ok_or_else(|| format!("{list}: not an array of tables [[{list}]]"))
 }
 
 /// Removes an element; the comment lines above it go to whatever comes next
 /// (the next element, or the next table in the file).
 fn remove_element(doc: &mut DocumentMut, list: &str, index: usize) -> Result<(), String> {
     let tables = list_mut(doc, list)?;
-    let old = tables.get(index).ok_or_else(|| format!("{list}: elemento {} mancante", index + 1))?;
+    let old = tables.get(index).ok_or_else(|| format!("{list}: missing item {}", index + 1))?;
     let prefix = old.decor().prefix().and_then(|p| p.as_str()).unwrap_or("").to_string();
     let position = old.position();
     tables.remove(index);

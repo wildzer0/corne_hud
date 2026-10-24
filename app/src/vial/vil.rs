@@ -45,16 +45,16 @@ impl Vil {
     pub fn parse(text: &str, rows: u8, cols: u8) -> Result<Self, VilError> {
         let v: Value = serde_json::from_str(text).map_err(VilError::Json)?;
         let layers =
-            v.get("layout").and_then(Value::as_array).ok_or_else(|| VilError::Invalid("manca 'layout'".into()))?;
+            v.get("layout").and_then(Value::as_array).ok_or_else(|| VilError::Invalid("missing 'layout'".into()))?;
         if layers.is_empty() || layers.len() > 32 {
-            return Err(VilError::Invalid(format!("numero di layer non valido: {}", layers.len())));
+            return Err(VilError::Invalid(format!("invalid layer count: {}", layers.len())));
         }
         let mut keymap = Keymap::new(layers.len() as u8, rows, cols);
         let mut unknown = Vec::new();
         for (l, layer) in layers.iter().enumerate() {
-            let layer_rows = layer.as_array().ok_or_else(|| VilError::Invalid(format!("layer {l} non è una lista")))?;
+            let layer_rows = layer.as_array().ok_or_else(|| VilError::Invalid(format!("layer {l} is not a list")))?;
             for (r, row) in layer_rows.iter().enumerate().take(rows as usize) {
-                let cells = row.as_array().ok_or_else(|| VilError::Invalid(format!("layer {l} riga {r}")))?;
+                let cells = row.as_array().ok_or_else(|| VilError::Invalid(format!("layer {l} row {r}")))?;
                 for (c, cell) in cells.iter().enumerate().take(cols as usize) {
                     let code = match cell {
                         Value::Number(n) => match n.as_i64() {
