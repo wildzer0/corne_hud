@@ -1,287 +1,296 @@
 # <img src="app/packaging/icon/icon.png" width="40" align="top" alt=""> Keyboard HUD
 
-Un HUD sempre in primo piano che mostra la mia **Corne v4.1** (firmware Vial) e la aggiorna in tempo reale: layer attivo con le sue legende, tasti premuti, modificatori, one-shot, Caps Lock / Caps Word, QWERTY o Colemak-DH, sistema operativo.
+An always-on-top HUD that shows your **QMK keyboard with Vial** and updates it in real time: the active layer with its legends, pressed keys, modifiers, one-shots, Caps Lock / Caps Word, and the host OS.
 
-![Layer SYS con Fn1 + Fn2 tenuti](docs/img/tri-layer.png)
+![Adjust layer with Lower + Raise held](docs/img/tri-layer.png)
 
-- **Portable**: un solo eseguibile per sistema, niente installazione e niente permessi di amministratore. Funziona anche da una chiavetta USB.
-- **La fonte di verità è la tastiera**: l'HUD interroga il firmware via Raw HID, la stessa interfaccia di Vial. Niente hook di sistema, niente keylogger, nessun permesso di Accessibilità. Funziona anche su Wayland.
-- **Nessun testo registrato**: l'HUD riceve solo quali tasti fisici sono premuti e su quale layer, mai i caratteri.
+- **Portable**: one executable per system, no installation and no administrator rights. It also runs from a USB stick.
+- **The keyboard is the source of truth**: the HUD queries the firmware over Raw HID, the same interface Vial uses. No system hooks, no keylogger, no Accessibility permission. It works on Wayland too.
+- **No text is recorded**: the HUD only receives which physical keys are pressed and on which layer, never the characters.
 
 | | |
 |---|---|
-| ![Layer DEBUG con etichette semantiche](docs/img/debug.png) | ![Ricerca di "(": Fn1 + D](docs/img/search.png) |
-| Layer DEBUG bloccato, con le etichette di VS Code | Ricerca: `(` si trova su SYM, con **Fn1 + D** |
-| ![Heatmap](docs/img/heatmap.png) | ![Modalità offline](docs/img/offline.png) |
-| Heatmap delle pressioni | Modalità offline (vial.json + .vil) |
+| ![Locked layer with custom labels](docs/img/debug.png) | ![Searching for "(": Lower + D](docs/img/search.png) |
+| A locked layer, with custom labels for VS Code | Search: `(` is on the Lower layer, with **Lower + D** |
+| ![Heatmap](docs/img/heatmap.png) | ![Offline mode](docs/img/offline.png) |
+| Key press heatmap | Offline mode (vial.json + .vil) |
+
+The screenshots show the simulated keyboard (`--mock`), a Corne.
 
 ---
 
-## Indice
+## Contents
 
-1. [Download](#download)
-2. [Primo avvio](#primo-avvio)
-3. [Firmware](#firmware)
-4. [Uso](#uso)
-5. [Linux: regola udev](#linux-regola-udev)
-6. [Windows: SmartScreen](#windows-smartscreen)
-7. [Wayland](#wayland)
-8. [Convivenza con Vial](#convivenza-con-vial)
-9. [Configurazione](#configurazione)
-10. [Stili](#stili)
-11. [Backup automatico](#backup-automatico)
-12. [Statistiche e privacy](#statistiche-e-privacy)
-13. [Modalità offline e simulata](#modalità-offline-e-simulata)
-14. [Opzioni da riga di comando](#opzioni-da-riga-di-comando)
-15. [Compilare l'app](#compilare-lapp)
-16. [Risoluzione dei problemi](#risoluzione-dei-problemi)
-17. [Licenza e crediti](#licenza-e-crediti)
+1. [Supported keyboards](#supported-keyboards)
+2. [Download](#download)
+3. [First start](#first-start)
+4. [Firmware](#firmware)
+5. [Usage](#usage)
+6. [Linux: udev rule](#linux-udev-rule)
+7. [Windows: SmartScreen](#windows-smartscreen)
+8. [Wayland](#wayland)
+9. [Living with Vial](#living-with-vial)
+10. [Configuration](#configuration)
+11. [Styles](#styles)
+12. [Automatic backup](#automatic-backup)
+13. [Statistics and privacy](#statistics-and-privacy)
+14. [Offline and simulated modes](#offline-and-simulated-modes)
+15. [Command line options](#command-line-options)
+16. [Building the app](#building-the-app)
+17. [Troubleshooting](#troubleshooting)
+18. [License and credits](#license-and-credits)
 
 ---
+
+## Supported keyboards
+
+The HUD reads the layout, the keymap, macros, combos, tap dances and key overrides from the keyboard's own Vial definition, so it is not tied to a model:
+
+- **Any keyboard with a Vial firmware** works, with a static view: the layers read through VIA, browsable with the mouse wheel, without live state.
+- **With the HUD module in the firmware** (a few lines in your keymap, see [Firmware](#firmware)) you get everything live: active layer, pressed keys, modifiers, one-shots, Caps Word, OS, the HUD_TOG key, the other half of a split keyboard.
+
+The HUD protocol (v1) carries the key matrix in 8 bytes, so the module supports matrices up to **8 rows × 8 columns** and up to 32 layers. That covers most split keyboards with up to 7 keys per row and half: Corne, Ferris/Sweep, Kyria, Planck rev6 and the like. Larger matrices (Lily58, Sofle, 60% and bigger boards) stay with the static view for now.
+
+The statistics guess hand and finger from the matrix assuming a split-style matrix (left half in the first rows, thumbs in the last row of each half): on other matrices the per-hand and per-finger figures are approximate.
 
 ## Download
 
-Dalla pagina **Releases** del repository:
+From the repository's **Releases** page:
 
-| Sistema | File |
+| System | File |
 |---|---|
 | Windows 10/11 (x86_64) | `keyboard-hud-windows-x86_64.exe` |
-| macOS 11+ (Apple Silicon e Intel) | `keyboard-hud-macos-universal.zip` (contiene `Keyboard HUD.app`) |
-| Linux x86_64 (glibc, Ubuntu 22.04+, Fedora recente) | `keyboard-hud-linux-x86_64` |
+| macOS 11+ (Apple Silicon and Intel) | `keyboard-hud-macos-universal.zip` (contains `Keyboard HUD.app`) |
+| Linux x86_64 (glibc, Ubuntu 22.04+, recent Fedora) | `keyboard-hud-linux-x86_64` |
 
-Ogni release contiene anche `SHA256SUMS.txt` e `keyboard-hud.example.toml`.
+Each release also contains `SHA256SUMS.txt` and `keyboard-hud.example.toml`.
 
-**Aggiornamenti.** Una volta al giorno l'HUD guarda se c'è una versione nuova e lo dice nel footer e nel mini indicatore (`[update] auto_check = false` per farlo solo a mano). Da menu → Generale → *Cerca aggiornamenti*, o dalla voce della tray, si controlla quando si vuole; se c'è una versione nuova, *Installa e riavvia*:
-- scarica il file del tuo sistema dalla release e lo confronta con `SHA256SUMS.txt` (se non coincide lo scarta);
-- **Windows**: rinomina l'`.exe` in uso in `<nome>.exe.old` (un eseguibile in uso si può rinominare, non sovrascrivere), mette il nuovo con lo stesso nome e riavvia; il `.old` sparisce all'avvio successivo;
-- **Linux**: sostituisce il file con il nuovo (stesso nome, eseguibile) e riavvia;
-- **macOS**: estrae lo zip con `ditto` e sostituisce l'intero `Keyboard HUD.app` nella sua cartella, poi lo riapre.
+**Updates.** Once a day the HUD checks for a new version and tells you in the footer and in the mini indicator (`[update] auto_check = false` to check only by hand). From menu → General → *Check for updates*, or from the tray, you can check whenever you like; if there is a new version, *Install and restart*:
+- downloads the file for your system from the release and checks it against `SHA256SUMS.txt` (if it does not match, it is discarded);
+- **Windows**: renames the running `.exe` to `<name>.exe.old` (a running executable can be renamed, not overwritten), puts the new one under the same name and restarts; the `.old` file goes away at the next start;
+- **Linux**: replaces the file with the new one (same name, executable) and restarts;
+- **macOS**: extracts the zip with `ditto` and replaces the whole `Keyboard HUD.app` in its folder, then opens it again.
 
-Configurazione, statistiche e backup restano dove sono. Serve che la cartella dell'eseguibile sia scrivibile: altrimenti l'HUD lo dice, e si scarica a mano dalla pagina della release (*Novità…*). L'installazione parte solo da un tuo clic. Le richieste passano dal `curl` del sistema (presente in Windows 10 e 11, macOS e quasi tutte le distribuzioni Linux) e vanno solo a github.com.
+Configuration, statistics and backups stay where they are. The executable's folder must be writable: otherwise the HUD says so, and you can download by hand from the release page (*What's new…*). Installing only starts from your click. Requests go through the system `curl` (included in Windows 10 and 11, macOS and nearly every Linux distribution) and only to github.com.
 
-## Primo avvio
+## First start
 
-1. Flasha il firmware con il supporto HUD su **entrambe** le metà (vedi [Firmware](#firmware)).
-2. Metti l'eseguibile in una cartella qualsiasi e avvialo:
-   - **Windows**: doppio clic. Se SmartScreen avvisa (l'eseguibile non è firmato), scegli *Ulteriori informazioni → Esegui comunque*, oppure sblocca il file una volta per tutte (vedi [Windows: SmartScreen](#windows-smartscreen)).
-   - **macOS**: estrai lo zip. La prima volta fai clic destro su `Keyboard HUD.app` → *Apri* (l'app è firmata ad-hoc, non da uno sviluppatore Apple registrato). In alternativa: `xattr -dr com.apple.quarantine "Keyboard HUD.app"`. L'app non compare nel Dock: si chiude dal menu contestuale dell'HUD.
-   - **Linux**: `chmod +x keyboard-hud-linux-x86_64 && ./keyboard-hud-linux-x86_64`. Serve una regola udev, una sola volta (vedi [Linux](#linux-regola-udev)).
-3. L'HUD compare in sovrimpressione. Con l'**heads-up** attivo (default) resta a schermo per un attimo, poi si nasconde da solo e ricompare quando tieni Fn1/Fn2 per più di un quarto di secondo (le combinazioni rapide, che sai già, non lo fanno lampeggiare), quando un one-shot è in attesa o quando tieni un modificatore. Mentre è nascosto, sul suo lato più vicino ai bordi dello schermo resta un piccolo **segno**: la tastiera dell'icona, con Fn1 e Fn2 nei colori dei loro layer.
+1. Flash a firmware with the HUD module (see [Firmware](#firmware)); on a split keyboard, flash **both** halves. Without the module the HUD still shows the layers, without live state.
+2. Put the executable in any folder and start it:
+   - **Windows**: double click. If SmartScreen warns you (the executable is not signed), choose *More info → Run anyway*, or unblock the file once and for all (see [Windows: SmartScreen](#windows-smartscreen)).
+   - **macOS**: extract the zip. The first time, right click `Keyboard HUD.app` → *Open* (the app is ad-hoc signed, not by a registered Apple developer). Or: `xattr -dr com.apple.quarantine "Keyboard HUD.app"`. The app has no Dock icon: quit it from the HUD's context menu or the tray.
+   - **Linux**: `chmod +x keyboard-hud-linux-x86_64 && ./keyboard-hud-linux-x86_64`. A udev rule is needed, once (see [Linux](#linux-udev-rule)).
+3. The HUD appears as an overlay. With **heads-up** on (the default) it stays on screen for a moment, then hides on its own and shows up again when you hold a layer key for more than a quarter of a second (quick combinations, which you already know, do not make it flash), when a one-shot is waiting or when you hold a modifier. While it is hidden, a small **marker** stays on its side nearest to the screen edges: the keyboard of the icon, with the keys of layers 1 and 2 in their colors.
 
-**Dove finiscono i file.** Se la cartella dell'eseguibile è scrivibile, o contiene già `keyboard-hud.toml` (modalità portable), tutto sta lì accanto. Altrimenti si usa la cartella di configurazione dell'utente (`%APPDATA%\keyboard-hud\config`, `~/Library/Application Support/keyboard-hud`, `~/.config/keyboard-hud`). I file sono:
+**Where the files go.** If the executable's folder is writable, or already contains `keyboard-hud.toml` (portable mode), everything stays next to it. Otherwise the user configuration folder is used (`%APPDATA%\keyboard-hud\config`, `~/Library/Application Support/keyboard-hud`, `~/.config/keyboard-hud`). The files are:
 
-| File | Contenuto |
+| File | Contents |
 |---|---|
-| `keyboard-hud.toml` | la tua configurazione (facoltativa) |
-| `keyboard-hud-state.toml` | posizione della finestra nell'ultima sessione |
-| `keyboard-hud-stats.json` | contatori delle statistiche |
-| `backups/` | backup automatici della configurazione della tastiera (`.vil`) |
-| `keyboard-hud.log` (+ `.log.1`) | log, massimo 1 MB per file |
-| `cache/` | definizione Vial letta dalla tastiera |
+| `keyboard-hud.toml` | your configuration (optional) |
+| `keyboard-hud-state.toml` | window position in the last session |
+| `keyboard-hud-stats.json` | statistics counters |
+| `backups/` | automatic backups of the keyboard configuration (`.vil`) |
+| `keyboard-hud.log` (+ `.log.1`) | log, at most 1 MB per file |
+| `cache/` | Vial definition read from the keyboard |
 
 ## Firmware
 
-Il firmware è la keymap Vial in `firmware/mia/`, per `crkbd/rev4_1/standard` nel fork [vial-qmk](https://github.com/vial-kb/vial-qmk). Il supporto HUD è la sezione **9. HUD (Raw HID)** di `keymap.c`; il protocollo è descritto in [docs/PROTOCOL.md](docs/PROTOCOL.md).
+The firmware side is a small module, [`firmware/hud/`](firmware/hud/), that you add to your own Vial keymap: it answers the HUD's requests and nothing else. It never sends data on its own and never writes to EEPROM, so the keyboard works exactly the same without the HUD. The protocol is described in [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
-```sh
-# una tantum: collega la keymap all'albero di vial-qmk
-ln -s "$PWD/firmware/mia" ~/git/vial-qmk/keyboards/crkbd/keymaps/mia
+In short (details, optional hooks and an example keymap in [firmware/README.md](firmware/README.md)):
 
-cd ~/git/vial-qmk
-qmk compile -kb crkbd/rev4_1/standard -km mia -e SKIP_VERSION=yes
-```
+1. copy `firmware/hud/` into your keymap folder of [vial-qmk](https://github.com/vial-kb/vial-qmk);
+2. in `rules.mk`: `include $(dir $(lastword $(MAKEFILE_LIST)))hud/hud.mk`;
+3. in `keymap.c`: `#include "hud.h"` and call `hud_task()` from `housekeeping_task_user()`;
+4. optional but recommended: a **`HUD_TOG`** custom keycode, which shows/hides the HUD and toggles click-through from the keyboard.
 
-Il file da flashare è `crkbd_rev4_1_standard_mia.uf2`. **Flasha entrambe le metà**: per ognuna tieni premuto il pulsante di reset (o usa `QK_BOOT` sul layer SYS), poi copia il file `.uf2` sull'unità che compare.
+The module costs under 1 KB of flash: it also fits an ATmega32U4 (Pro Micro) with the stock Vial features.
 
-Dopo il flash, da Vial assegna **`HUD_TOG`** (tab *User*, ultimo tasto) dove preferisci, ad esempio su un tasto libero del layer SYS.
+## Usage
 
-Il firmware funziona identico anche senza HUD collegato. Risponde solo alle richieste dell'HUD, non invia mai dati di sua iniziativa e non scrive nulla in EEPROM.
+**The menu** (right click on the HUD) has at the top the actions on the clicked key (*Change this key…*, *Undo the last change*) and the most used switches (heads-up, click-through, pause); below, on the left, the tabs **Window** (opacity, scale, view, position), **Style** (theme, styles, keys), **On the keys** (combos, keycast, heatmap), **Tools** (search, training, statistics, export, backup, diagnostics), **General** (language, start with the system). At the bottom *Settings…* and *Quit*. The menu window always has the same size and remembers the last tab.
 
-## Uso
-
-**Il menu** (clic destro sull'HUD) ha in alto le azioni sul tasto cliccato (*Cambia questo tasto…*, *Annulla l'ultima modifica*) e gli interruttori più usati (heads-up, click-through, pausa); sotto, a sinistra, le schede **Finestra** (opacità, scala, vista, posizione), **Stile** (tema, stili, tasti), **Sui tasti** (combo, keycast, heatmap), **Strumenti** (cerca, allenamento, statistiche, esportazione, backup, diagnostica), **Generale** (lingua, avvio con il sistema). In fondo *Impostazioni…* ed *Esci*. La finestra del menu ha sempre la stessa misura; ricorda l'ultima scheda aperta.
-
-| Azione | Come |
+| Action | How |
 |---|---|
-| Spostare l'HUD | trascinalo con il mouse. Su Windows si aggancia ai bordi, agli angoli e al centro dello schermo |
-| Metterlo in un angolo, a metà di un bordo o al centro | menu → Finestra → Posizione (griglia 3×3) |
-| Ingrandire / rimpicciolire (50–200%) | Ctrl + rotellina sull'HUD, oppure menu → Finestra → Scala |
-| Menu (opacità, scala, vista, posizione, tema, heads-up, combo, heatmap, statistiche, ricerca, impostazioni, click-through, pausa, avvio con il sistema, esci) | clic destro sull'HUD |
-| Mostrare / nascondere | un tocco di **HUD_TOG**. Con l'heads-up attivo il tocco *fissa* l'HUD a schermo, e un altro tocco lo restituisce all'heads-up |
-| Click-through (i clic passano alle finestre sotto) | menu, oppure **doppio tocco** di HUD_TOG. Si disattiva solo con il doppio tocco |
-| Cercare un tasto | Ctrl+F o `/` con l'HUD in primo piano, oppure menu → Strumenti → Cerca. Frecce per scegliere, Invio/Esc per chiudere. Trova anche combo, tap dance e key override |
-| Vedere le combo | menu → Sui tasti → Mostra le combo |
-| Avviare l'HUD all'accesso | menu → Generale → Avvia con il sistema (vedi sotto) |
-| Icona nella tray | clic sinistro: mostra/nasconde l'HUD; clic destro: menu con pausa, backup, statistiche, impostazioni, avvio con il sistema, esci |
-| Impostazioni | Ctrl+, con l'HUD in primo piano, menu → Impostazioni…, oppure la tray; Ctrl+Shift+, apre il file di testo |
-| Sfogliare i layer (solo offline) | rotellina o tasti 0–9 |
+| Move the HUD | drag it with the mouse. On Windows it snaps to the edges, the corners and the center of the screen |
+| Put it in a corner, the middle of an edge or the center | menu → Window → Position (3×3 grid) |
+| Zoom in / out (50–200%) | Ctrl + mouse wheel on the HUD, or menu → Window → Scale |
+| Menu (opacity, scale, view, position, theme, heads-up, combos, heatmap, statistics, search, settings, click-through, pause, start with the system, quit) | right click on the HUD |
+| Show / hide | one tap of **HUD_TOG**. With heads-up on, the tap *pins* the HUD on screen, and another tap gives it back to heads-up |
+| Click-through (clicks go to the windows below) | menu, or **double tap** of HUD_TOG. It turns off only with the double tap |
+| Find a key | Ctrl+F or `/` with the HUD focused, or menu → Tools → Search. Arrows to choose, Enter/Esc to close. It also finds combos, tap dances and key overrides |
+| See the combos | menu → On the keys → Show combos |
+| Start the HUD at login | menu → General → Start with the system (see below) |
+| Tray icon | left click: shows/hides the HUD; right click: menu with pause, backup, statistics, settings, start with the system, quit |
+| Settings | Ctrl+, with the HUD focused, menu → Settings…, or the tray; Ctrl+Shift+, opens the text file |
+| Browse the layers (offline or without the HUD module) | mouse wheel or keys 0–9 |
 
-Il menu si apre in una piccola finestra separata accanto al punto del clic, così resta leggibile anche con l'HUD rimpicciolito o in vista compatta. Si chiude con ✕, con Esc, con un clic sull'HUD o con un clic altrove. Su Wayland è il compositor a decidere dove compare.
+The menu opens in a small separate window next to the click, so it stays readable even with a small HUD or in the compact view. It closes with ✕, Esc, a click on the HUD or a click elsewhere. On Wayland the compositor decides where it appears.
 
-**Icona nella tray.** Comoda soprattutto con l'HUD nascosto e su macOS, dove l'app non ha icona nel Dock. Su Linux passa da D-Bus (StatusNotifierItem), senza GTK: KDE, Xfce e la maggior parte dei pannelli la mostrano, GNOME solo con l'estensione *AppIndicator*. Si toglie con `tray = false` in `[appearance]`.
+**Tray icon.** Handy above all with the HUD hidden and on macOS, where the app has no Dock icon. On Linux it goes through D-Bus (StatusNotifierItem), without GTK: KDE, Xfce and most panels show it, GNOME only with the *AppIndicator* extension. Turn it off with `tray = false` in `[appearance]`.
 
-**Avvio con il sistema.** Vale solo per il tuo utente e non chiede permessi di amministratore: su Windows è un valore in `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`, su Linux il file `~/.config/autostart/keyboard-hud.desktop`, su macOS `~/Library/LaunchAgents/io.github.keyboard-hud.plist`. Registra il percorso dell'eseguibile e le opzioni `--x11`, `--vid`, `--pid` e `--verbose` con cui l'hai avviato. Se sposti l'eseguibile, la casella risulta vuota e il tooltip lo segnala: spuntala di nuovo per aggiornare il percorso. Con la modalità portable su una chiavetta, l'avvio funziona solo se la chiavetta è collegata.
+**Start with the system.** Only for your user, without administrator rights: on Windows a value in `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`, on Linux the file `~/.config/autostart/keyboard-hud.desktop`, on macOS `~/Library/LaunchAgents/io.github.keyboard-hud.plist`. It records the executable's path and the `--x11`, `--vid`, `--pid` and `--verbose` options you started it with. If you move the executable, the box shows unchecked and the tooltip says why: check it again to update the path. In portable mode on a USB stick, it only works with the stick plugged in.
 
-Il click-through si attiva solo se la tastiera collegata ha il tasto HUD_TOG, così c'è sempre un modo per disattivarlo. Se la tastiera si scollega, si spegne da solo.
+Click-through can only be turned on if the connected keyboard has the HUD_TOG key, so there is always a way to turn it off. If the keyboard is unplugged, it turns off on its own.
 
-**Cosa mostra l'HUD**
+**What the HUD shows**
 
-- **Layer**: nome e colore (gli stessi dei LED: SYM azzurro, NAV verde, DEBUG rosso, ACC giallo). Il lucchetto indica un layer bloccato (`TG`); `1×` con pulsazione indica un one-shot in attesa. Gli altri layer attivi compaiono come etichette.
-- **Legende**: quelle del layer attivo, già con Colemak-DH applicato dal firmware. I tasti trasparenti mostrano attenuata la legenda del layer sotto; i tasti layer hanno il colore del layer di destinazione; i mod-tap mostrano il tocco in grande e il modificatore in piccolo. Il tooltip dà il nome completo.
-- **Modificatori**: Ctrl, Shift, Alt, Gui (Cmd/Opt su macOS). Pieno = tenuto, pallido = weak, contorno pulsante = one-shot, lucchetto = one-shot bloccato.
-- **Caps Lock / Caps Word, QWERTY / Colemak-DH, OS** rilevato o forzato; **Bloc Num** nella vista completa.
-- **Altra metà scollegata**: se la metà senza USB smette di rispondere (cavo TRRS staccato), un avviso rosso nell'HUD e nel mini indicatore. Compare solo dopo che l'altra metà è stata vista collegata, così una tastiera non split non dà falsi allarmi.
-- **Macro**: il tasto mostra cosa scrive o preme (`hi⏎`, `Ctrl+C`, troncato a 6 caratteri) con `M0` in piccolo; il tooltip elenca ogni passo. Le macro si leggono dalla tastiera a ogni connessione, o dal `.vil` in offline.
-- **Tasti premuti**: si accendono subito e sfumano in 200 ms.
-- **Lingua**: italiano o inglese (*English*), dal menu o con `language` in `[appearance]`; con `auto` segue il sistema. Cambiano interfaccia, tooltip, ricerca, CSV delle statistiche e nuove voci del `CHANGELOG.md` dei backup; il log resta in italiano.
-- **Keycast** (menu → Sui tasti → *Keycast*, o `[keycast] enabled = true`): per video e presentazioni, in basso sullo schermo compaiono per due secondi e mezzo le scorciatoie premute: `Ctrl+Shift+P`, `Alt+Tab`, `F5`, `Esc`, frecce, tasti multimediali. **Mai il testo**: un tasto che scrive un carattere compare solo insieme a Ctrl, Alt o Gui (Shift da solo non basta), e Invio, Spazio e Backspace non compaiono mai da soli. Niente viene salvato. I mod-tap (Ctrl sulla home row) funzionano: il tasto aspetta un attimo che il modificatore arrivi.
-- **Cambiare un tasto senza Vial**: clic destro **sopra il tasto** da cambiare → *Cambia questo tasto…* (prima voce del menu; aperto altrove, il menu la mostra disattivata). Si cerca il nuovo tasto per nome o descrizione (`esc`, `redo`, `MO(2)`, `HUD_TOG`) oppure lo si scrive come in Vial (`C(KC_Z)`, `LCTL_T(KC_A)`, `LT1(KC_SPC)`). Prima di scrivere, l'HUD avvisa se un layer non si potrà più raggiungere o se sparisce l'ultimo `QK_BOOT` o `HUD_TOG`, e chiede conferma. `QK_BOOT` si assegna solo da Vial. Subito prima di ogni scrittura viene fatto un [backup](#backup-automatico) e la modifica finisce nel `CHANGELOG.md`; menu → *Annulla l'ultima modifica* rimette il tasto di prima. Con Colemak attivo le lettere dei layer rimappati vanno cambiate in QWERTY. Macro, tap dance, combo, key override e impostazioni restano in Vial.
-- **Esportare la keymap** (menu → Strumenti → *Esporta la keymap…*, oppure `--export FILE`): una pagina HTML con un disegno per ogni layer, nei colori dei layer e con le tue etichette, più l'elenco di combo, tap dance, macro e key override. Si apre nel browser, da cui si stampa o si salva in PDF. I file finiscono in `export/` accanto alla configurazione.
-- **Allenamento** (menu → Strumenti → *Allenamento…*): l'HUD chiede un simbolo o una scorciatoia (`{`, `Ctrl+Z`, `F5`) e aspetta che tu la prema, 20 domande per giro. Dopo 6 secondi mostra come si fa (`Fn1 + D`) e illumina il tasto sull'HUD. Escono più spesso i tasti dei layer superiori che usi poco (dalle [statistiche](#statistiche-e-privacy), se attive) e quelli sbagliati; alla fine ci sono i risultati e i tasti da ripassare. Vale anche Shift + tasto per un simbolo con Shift. Serve il firmware HUD.
-- **Diagnostica** (menu → Strumenti → *Diagnostica…*): tastiera, protocollo del firmware, letture al secondo, latenza delle risposte, errori e riconnessioni, OS rilevato, altra metà, percorsi dei file, ultimo backup. *Copia tutto* la mette negli appunti, pronta per una segnalazione.
-- **Mini indicatore**: quando l'HUD è nascosto (heads-up o HUD_TOG), un piccolo badge in un angolo dello schermo ricorda gli stati che restano dopo aver rilasciato i tasti: layer bloccato (per esempio DEBUG con il lucchetto), one-shot in attesa, modificatori bloccati, Caps Lock, Caps Word. Mostra anche perché manca la tastiera (non trovata, in pausa per Vial) e, per due secondi, cosa è appena cambiato: QWERTY/Colemak-DH, OS rilevato o forzato, HUD nascosto da HUD_TOG. Non intercetta i clic. Con `locked_layer = "indicator"` un layer bloccato non tiene più su l'HUD intero, ma solo il badge; con `oneshot = "indicator"` vale lo stesso per i one-shot in attesa (layer e modificatori), con `modifiers = "indicator"` per i modificatori tenuti a lungo.
-- **Ritardo dei layer**: con l'heads-up, un layer tenuto (Fn1, Fn2, tri-layer) fa comparire l'HUD solo dopo `layer_delay_ms` (default 250 ms). Fn1 + un tasto battuti di fila, perché sai già dov'è, non fanno lampeggiare l'HUD; se esiti, compare. Con 0 compare subito come prima. I one-shot in attesa compaiono sempre subito.
-- **Schermo intero**: con una finestra a schermo intero in primo piano (un gioco, un video, una presentazione) l'HUD, il segno e il mini indicatore si nascondono e tornano quando esci; il keycast resta, perché serve proprio nelle presentazioni. Si disattiva con `[appearance] hide_in_fullscreen = false` o dalle Impostazioni. Su Windows (finestra che copre esattamente il suo monitor, non solo massimizzata) e X11 (`_NET_WM_STATE_FULLSCREEN`); su Wayland e macOS non si può sapere.
-- **Segno dell'heads-up**: con l'HUD nascosto dall'heads-up resta, nel punto in cui ricompare, una piccola tastiera come quella dell'icona, sul lato dell'HUD più vicino ai bordi dello schermo (sopra con l'HUD in alto, nell'angolo con l'HUD in un angolo, al centro con l'HUD al centro; una posizione libera vale come la più vicina delle nove del menu *Posizione*): dice che l'app è attiva, dove comparirà l'HUD e quali tasti lo richiamano (Fn1 e Fn2, colorati come i layer SYM e NAV). Diventa scura su uno sfondo chiaro e chiara su uno scuro, leggendo i pixel attorno al segno ogni 2 secondi (vedi [privacy](#statistiche-e-privacy)). Su Windows e su Linux X11; su Wayland e macOS il sistema non lo permette senza permessi speciali, e il segno resta chiaro con un alone scuro, leggibile su qualunque sfondo. Non intercetta i clic. Si toglie con `[headsup] marker = false` o dal menu (*Segno quando è nascosto*); l'opacità si regola con `marker_opacity` (default 85%) o nelle Impostazioni. Non compare con l'HUD nascosto da HUD_TOG.
-- **Tap dance, combo e key override** configurati in Vial, letti dalla tastiera a ogni connessione (quindi anche quando l'HUD riprende dopo la pausa per Vial) oppure dal `.vil` in modalità offline:
-  - un tasto tap dance mostra in grande l'azione al tocco e in piccolo quella tenendolo premuto (o il doppio tocco); il tooltip le elenca tutte;
-  - con *Mostra le combo* ogni combo è un'etichetta con il risultato fra i tasti da premere insieme;
-  - un key override si vede mentre lo usi: tenendo Shift, il tasto ⌫ mostra ⌦ in colore (con l'override Shift+⌫ = Canc).
-- **Ricerca**: oltre ai tasti trova le combo (`combo: J + K insieme`), le azioni dei tap dance (`Q (tieni)`) e i key override (`Shift + Bksp`).
+- **Layer**: name and color (from `[[layers]]` in the configuration; by default BASE, LOWER, RAISE, ADJUST). The padlock means a locked layer (`TG`, Layer Lock); a pulsing `1×` means a waiting one-shot. The other active layers appear as chips.
+- **Legends**: those of the active layer, as the firmware resolves them (a remap such as Colemak in `keymap_key_to_keycode()` is already applied). Transparent keys show the legend of the layer below, dimmed; layer keys have the color of their target layer; mod-taps show the tap large and the modifier small. The tooltip gives the full name.
+- **Modifiers**: Ctrl, Shift, Alt, Gui (Cmd/Opt on macOS). Solid = held, pale = weak, pulsing outline = one-shot, padlock = locked one-shot.
+- **Caps Lock / Caps Word**, the **OS** detected or forced, **Num Lock** in the full view, and **QWERTY / Colemak-DH** if the keymap declares it (see [firmware/README.md](firmware/README.md)).
+- **Other half disconnected**: if the half without USB stops answering (TRRS cable unplugged), a red warning in the HUD and in the mini indicator. It appears only after the other half has been seen connected, so a non-split keyboard gives no false alarms.
+- **Macros**: the key shows what it types or presses (`hi⏎`, `Ctrl+C`, cut to 6 characters) with `M0` small; the tooltip lists every step. Macros are read from the keyboard at every connection, or from the `.vil` offline.
+- **Pressed keys**: light up at once and fade in 200 ms.
+- **Language**: English or Italian (*Italiano*), from the menu or with `language` in `[appearance]`; with `auto` it follows the system. It changes the interface, tooltips, search, the statistics CSV and new entries of the backups' `CHANGELOG.md`; the log stays in English.
+- **Keycast** (menu → On the keys → *Keycast*, or `[keycast] enabled = true`): for videos and presentations, the shortcuts you press appear at the bottom of the screen for two and a half seconds: `Ctrl+Shift+P`, `Alt+Tab`, `F5`, `Esc`, arrows, media keys. **Never the text**: a key that types a character appears only together with Ctrl, Alt or Gui (Shift alone is not enough), and Enter, Space and Backspace never appear alone. Nothing is saved. Mod-taps (Ctrl on the home row) work: the key waits a moment for the modifier to arrive.
+- **Change a key without Vial**: right click **on the key** to change → *Change this key…* (first menu entry; opened elsewhere, the menu shows it disabled). Search the new key by name or description (`esc`, `redo`, `MO(2)`, `HUD_TOG`) or write it as in Vial (`C(KC_Z)`, `LCTL_T(KC_A)`, `LT1(KC_SPC)`). Before writing, the HUD warns you if a layer can no longer be reached or if the last `QK_BOOT` or `HUD_TOG` goes away, and asks for confirmation. `QK_BOOT` can only be assigned from Vial. Right before every write a [backup](#automatic-backup) is made and the change goes into the `CHANGELOG.md`; menu → *Undo the last change* puts the previous key back. With a remap such as Colemak on, letters on the remapped layers must be changed in their QWERTY position. Macros, tap dances, combos, key overrides and settings stay in Vial.
+- **Export the keymap** (menu → Tools → *Export the keymap…*, or `--export FILE`): an HTML page with a drawing of each layer, in the layer colors and with your labels, plus the list of combos, tap dances, macros and key overrides. It opens in the browser, from which you can print it or save it as PDF. The files go to `export/` next to the configuration.
+- **Training** (menu → Tools → *Training…*): the HUD asks for a symbol or a shortcut (`{`, `Ctrl+Z`, `F5`) and waits for you to press it, 20 questions per round. After 6 seconds it shows how (`Lower + D`) and lights the key on the HUD. Keys of the upper layers you use little (from the [statistics](#statistics-and-privacy), if on) and the ones you got wrong come up more often; at the end there are the results and the keys to review. Shift + key also counts for a shifted symbol. Needs the HUD module.
+- **Diagnostics** (menu → Tools → *Diagnostics…*): keyboard, firmware protocol, reads per second, answer latency, errors and reconnections, detected OS, other half, file paths, last backup. *Copy all* puts it on the clipboard, ready for a bug report.
+- **Mini indicator**: while the HUD is hidden (heads-up or HUD_TOG), a small badge in a corner of the screen reminds you of the states that last after the keys are released: a locked layer (with the padlock), a waiting one-shot, locked modifiers, Caps Lock, Caps Word. It also shows why the keyboard is missing (not found, paused for Vial) and, for two seconds, what just changed: QWERTY/Colemak-DH, OS detected or forced, HUD hidden by HUD_TOG. It does not catch clicks. With `locked_layer = "indicator"` a locked layer no longer keeps up the whole HUD, only the badge; with `oneshot = "indicator"` the same goes for waiting one-shots (layers and modifiers), with `modifiers = "indicator"` for modifiers held for a while.
+- **Layer delay**: with heads-up, a held layer (Lower, Raise, tri-layer, `MO`, `LT`) brings up the HUD only after `layer_delay_ms` (default 250 ms). Lower + a key typed in a row, because you already know where it is, do not make the HUD flash; if you hesitate, it shows up. With 0 it shows up at once. Waiting one-shots always show up at once.
+- **Full screen**: with a full screen window in the foreground (a game, a video, a presentation) the HUD, the marker and the mini indicator hide and come back when you leave it; the keycast stays, because presentations are where it is needed. Turn it off with `[appearance] hide_in_fullscreen = false` or from Settings. On Windows (a window covering exactly its monitor, not just maximized) and X11 (`_NET_WM_STATE_FULLSCREEN`); on Wayland and macOS it cannot be known.
+- **Heads-up marker**: with the HUD hidden by heads-up, a small keyboard like the icon's stays where the HUD will show up, on the side of the HUD nearest to the screen edges (above with the HUD at the top, in the corner with the HUD in a corner, in the center with the HUD in the center; a free position counts as the nearest of the nine in the *Position* menu): it says that the app is running, where the HUD will appear and which keys bring it up (the keys of layers 1 and 2, in their colors). It turns dark on a light background and light on a dark one, reading the pixels around the marker every 2 seconds (see [privacy](#statistics-and-privacy)). On Windows and Linux X11; on Wayland and macOS the system does not allow it without special permissions, and the marker stays light with a dark halo, readable on any background. It does not catch clicks. Turn it off with `[headsup] marker = false` or from the menu (*Marker while hidden*); set its opacity with `marker_opacity` (default 85%) or in Settings. It does not appear with the HUD hidden by HUD_TOG.
+- **Tap dances, combos and key overrides** configured in Vial, read from the keyboard at every connection (so also when the HUD resumes after the pause for Vial) or from the `.vil` offline:
+  - a tap dance key shows the tap action large and the hold (or double tap) action small; the tooltip lists them all;
+  - with *Show combos* each combo is a label with its result between the keys to press together;
+  - a key override shows while you use it: holding Shift, the ⌫ key shows ⌦ in color (with the override Shift+⌫ = Del).
+- **Search**: besides keys it finds combos (`combo: J + K together`), tap dance actions (`Q (hold)`) and key overrides (`Shift + Bksp`).
 
-## Linux: regola udev
+## Linux: udev rule
 
-Su Linux l'accesso a `/dev/hidraw*` richiede una regola udev. È l'unico passaggio con `sudo`, da fare una volta. Se manca, l'HUD lo dice nel suo stato.
+On Linux, access to `/dev/hidraw*` needs a udev rule. It is the only step with `sudo`, done once. If it is missing, the HUD says so in its status.
 
 ```sh
 ./keyboard-hud-linux-x86_64 --print-udev-rule
 ```
 
-Stampa questa regola, la stessa consigliata da Vial (se Vial ti funziona già, è probabilmente già installata):
+It prints this rule, the same one Vial recommends (if Vial already works for you, it is probably installed):
 
 ```
 KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{serial}=="*vial:f64c2b3c*", MODE="0660", GROUP="users", TAG+="uaccess", TAG+="udev-acl"
 ```
 
 ```sh
-sudo nano /etc/udev/rules.d/59-vial.rules        # incolla la riga
+sudo nano /etc/udev/rules.d/59-vial.rules        # paste the line
 sudo udevadm control --reload && sudo udevadm trigger
 ```
 
-Poi scollega e ricollega la tastiera.
+Then unplug and plug the keyboard back in.
 
 ## Windows: SmartScreen
 
-L'eseguibile non è firmato con un certificato di sviluppatore, quindi la prima volta Microsoft Defender SmartScreen mostra *"Windows ha protetto il PC"*. L'avviso dipende dal segno "scaricato da Internet" che il browser mette sul file, non da un problema dell'app. Per toglierlo una volta per tutte:
+The executable is not signed with a developer certificate, so the first time Microsoft Defender SmartScreen shows *"Windows protected your PC"*. The warning comes from the "downloaded from the Internet" mark the browser puts on the file, not from a problem with the app. To remove it once and for all:
 
-- clic destro sull'`.exe` → *Proprietà* → spunta **Sblocca** → *OK*;
-- oppure, da PowerShell: `Unblock-File .\keyboard-hud-windows-x86_64.exe`.
+- right click the `.exe` → *Properties* → check **Unblock** → *OK*;
+- or, from PowerShell: `Unblock-File .\keyboard-hud-windows-x86_64.exe`.
 
-Prima di sbloccarlo puoi confrontarlo con `SHA256SUMS.txt` della release: `Get-FileHash .\keyboard-hud-windows-x86_64.exe`. Se è l'antivirus di Defender a segnalarlo (falso positivo), il file si può inviare a Microsoft per l'analisi dal portale *Microsoft Security Intelligence*. Un eseguibile compilato da te dai sorgenti non ha il segno e non fa scattare l'avviso.
+Before unblocking it you can compare it with the release's `SHA256SUMS.txt`: `Get-FileHash .\keyboard-hud-windows-x86_64.exe`. If the Defender antivirus flags it (a false positive), you can submit the file to Microsoft for analysis from the *Microsoft Security Intelligence* portal. An executable you build from source has no mark and does not trigger the warning.
 
 ## Wayland
 
-Su Wayland è il compositor a decidere la posizione delle finestre e se possono restare sempre in primo piano: molti (GNOME in particolare) ignorano entrambe le richieste. Se l'HUD finisce sotto le altre finestre o non ricorda la posizione, avvialo con:
+On Wayland the compositor decides where windows go and whether they can stay on top: many (GNOME in particular) ignore both requests. If the HUD ends up below other windows or does not remember its position, start it with:
 
 ```sh
 ./keyboard-hud-linux-x86_64 --x11
 ```
 
-L'opzione forza XWayland, dove "sempre in primo piano" e la posizione funzionano. Anche il click-through dipende dal compositor.
+The option forces XWayland, where "always on top" and the position work. Click-through also depends on the compositor.
 
-## Convivenza con Vial
+## Living with Vial
 
-Vial e l'HUD usano la stessa interfaccia Raw HID. Le risposte destinate all'uno potrebbero finire nell'altro e confonderlo. Per questo:
+Vial and the HUD use the same Raw HID interface. Answers meant for one of them could end up in the other and confuse it. So:
 
-- se l'HUD trova il processo **Vial** (o VIA) in esecuzione, chiude il dispositivo e mostra *"In pausa: Vial è aperto"*. Il controllo avviene ogni 2 secondi;
-- quando Vial si chiude, l'HUD si ricollega da solo e **rilegge il keymap**, che potresti aver appena cambiato;
-- la **web app di Vial** (o di VIA) gira nel browser e non si vede tra i processi. In compenso l'HUD si accorge delle risposte che non ha chiesto: smette di interrogare la tastiera, mostra *"In pausa: un altro programma usa la tastiera"* e riprende dopo 20 secondi di silenzio, rileggendo tutto;
-- dal menu c'è anche una **pausa manuale**.
+- if the HUD finds the **Vial** (or VIA) process running, it closes the device and shows *"Paused: Vial is open"*. It checks every 2 seconds;
+- when Vial closes, the HUD reconnects on its own and **re-reads the keymap**, which you may have just changed;
+- the **Vial web app** (or VIA's) runs in the browser and does not show among the processes. The HUD notices the answers it did not ask for, though: it stops querying the keyboard, shows *"Paused: another program is using the keyboard"* and resumes after 20 seconds of silence, re-reading everything;
+- there is also a **manual pause** in the menu.
 
-Con la web app la protezione automatica scatta solo dopo il primo scambio tra browser e tastiera, e riparte se la web app resta ferma più di 20 secondi. **Per lavorare tranquillo con la web app metti l'HUD in pausa dal menu** e togli la pausa quando hai finito.
+With the web app, the automatic protection only kicks in after the first exchange between the browser and the keyboard, and starts over if the web app stays idle for more than 20 seconds. **To work safely with the web app, pause the HUD from the menu** and resume when you are done.
 
-L'HUD si accorge comunque dei cambi di keymap fatti da Vial. Il firmware rileva le modifiche in pochi millisecondi e l'HUD rilegge le legende. Fa lo stesso dopo `CMK_TOG` (QWERTY/Colemak-DH).
+The HUD notices keymap changes made by Vial anyway: the firmware module detects them within a few milliseconds and the HUD re-reads the legends. A keymap that remaps keys on its own (such as a Colemak toggle) calls `hud_keymap_changed()` for the same effect.
 
-## Configurazione
+## Configuration
 
-Copia [`keyboard-hud.example.toml`](keyboard-hud.example.toml) accanto all'eseguibile con il nome `keyboard-hud.toml`, oppure nella cartella di configurazione dell'utente. Ogni voce è facoltativa. Le modifiche valgono **entro un secondo, senza riavviare**; solo `[device]` richiede un riavvio.
+Copy [`keyboard-hud.example.toml`](keyboard-hud.example.toml) next to the executable as `keyboard-hud.toml`, or to the user configuration folder. Every entry is optional. Changes apply **within a second, without restarting**; only `[device]` needs a restart.
 
-**Finestra Impostazioni** (menu → *Impostazioni…*, icona nella tray, oppure **Ctrl+,** con l'HUD in primo piano), come in VS Code: tutte le voci del file divise per sezione, con la descrizione, una casella di ricerca, un pallino sulle voci diverse dal predefinito e ↺ per ripristinarlo. Ogni modifica si salva subito in `keyboard-hud.toml` toccando solo quella voce: commenti e ordine del file restano. *Apri come testo* (o **Ctrl+Shift+,**) apre il file nell'editor di sistema; se il file contiene un errore la finestra lo mostra e resta in sola lettura finché non lo correggi.
+**Settings window** (menu → *Settings…*, tray icon, or **Ctrl+,** with the HUD focused), like VS Code's: every entry of the file grouped by section, with its description, a search box, a dot on the entries that differ from the default and ↺ to reset them. Every change is saved at once in `keyboard-hud.toml`, touching only that entry: comments and order stay. *Open as text* (or **Ctrl+Shift+,**) opens the file in the system editor; if the file contains an error the window shows it and stays read-only until you fix it.
 
-- **Layer**: nome e colore di ogni layer, nell'ordine del firmware, con il selettore di colore (o *neutro*); *Aggiungi layer* e ✕ sull'ultimo.
-- **Etichette**: una scheda per etichetta con testo, descrizione, tasto (keycode oppure riga e colonna della matrice), layer e app. Un keycode non riconosciuto o un'etichetta incompleta vengono segnalati sulla scheda. La ricerca in alto trova anche le etichette.
-- **File di testo**: il file intero con i commenti, modificabile nella finestra; *Salva* (Ctrl+S) scrive solo un file valido, altrimenti mostra l'errore con la riga. Serve anche a correggere un file rotto senza uscire dall'app.
+- **Layers**: name and color of each layer, in firmware order, with a color picker (or *neutral*); *Add layer* and ✕ on the last one.
+- **Labels**: a card per label with text, description, key (keycode, or matrix row and column), layer and app. An unknown keycode or an incomplete label is flagged on the card. The search at the top also finds labels.
+- **Text file**: the whole file with its comments, editable in the window; *Save* (Ctrl+S) only writes a valid file, otherwise it shows the error with its line. It also helps fixing a broken file without leaving the app.
 
-Slider, numeri e colori si salvano quando rilasci il mouse; i campi di testo quando premi Invio o passi ad altro.
+Sliders, numbers and colors are saved when you release the mouse; text fields when you press Enter or move on.
 
-| Sezione | Cosa regola |
+| Section | What it sets |
 |---|---|
-| `[device]` | `vid` / `pid` per scegliere la tastiera (default: la prima che risponde al protocollo HUD) |
-| `[appearance]` | icona nella tray (`tray`), opacità (default 85%), scala, tema (`system`/`dark`/`light`), vista (`full`/`compact`), posizione iniziale, distanza di aggancio ai bordi (`snap_distance`, 16) e margine dai bordi (`screen_margin`, 8), stile (`style`), opacità e arrotondamento dei tasti (`key_opacity`, `key_radius`), combo sopra i tasti (`combos`), lingua (`language`: `auto`, `it`, `en`), nascondersi con una finestra a schermo intero (`hide_in_fullscreen`, default sì) |
-| `[headsup]` | attivo, ritardo dei layer (`layer_delay_ms`, 250 ms) e dei modificatori (400 ms), ritardo di scomparsa (800 ms), opacità da nascosto, cosa mostra un layer bloccato (`locked_layer`: `hud` o `indicator`) un one-shot in attesa (`oneshot`) e un modificatore tenuto (`modifiers`), sempre `hud` o `indicator`; segno quando è nascosto (`marker`, default sì) e sua opacità (`marker_opacity`, 85%) |
-| `[keycast]` | keycast attivo (default no), posizione sullo schermo (`position`, default `bottom`) |
-| `[indicator]` | mini indicatore attivo, angolo dello schermo (`position`, default `top-right`) |
-| `[[layers]]` | nome e colore di ogni layer, in ordine |
-| `[[labels]]` | etichette personalizzate, per keycode (anche limitato a un layer) o per posizione, anche solo per un'applicazione |
-| `[stats]` | statistiche attive, file, periodo del report "mai usati" |
-| `[backup]` | backup automatico attivo, cartella, quanti tenerne (default 30) |
-| `[update]` | controllo automatico delle nuove versioni, una volta al giorno (`auto_check`, default sì) |
-| `[polling]` | frequenze di lettura (60 Hz visibile, 10 Hz nascosto) e timeout |
-| `[log]` | livello del log |
+| `[device]` | `vid` / `pid` to pick the keyboard (default: the first one that answers the HUD protocol) |
+| `[appearance]` | tray icon (`tray`), opacity (default 85%), scale, theme (`system`/`dark`/`light`), view (`full`/`compact`), initial position, snap distance (`snap_distance`, 16) and screen margin (`screen_margin`, 8), style (`style`), key opacity and corner radius (`key_opacity`, `key_radius`), combos over the keys (`combos`), language (`language`: `auto`, `en`, `it`), hiding with a full screen window (`hide_in_fullscreen`, default yes) |
+| `[headsup]` | on/off, layer delay (`layer_delay_ms`, 250 ms) and modifier delay (400 ms), hide delay (800 ms), opacity when hidden, what a locked layer (`locked_layer`: `hud` or `indicator`), a waiting one-shot (`oneshot`) and a held modifier (`modifiers`) show, always `hud` or `indicator`; marker when hidden (`marker`, default yes) and its opacity (`marker_opacity`, 85%) |
+| `[keycast]` | keycast on (default no), position on screen (`position`, default `bottom`) |
+| `[indicator]` | mini indicator on, screen corner (`position`, default `top-right`) |
+| `[[layers]]` | name and color of each layer, in order |
+| `[[labels]]` | custom labels, by keycode (optionally on one layer) or by position, optionally for one application |
+| `[stats]` | statistics on, file, period of the "never used" report |
+| `[backup]` | automatic backup on, folder, how many to keep (default 30) |
+| `[update]` | automatic check for new versions, once a day (`auto_check`, default yes) |
+| `[polling]` | read rates (60 Hz visible, 10 Hz hidden) and timeout |
+| `[log]` | log level |
 
-Esempio di etichette (il file d'esempio contiene già tutto il layer DEBUG):
+Label examples:
 
 ```toml
 [[labels]]
-layer = 4
+layer = 2
 keycode = "KC_F10"
 label = "Step over"
-description = "Esegui la riga (F10)"
+description = "Step over (F10)"
 
 [[labels]]
-layer = 4
-keycode = "C(KC_DOT)"      # anche S(...), A(...), C(S(...)), QK_KB_15 / USER15
+layer = 2
+keycode = "C(KC_DOT)"      # also S(...), A(...), C(S(...)), QK_KB_15 / USER15
 label = "Quick fix"
 
-[[labels]]                 # per posizione: layer, riga e colonna della matrice
+[[labels]]                 # by position: layer, matrix row and column
 layer = 0
 row = 0
 col = 0
-label = "Debug"
+label = "Esc"
 ```
 
-**Etichette per applicazione.** Con `app` un'etichetta vale solo mentre quel programma è in primo piano, e a parità di tasto vince su quella generica. Così F10 può dire "Step over" in VS Code e restare F10 altrove:
+**Per-application labels.** With `app` a label applies only while that program is in the foreground, and for the same key it wins over the generic one. So F10 can say "Step over" in VS Code and stay F10 elsewhere:
 
 ```toml
 [[labels]]
-app = "code"               # anche una lista: ["idea64", "pycharm64"]
-layer = 4
+app = "code"               # also a list: ["idea64", "pycharm64"]
+layer = 2
 keycode = "KC_F10"
 label = "Step over"
 ```
 
-Il nome è quello del processo, senza `.exe` e senza distinguere maiuscole: `code` vale per `Code.exe` su Windows e per `code` su Linux; su macOS è il nome dell'app. Il footer dell'HUD mostra quale insieme di etichette è attivo. Su Wayland l'applicazione in primo piano non si può sapere: valgono solo le etichette generiche.
+The name is the process name, without `.exe` and case-insensitive: `code` matches `Code.exe` on Windows and `code` on Linux; on macOS it is the app name. The HUD footer shows which set of labels is active. On Wayland the foreground application cannot be known: only the generic labels apply.
 
-Le scelte fatte dal menu (scala, opacità, vista, tema, lingua, stile, opacità e arrotondamento dei tasti, heads-up, combo, keycast) e con Ctrl + rotellina vengono scritte in `keyboard-hud.toml`, creato se manca, toccando solo quelle voci: i commenti restano. `keyboard-hud-state.toml` ricorda solo la posizione della finestra; le scelte che le versioni precedenti tenevano lì passano nella configurazione al primo avvio.
+The choices made from the menu (scale, opacity, view, theme, language, style, key opacity and radius, heads-up, combos, keycast) and with Ctrl + mouse wheel are written to `keyboard-hud.toml`, created if missing, touching only those entries: the comments stay. `keyboard-hud-state.toml` only remembers the window position.
 
-## Stili
+## Styles
 
-Uno stile decide colori e forma dell'HUD: arrotondamento e opacità dei tasti, bordi, dimensione delle legende, angoli e opacità della finestra. Non sceglie fra chiaro e scuro: ha colori per entrambi e segue il tema. Si sceglie dal menu (**Stile**) o con `style` in `[appearance]`.
+A style sets the colors and the shape of the HUD: key corner radius and opacity, borders, legend size, window corners and opacity. It does not choose between light and dark: it has colors for both and follows the theme. Choose it from the menu (**Style**) or with `style` in `[appearance]`.
 
-Inclusi: **predefinito** (l'aspetto di sempre, tasti appena arrotondati), **minimal** (niente bordi, tasti morbidi), **vetro** (finestra e tasti semitrasparenti; un tasto premuto torna pieno), **alto-contrasto** (bianco e nero, bordi spessi, legende più grandi). Poi i colori dei temi più noti, in versione scura e chiara (segue *Tema*): **monokai**, **dracula**, **nord**, **solarized**, **gruvbox**, **catppuccin** (Mocha e Latte), **one** (One Dark e One Light), **tokyo-night**. I colori dei layer restano quelli di `[[layers]]`.
+Built in: **default** (slightly rounded keys), **minimal** (no borders, soft keys), **glass** (translucent window and keys; a pressed key turns solid), **high-contrast** (black and white, thick borders, larger legends). Then the colors of well-known themes, dark and light (following *Theme*): **monokai**, **dracula**, **nord**, **solarized**, **gruvbox**, **catppuccin** (Mocha and Latte), **one** (One Dark and One Light), **tokyo-night**. The layer colors stay those of `[[layers]]`.
 
-I tuoi stili sono file `.toml` nella cartella `styles/` accanto alla configurazione (menu → Stile → **Cartella stili**); il nome del file è il nome dello stile, e un file con il nome di uno stile incluso lo sostituisce. Ogni voce è facoltativa:
+Your styles are `.toml` files in the `styles/` folder next to the configuration (menu → Style → **Styles folder**); the file name is the style name, and a file with the name of a built-in style replaces it. Every entry is optional:
 
 ```toml
-# styles/notte.toml
-key_opacity = 0.8       # 0.2 – 1: le legende restano piene
-key_radius = 0.25       # 0 – 0.5 della dimensione del tasto
-border_width = 0        # bordo dei tasti in pixel, 0 = nessuno
+# styles/night.toml
+key_opacity = 0.8       # 0.2 – 1: the legends stay solid
+key_radius = 0.25       # 0 – 0.5 of the key size
+border_width = 0        # key border in pixels, 0 = none
 legend_scale = 1.1      # 0.7 – 1.5
-window_radius = 16      # angoli della finestra
-window_opacity = 0.7    # applicata quando scegli lo stile
+window_radius = 16      # window corners
+window_opacity = 0.7    # applied when you choose the style
 
-[dark]                  # colori "#RRGGBB"; quelli mancanti restano i predefiniti
+[dark]                  # "#RRGGBB" colors; missing ones keep the defaults
 background = "#0B0E14"
 key = "#1A1F2B"
 accent = "#7AA2F7"
@@ -290,133 +299,135 @@ accent = "#7AA2F7"
 key = "#FFFFFF"
 ```
 
-Colori disponibili: `background`, `key`, `key_empty`, `key_border`, `pressed`, `pressed_text`, `text`, `text_dim`, `neutral_layer`, `accent`, `chip_off`, `caps_word`, `colemak`, `warning`. I colori dei layer restano in `[[layers]]`, perché corrispondono ai LED del firmware.
+Available colors: `background`, `key`, `key_empty`, `key_border`, `pressed`, `pressed_text`, `text`, `text_dim`, `neutral_layer`, `accent`, `chip_off`, `caps_word`, `colemak`, `warning`. The layer colors stay in `[[layers]]`, so that they can match the keyboard's LEDs.
 
-**Salva come stile** (menu) scrive `styles/personale.toml` (o `personale-2.toml`, mai sopra un file esistente) con tutti i valori attuali, colori compresi: il modo più semplice per partire. Le modifiche al file dello stile in uso si vedono entro un secondo; se il file non è valido compare l'errore e resta lo stile di prima.
+**Save as style** (menu) writes `styles/personal.toml` (or `personal-2.toml`, never over an existing file) with all the current values, colors included: the easiest way to start. Changes to the file of the style in use show within a second; if the file is not valid the error appears and the previous style stays.
 
-Opacità e arrotondamento dei tasti: il valore di `[appearance]` se c'è, altrimenti quello dello stile. Scegliere uno stile dal menu riparte dai suoi valori (toglie `key_opacity` e `key_radius` e applica l'opacità della finestra dello stile); cambiando `style` nel file o nelle Impostazioni le altre voci restano come sono.
+Key opacity and corner radius: the `[appearance]` value if set, otherwise the style's. Choosing a style from the menu starts from its values (removes `key_opacity` and `key_radius` and applies the style's window opacity); changing `style` in the file or in Settings leaves the other entries as they are.
 
-## Backup automatico
+## Automatic backup
 
-L'HUD salva da solo la configurazione della tastiera come file `.vil`, lo stesso formato dell'export di Vial: keymap, encoder, macro, tap dance, combo, key override, alt-repeat e impostazioni QMK. Non serve ricordarsi di esportare dopo ogni modifica.
+The HUD saves the keyboard configuration on its own as a `.vil` file, the same format as Vial's export: keymap, encoders, macros, tap dances, combos, key overrides, alt-repeat and QMK settings. No need to remember to export after every change.
 
-- **Quando**: alla connessione, quando chiudi Vial (o finisce il traffico della web app), quando il keymap cambia e, ogni 2 minuti a tastiera ferma, per combo e macro, che il firmware non segnala. Un nuovo file nasce **solo se qualcosa è cambiato** rispetto all'ultimo backup della stessa tastiera.
-- **Dove**: cartella `backups/` accanto alla configurazione; si apre da menu → Strumenti → *Cartella dei backup…*. I file si chiamano `corne-v4_2026-10-22T081530Z.vil` (ora UTC); se ne tengono 30 per tastiera.
-- **Confronto** (menu → Strumenti → *Storico dei backup…*): scegli due backup qualsiasi e vedi cosa è cambiato. I tasti cambiati sono evidenziati sulla tastiera disegnata, layer per layer; sotto c'è l'elenco a parole, con combo, tap dance, macro e impostazioni. *Rimetti com'era* accanto a un tasto apre *Cambia tasto* con il valore di prima, da controllare e scrivere. Un backup intero si ricarica in Vial (*File → Load saved layout*).
-- **Storico**: nella stessa cartella, `CHANGELOG.md` racconta a parole cosa è cambiato a ogni backup, dal più recente. Per esempio:
+- **When**: at connection, when you close Vial (or the web app traffic ends), when the keymap changes and, every 2 minutes with the keyboard idle, for combos and macros, which the firmware does not report. A new file is made **only if something changed** since the last backup of the same keyboard.
+- **Where**: the `backups/` folder next to the configuration; open it from menu → Tools → *Backups folder…*. The files are named like `corne_2026-10-22T081530Z.vil` (UTC time); 30 are kept per keyboard.
+- **Compare** (menu → Tools → *Backup history…*): pick any two backups and see what changed. The changed keys are highlighted on the drawn keyboard, layer by layer; below is the list in words, with combos, tap dances, macros and settings. *Put it back* next to a key opens *Change key* with the previous value, to check and write. A whole backup loads back in Vial (*File → Load saved layout*).
+- **History**: in the same folder, `CHANGELOG.md` tells in words what changed at every backup, newest first. For example:
 
   ```markdown
-  ## 2026-10-22 06:53:40 UTC · Corne v4 · `corne-v4_2026-10-22T065340Z.vil`
+  ## 2026-10-22 06:53:40 UTC · Corne · `corne_2026-10-22T065340Z.vil`
 
-  - NAV · tasto B (riga 2, colonna 5): Redo → Ctrl+Y
-  - Combo aggiunta: J + K insieme → Esc
-  - Key override disattivato: Shift + Bksp → Del (tutti i layer)
+  - RAISE · key B (row 2, column 5): Redo → Ctrl+Y
+  - Combo added: J + K together → Esc
+  - Key override turned off: Shift + Bksp → Del (all layers)
   - tapping term: 180 → 200
   ```
 
-  Le stesse righe finiscono nel log, e l'HUD mostra un avviso con il numero di modifiche.
-- **Ripristino**: in Vial, *File → Load saved layout*. I keycode sono scritti come numeri, una forma che Vial accetta: il file non è fatto per essere letto a mano.
-- Le letture usano gli stessi comandi di Vial e non richiedono lo sblocco. Si disattiva con `enabled = false` nella sezione `[backup]`.
+  The same lines go to the log, and the HUD shows a notice with the number of changes.
+- **Restore**: in Vial, *File → Load saved layout*. Keycodes are written as numbers, a form Vial accepts: the file is not meant to be read by hand.
+- Reads use the same commands as Vial and need no unlocking. Turn it off with `enabled = false` in the `[backup]` section.
 
-## Statistiche e privacy
+## Statistics and privacy
 
-- Si conta solo **quante volte** viene premuto ogni tasto fisico, su quale layer e in quale giorno (UTC).
-- **Mai** testo, sequenze di tasti o tempi tra un tasto e l'altro. I dati restano sul tuo computer, in `keyboard-hud-stats.json`, e non vengono mai trasmessi.
-- Si disattivano con `[stats] enabled = false` e si azzerano dalla finestra delle statistiche, con conferma.
-- **Heatmap** (menu → Sui tasti → Heatmap): pressioni sul layer mostrato, oppure su tutti i layer insieme.
-- **Finestra delle statistiche** (menu → Strumenti → Statistiche): utilizzo dei layer, distribuzione tra le mani, le dita e le righe (quanto lavori sulla home row), tasti più usati con la combinazione per raggiungerli, attività giornaliera, tasti mai usati negli ultimi N giorni, esportazione CSV (`keyboard-hud-stats.csv`).
-- **Suggerimenti**: se un tasto molto usato di un layer superiore sta in una posizione faticosa (mignolo, righe alta e bassa, colonne di allungamento), la finestra propone di scambiarlo con una posizione comoda e poco usata dello stesso layer, con il risparmio stimato. Segnala anche se una mano lavora molto più dell'altra. Il layer base non viene toccato: la disposizione delle lettere è una scelta di layout. Il modello di fatica è semplice (dito, riga, allungamento) e va preso come uno spunto, non come una regola.
-- **Aggiornamenti**: l'unica connessione in uscita dell'app. Una richiesta a `api.github.com` per sapere l'ultima versione (una volta al giorno, o mai con `[update] auto_check = false` finché non lo chiedi dal menu) e, solo se installi, il download da github.com. Non viene inviato nient'altro.
-- **Segno dell'heads-up**: per scegliere se disegnarlo chiaro o scuro l'app legge, ogni 2 secondi e solo con l'HUD nascosto, i pixel di una piccola area attorno al segno (circa 50×40). Ne calcola la luminosità media e li scarta subito: niente viene salvato o trasmesso. Con `[headsup] marker = false` lo schermo non viene mai letto.
-- Il conteggio si basa sugli stati letti dalla tastiera. Con l'HUD visibile la lettura è a 60 Hz, da nascosto almeno a 30 Hz se le statistiche sono attive. Un tocco più breve di circa 16 ms può sfuggire.
+- Only **how many times** each physical key is pressed is counted, per layer and per day (UTC).
+- **Never** text, key sequences or timings between keys. The data stays on your computer, in `keyboard-hud-stats.json`, and is never sent anywhere.
+- Turn them off with `[stats] enabled = false` and reset them from the statistics window, with confirmation.
+- **Heatmap** (menu → On the keys → Heatmap): presses on the shown layer, or on all layers together.
+- **Statistics window** (menu → Tools → Statistics): layer usage, split between hands, fingers and rows (how much you work on the home row), most used keys with the combination to reach them, daily activity, keys never used in the last N days, CSV export (`keyboard-hud-stats.csv`).
+- **Suggestions**: if a much used key of an upper layer sits in a tiring position (pinky, top and bottom rows, stretch columns), the window suggests swapping it with a comfortable, little used position of the same layer, with the estimated gain. It also tells if one hand works much more than the other. The base layer is never touched: the letter layout is a layout choice. The effort model is simple (finger, row, stretch) and is meant as a hint, not a rule.
+- **Updates**: the app's only outgoing connection. A request to `api.github.com` for the latest version (once a day, or never with `[update] auto_check = false` until you ask from the menu) and, only if you install, the download from github.com. Nothing else is sent.
+- **Heads-up marker**: to choose whether to draw it light or dark the app reads, every 2 seconds and only with the HUD hidden, the pixels of a small area around the marker (about 50×40). It computes their average brightness and discards them at once: nothing is saved or sent. With `[headsup] marker = false` the screen is never read.
+- The count is based on the states read from the keyboard. With the HUD visible it reads at 60 Hz, hidden at least at 30 Hz if the statistics are on. A tap shorter than about 16 ms can be missed.
 
-**Nota sulla sicurezza.** Vial protegge la lettura della matrice dei tasti dietro lo sblocco. Il protocollo HUD invece la espone, perché serve proprio a questo. Qualunque programma locale che abbia accesso al dispositivo HID può quindi sapere quali tasti fisici sono premuti. Su Linux, con la regola udev consigliata, l'accesso è limitato all'utente collegato e al gruppo `users`.
+**A note on security.** Vial keeps the key matrix behind its unlock. The HUD protocol exposes it instead, since that is its whole point. Any local program with access to the HID device can therefore know which physical keys are pressed. On Linux, with the recommended udev rule, access is limited to the logged-in user and the `users` group.
 
-## Modalità offline e simulata
+## Offline and simulated modes
 
-- **Offline** (`--offline`, oppure automaticamente se la tastiera non c'è): mostra i layer da `vial.json` e da un file `.vil` esportato da Vial, senza stato live. I file si indicano con `--vial-json` e `--vil`, oppure si mettono accanto all'eseguibile (`vial.json` più il primo `*.vil`). I layer si sfogliano con la rotellina o con i tasti 0–9.
-- **Firmware senza protocollo HUD**: l'HUD lo segnala, legge comunque il keymap via VIA e mostra i layer senza stato live.
-- **Simulata** (`--mock`): una tastiera finta ripete in ciclo uno scenario realistico (digitazione, Fn1, Fn2, tri-layer, one-shot, Ctrl in mod-tap, Caps Word, DEBUG bloccato). Serve per sviluppare l'interfaccia senza tastiera.
+- **Offline** (`--offline`, or automatically when there is no keyboard): shows the layers from `vial.json` and a `.vil` file exported from Vial, without live state. Pass the files with `--vial-json` and `--vil`, or put them next to the executable (`vial.json` plus the first `*.vil`). Browse the layers with the mouse wheel or the keys 0–9.
+- **Firmware without the HUD module**: the HUD says so, reads the keymap through VIA anyway and shows the layers without live state.
+- **Simulated** (`--mock`): a fake Corne loops through a realistic scenario (typing, Lower, Raise, tri-layer, one-shot, Ctrl as mod-tap, Caps Word, a locked layer). It is meant for developing the interface without a keyboard.
 
-## Opzioni da riga di comando
+## Command line options
 
 ```
---mock                tastiera simulata
---offline             nessuna tastiera: vial.json + .vil dal disco
---vial-json PERCORSO  definizione Vial per la modalità offline
---vil PERCORSO        backup Vial (.vil) per la modalità offline
---export FILE         esporta la keymap in FILE (pagina HTML) ed esce; con --offline non serve la tastiera
---vid 0xVVVV          usa solo dispositivi con questo Vendor ID
---pid 0xPPPP          usa solo dispositivi con questo Product ID
---x11                 Linux: forza XWayland
---print-udev-rule     stampa la regola udev per Linux ed esce
---layer N             layer mostrato all'avvio in modalità offline
---verbose             log dettagliato
+--mock                simulated keyboard
+--offline             no keyboard: vial.json + .vil from disk
+--vial-json PATH      Vial definition for the offline mode
+--vil PATH            Vial backup (.vil) for the offline mode
+--export FILE         export the keymap to FILE (HTML page) and exit; with --offline no keyboard is needed
+--vid 0xVVVV          only use devices with this Vendor ID
+--pid 0xPPPP          only use devices with this Product ID
+--x11                 Linux: force XWayland
+--print-udev-rule     print the Linux udev rule and exit
+--layer N             layer shown at start in the offline mode
+--verbose             detailed log
 --version, -h/--help
 ```
 
-Ci sono anche opzioni di sviluppo, che servono a catturare gli stati dell'interfaccia: `--mock-at`, `--screenshot`, `--screenshot-after`, `--search`, `--heatmap`, `--stats-window`, `--settings`, `--settings-page layers|labels|text`.
+There are also development options, used to capture the states of the interface: `--mock-at`, `--screenshot`, `--screenshot-after`, `--search`, `--heatmap`, `--stats-window`, `--settings`, `--settings-page layers|labels|text`.
 
-Su Windows l'eseguibile release è un'applicazione grafica senza console, quindi l'output di `--help` non si vede: le opzioni sono comunque quelle elencate qui.
+On Windows the release executable is a GUI application without a console, so the output of `--help` does not show: the options are the ones listed here.
 
-## Compilare l'app
+## Building the app
 
-Serve Rust (la versione è fissata in `app/rust-toolchain.toml` e `rustup` la installa da sé). Non servono librerie di sistema: su Linux X11, Wayland e OpenGL vengono caricati all'avvio.
+You need Rust (the version is pinned in `app/rust-toolchain.toml` and `rustup` installs it by itself). No system libraries are needed: on Linux, X11, Wayland and OpenGL are loaded at runtime.
 
 ```sh
 cd app
-cargo run -- --mock          # prova con la tastiera simulata
-cargo test                   # test unitari
-cargo clippy --all-targets   # deve restare pulito
+cargo run -- --mock          # try it with the simulated keyboard
+cargo test                   # unit tests
+cargo clippy --all-targets   # must stay clean
 cargo build --release        # target/release/keyboard-hud
 ```
 
-**Build delle release.** Il workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) compila i tre eseguibili a ogni push e, a ogni tag `vX.Y.Z` (che deve corrispondere alla versione in `app/Cargo.toml`), pubblica la release con i file e i checksum:
+**Release builds.** The workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) builds the three executables on every push and, on every `vX.Y.Z` tag (which must match the version in `app/Cargo.toml`), publishes the release with the files and the checksums:
 
 ```sh
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-Gli eseguibili Linux sono compilati su Ubuntu 22.04 per restare compatibili con le glibc più vecchie. Quello macOS è universale (arm64 + x86_64, `lipo`), impacchettato in un `.app` firmato ad-hoc.
+The Linux executables are built on Ubuntu 22.04 to stay compatible with older glibc versions. The macOS one is universal (arm64 + x86_64, `lipo`), packaged in an ad-hoc signed `.app`.
 
-**Struttura**
+**Layout**
 
 ```
-firmware/mia/          keymap Vial (sezione 9 = HUD), vial.json, corne.vil
-firmware/tools/        hud_probe.py: test del protocollo da riga di comando
-docs/PROTOCOL.md       protocollo Raw HID
-app/src/hid/           trasporto hidapi, protocollo, worker, tastiera simulata
-app/src/vial/          definizione Vial, keycode (tabelle generate), legende, .vil
-app/src/kle.rs         parser KLE (rotazioni comprese)
-app/src/model.rs       keymap effettivo, trasparenti, layer tenuti/bloccati, modificatori
-app/src/ui/            overlay egui, intestazione, tastiera, ricerca, statistiche
+firmware/hud/          firmware module: the HUD protocol for any Vial keymap
+firmware/examples/     example keymap (stock Vial Corne + the module)
+firmware/tools/        hud_probe.py: protocol test from the command line
+docs/PROTOCOL.md       Raw HID protocol
+app/src/hid/           hidapi transport, protocol, worker, simulated keyboard
+app/src/vial/          Vial definition, keycodes (generated tables), legends, .vil
+app/src/kle.rs         KLE parser (rotations included)
+app/src/model.rs       effective keymap, transparent keys, held/locked layers, modifiers
+app/src/ui/            egui overlay, header, keyboard, search, statistics
 app/src/{config,labels,headsup,search,stats}.rs
-app/data/keycodes/     hjson di vial-qmk e nomi di vial-gui (fonte delle tabelle)
+app/data/keycodes/     vial-qmk hjson and vial-gui names (source of the tables)
+app/data/mock/         the simulated keyboard (definition, .vil, configuration)
 ```
 
-Le tabelle dei keycode sono **generate** da `build.rs` a partire dai file hjson di vial-qmk e da `keycodes_v6.py` di vial-gui, copiati in `app/data/keycodes/` (le versioni sono in `SOURCE.md`). Per aggiornarle basta ricopiare i file e ricompilare.
+The keycode tables are **generated** by `build.rs` from vial-qmk's hjson files and vial-gui's `keycodes_v6.py`, copied into `app/data/keycodes/` (the versions are in `SOURCE.md`). To update them, copy the files again and rebuild.
 
-**Test del protocollo senza l'app**: `pip install hidapi`, poi `python firmware/tools/hud_probe.py info | state --watch | keymap --raw`, con Vial chiuso.
+**Protocol test without the app**: `pip install hidapi`, then `python firmware/tools/hud_probe.py info | state --watch | keymap --raw`, with Vial closed.
 
-## Risoluzione dei problemi
+## Troubleshooting
 
-| Sintomo | Causa e rimedio |
+| Symptom | Cause and fix |
 |---|---|
-| "Ricerca della tastiera…" fisso | Cavo di sola alimentazione, oppure firmware senza HUD (ma allora compare un avviso). Prova `hud_probe.py info`. Su Linux controlla la regola udev |
-| "Permesso negato sul dispositivo HID" | Linux: manca la regola udev, vedi sopra |
-| "Firmware senza protocollo HUD" | Flasha il firmware di `firmware/mia/` su entrambe le metà |
-| "In pausa: Vial è aperto" | Chiudi Vial: l'HUD riprende da solo |
-| L'HUD non resta sopra le altre finestre (Linux) | Wayland: avvia con `--x11` |
-| Non riesco più a cliccare l'HUD | Il click-through è attivo: doppio tocco di HUD_TOG. Riavviare l'app lo disattiva comunque |
-| L'HUD è fuori dallo schermo | All'avvio torna da solo sullo schermo più vicino (anche se il monitor dove stava è scollegato). Altrimenti menu → Finestra → Posizione |
-| L'HUD è sparito | Heads-up: ricompare tenendo Fn1/Fn2. Oppure è nascosto: tocca HUD_TOG. Con una finestra a schermo intero in primo piano si nasconde da solo (`hide_in_fullscreen`) |
-| L'aggiornamento non riesce | La cartella dell'eseguibile deve essere scrivibile, e serve `curl`. Il motivo è nel menu → Generale; si può sempre scaricare a mano dalla release |
-| Legende sbagliate dopo una modifica in Vial | Si aggiornano da sole entro un secondo. Altrimenti metti in pausa e riprendi dal menu |
-| Dettagli | `keyboard-hud.log`, con `--verbose` per il livello debug |
+| Stuck on "Looking for the keyboard…" | A charge-only cable, or a firmware without Vial. Try `hud_probe.py info`. On Linux check the udev rule |
+| "Permission denied on the HID device" | Linux: the udev rule is missing, see above |
+| "Firmware without the HUD protocol" | Add the [HUD module](#firmware) to your keymap and flash it (on both halves of a split keyboard) |
+| "Paused: Vial is open" | Close Vial: the HUD resumes on its own |
+| The HUD does not stay above other windows (Linux) | Wayland: start it with `--x11` |
+| I can no longer click the HUD | Click-through is on: double tap HUD_TOG. Restarting the app turns it off anyway |
+| The HUD is off screen | At start it comes back on its own to the nearest screen (even if its monitor is unplugged). Otherwise menu → Window → Position |
+| The HUD is gone | Heads-up: it shows up again holding a layer key. Or it is hidden: tap HUD_TOG. With a full screen window in the foreground it hides on its own (`hide_in_fullscreen`) |
+| The update fails | The executable's folder must be writable, and `curl` is needed. The reason is in menu → General; you can always download by hand from the release |
+| Wrong legends after a change in Vial | They update on their own within a second. Otherwise pause and resume from the menu |
+| Details | `keyboard-hud.log`, with `--verbose` for the debug level |
 
-## Licenza e crediti
+## License and credits
 
-- Codice dell'app: **GPL-2.0-or-later** (testo della licenza in [`LICENSE`](LICENSE)). Le tabelle dei keycode derivano da [vial-qmk](https://github.com/vial-kb/vial-qmk) (GPL-2.0-or-later) e [vial-gui](https://github.com/vial-kb/vial-gui) (GPL-2.0).
-- Firmware: basato su QMK/vial-qmk (GPL-2.0-or-later).
-- Font: [DejaVu Sans](https://dejavu-fonts.github.io/) (licenza in `app/data/fonts/DejaVu-LICENSE.txt`), usato per i simboli dei tasti.
-- Interfaccia: [egui/eframe](https://github.com/emilk/egui); accesso HID: [hidapi](https://github.com/ruabmbua/hidapi-rs).
+- App code: **GPL-2.0-or-later** (license text in [`LICENSE`](LICENSE)). The keycode tables derive from [vial-qmk](https://github.com/vial-kb/vial-qmk) (GPL-2.0-or-later) and [vial-gui](https://github.com/vial-kb/vial-gui) (GPL-2.0).
+- Firmware module and example: based on QMK/vial-qmk (GPL-2.0-or-later).
+- Font: [DejaVu Sans](https://dejavu-fonts.github.io/) (license in `app/data/fonts/DejaVu-LICENSE.txt`), used for the key symbols.
+- Interface: [egui/eframe](https://github.com/emilk/egui); HID access: [hidapi](https://github.com/ruabmbua/hidapi-rs).

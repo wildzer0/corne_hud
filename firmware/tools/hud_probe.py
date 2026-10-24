@@ -22,10 +22,10 @@ GET_INFO, GET_STATE, GET_KEYMAP = 0x01, 0x02, 0x03
 STATUS_PENDING = 0xFF
 
 MODS = ["LCtl", "LSft", "LAlt", "LGui", "RCtl", "RSft", "RAlt", "RGui"]
-FLAGS = ["CapsLock", "CapsWord", "Colemak", "DebugLock", "NumLock", "SlaveOK"]
+FLAGS = ["CapsLock", "CapsWord", "Colemak", "User", "NumLock", "SlaveOK"]
+CAPS = ["Colemak", "CapsWord", "OSDetection", "HUD_TOG", "LayerLock", "Split"]
 OS_DETECTED = ["unsure", "linux", "windows", "macos", "ios"]
 OS_MODE = ["auto", "win", "mac", "lnx"]
-LAYERS = ["BASE", "SYM", "NAV", "SYS", "DEBUG", "ACC"]
 
 
 def open_device():
@@ -115,7 +115,7 @@ def bits(value, names):
 
 
 def layer_names(mask):
-    return " ".join(LAYERS[i] if i < len(LAYERS) else str(i) for i in range(32) if mask & (1 << i)) or "-"
+    return " ".join(str(i) for i in range(32) if mask & (1 << i)) or "-"
 
 
 def print_state(s, rows, cols):
@@ -156,6 +156,7 @@ def main():
     if a.command == "info":
         for k, v in info.items():
             print(f"{k:15}: {v:#06x}" if k in ("caps", "hud_tog") else f"{k:15}: {v}")
+        print(f"{'capabilities':15}: {bits(info['caps'], CAPS)}")
     elif a.command == "state":
         while True:
             t = time.perf_counter()
@@ -173,7 +174,7 @@ def main():
         for layer in layers:
             eff = hud.keymap(layer, rows, cols, info["keymap_max"])
             raw = hud.via_raw_keymap(layer, rows, cols) if a.raw else None
-            print(f"layer {layer} ({LAYERS[layer] if layer < len(LAYERS) else '?'}):")
+            print(f"layer {layer}:")
             print_grid(eff, rows, cols, raw)
 
 
