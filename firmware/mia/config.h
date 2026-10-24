@@ -64,3 +64,6 @@
 
 // Il numero di combo, tap dance e key override configurabili da Vial
 // viene calcolato in automatico in base alla memoria disponibile.
+
+// Keyboard HUD: questa keymap ha il remap Colemak (hud_colemak_on)
+#define HUD_HAS_COLEMAK

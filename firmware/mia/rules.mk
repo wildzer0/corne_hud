@@ -31,3 +31,5 @@ RGB_MATRIX_CUSTOM_USER = yes
 
 # Firmware piu' compatto
 LTO_ENABLE          = yes
+# Keyboard HUD (modulo in firmware/hud/ del progetto)
+include $(dir $(lastword $(MAKEFILE_LIST)))../hud/hud.mk

@@ -10,7 +10,7 @@
  *   6. Colemak-DH
  *   7. Sincronizzazione tra le due meta'
  *   8. LED: indicatori, animazione del cambio layout
- *   9. HUD: stato della tastiera per l'app Keyboard HUD (Raw HID)
+ *   9. HUD: hook del modulo Keyboard HUD (firmware/hud/)
  *  10. Gestione dei tasti e ciclo principale
  *  11. Layout
  *
@@ -23,17 +23,9 @@
 #include "keymap_introspection.h" // keycode_at_keymap_location() e simili
 #include "transactions.h"         // comunicazione tra le due meta'
 #include <string.h>
+#include "hud.h"                // Keyboard HUD (firmware/hud/)
 #ifdef VIAL_ENABLE
 #    include "vial.h"
-#endif
-#ifdef VIA_ENABLE
-#    include "via.h" // raw_hid_receive_kb(), id_unhandled
-#endif
-#ifdef DYNAMIC_KEYMAP_ENABLE
-#    include "dynamic_keymap.h"
-#endif
-#ifdef SPLIT_KEYBOARD
-#    include "split_util.h" // is_transport_connected()
 #endif
 #ifdef RGB_MATRIX_ENABLE
 #    include <lib/lib8tion/lib8tion.h> // scale8()
@@ -578,186 +570,29 @@ static void rgb_funzioni_pressed(void) {}
 
 /* ==================================================================
  * 9. HUD (RAW HID)
- * L'app "Keyboard HUD" interroga la tastiera sull'interfaccia Raw HID
- * di Vial con il comando 0xF0 e riceve lo stato: layer, tasti premuti,
- * modificatori, Colemak, sistema operativo.
- * La tastiera risponde e basta: non invia mai nulla da sola (non
- * disturba Vial) e non scrive nulla in memoria.
- * Impaginazione dei messaggi: docs/PROTOCOL.md del progetto HUD.
+ * Il protocollo sta nel modulo firmware/hud/ del progetto Keyboard HUD:
+ * qui ci sono solo gli hook con lo stato di questa keymap.
  * ================================================================== */
-#define HUD_CMD        0xF0
-#define HUD_PROTOCOL   1
-#define HUD_KEYMAP_MAX 12 // keycode per risposta di GET_KEYMAP
-
-static uint8_t hud_toggle_count = 0; // +1 a ogni pressione di HUD_TOG
-static uint8_t keymap_version   = 0; // +1 quando cambia il keymap effettivo
-
-// Vial non avvisa quando cambia un tasto: il master rilegge il keymap
-// un pezzetto alla volta (8 tasti per ciclo, pochi ms per tutto) e ne
-// calcola un'impronta. Se l'impronta cambia, l'HUD rilegge le legende.
-#ifdef DYNAMIC_KEYMAP_ENABLE
-#    define HUD_SCAN_STEP 8
-#    define FNV_OFFSET    2166136261UL
-#    define FNV_PRIME     16777619UL
-
-static void keymap_watch_task(void) {
-    static uint16_t pos       = 0;
-    static uint32_t hash      = FNV_OFFSET;
-    static uint32_t last_hash = 0;
-    static bool     first     = true; // il primo giro serve solo a partire
-
-    const uint16_t per_layer = MATRIX_ROWS * MATRIX_COLS;
-    const uint16_t total     = dynamic_keymap_get_layer_count() * per_layer;
-
-    for (uint8_t i = 0; i < HUD_SCAN_STEP && pos < total; i++, pos++) {
-        uint8_t  layer = pos / per_layer;
-        uint8_t  rest  = pos % per_layer;
-        uint16_t kc    = dynamic_keymap_get_keycode(layer, rest / MATRIX_COLS, rest % MATRIX_COLS);
-        hash           = (hash ^ (kc & 0xFF)) * FNV_PRIME;
-        hash           = (hash ^ (kc >> 8)) * FNV_PRIME;
-    }
-    if (pos < total) return;
-
-    if (!first && hash != last_hash) keymap_version++;
-    first     = false;
-    last_hash = hash;
-    pos       = 0;
-    hash      = FNV_OFFSET;
-}
-#else
-static void keymap_watch_task(void) {}
-#endif
-
-#ifdef VIA_ENABLE
-enum { HUD_GET_INFO = 0x01, HUD_GET_STATE = 0x02, HUD_GET_KEYMAP = 0x03 };
-enum { HUD_OK = 0, HUD_ERR_CMD = 1, HUD_ERR_ARG = 2 };
-
-enum {
-    HUD_CAP_COLEMAK    = 1 << 0,
-    HUD_CAP_CAPS_WORD  = 1 << 1,
-    HUD_CAP_OS_DETECT  = 1 << 2,
-    HUD_CAP_HUD_TOG    = 1 << 3,
-    HUD_CAP_LAYER_LOCK = 1 << 4,
-    HUD_CAP_SPLIT      = 1 << 5,
-};
-
-enum {
-    HUD_FLAG_CAPS_LOCK  = 1 << 0,
-    HUD_FLAG_CAPS_WORD  = 1 << 1,
-    HUD_FLAG_COLEMAK    = 1 << 2,
-    HUD_FLAG_DEBUG_LOCK = 1 << 3,
-    HUD_FLAG_NUM_LOCK   = 1 << 4,
-    HUD_FLAG_SLAVE_OK   = 1 << 5,
-};
-
-static void put16(uint8_t *p, uint16_t v) {
-    p[0] = v & 0xFF;
-    p[1] = v >> 8;
+uint16_t hud_toggle_keycode(void) {
+    return HUD_TOG;
 }
 
-static void put32(uint8_t *p, uint32_t v) {
-    put16(p, v & 0xFFFF);
-    put16(p + 2, v >> 16);
+bool hud_colemak_on(void) {
+    return colemak_on;
 }
 
-static void hud_get_info(uint8_t *data) {
-    uint16_t caps = HUD_CAP_COLEMAK | HUD_CAP_OS_DETECT | HUD_CAP_HUD_TOG;
-#    ifdef CAPS_WORD_ENABLE
-    caps |= HUD_CAP_CAPS_WORD;
-#    endif
-#    ifdef LAYER_LOCK_ENABLE
-    caps |= HUD_CAP_LAYER_LOCK;
-#    endif
-#    ifdef SPLIT_KEYBOARD
-    caps |= HUD_CAP_SPLIT;
-#    endif
-    data[4] = HUD_PROTOCOL;
-    data[5] = MATRIX_ROWS;
-    data[6] = MATRIX_COLS;
-    data[7] = dynamic_keymap_get_layer_count();
-    put16(&data[8], caps);
-    put16(&data[10], HUD_TOG);
-    data[12] = HUD_KEYMAP_MAX;
-    data[13] = keymap_version;
+uint8_t hud_os_mode(void) {
+    return os_mode;
 }
 
-static void hud_get_state(uint8_t *data) {
-    put32(&data[4], (uint32_t)layer_state);
-    data[8] = (uint8_t)default_layer_state;
-#    ifdef LAYER_LOCK_ENABLE
-    for (uint8_t l = 0; l < 8; l++) {
-        if (is_layer_locked(l)) data[9] |= 1 << l;
-    }
-#    endif
-    // il master ha anche le righe dell'altra meta'
-    for (uint8_t r = 0; r < MATRIX_ROWS && r < 8; r++) data[10 + r] = (uint8_t)matrix_get_row(r);
-
-    data[18] = get_mods();
-    data[19] = get_weak_mods();
-    data[20] = get_oneshot_mods();
-    data[21] = get_oneshot_locked_mods();
-    data[22] = get_oneshot_layer_state() ? get_oneshot_layer() : 0xFF;
-
-    const led_t leds  = host_keyboard_led_state();
-    uint8_t     flags = 0;
-    if (leds.caps_lock) flags |= HUD_FLAG_CAPS_LOCK;
-    if (leds.num_lock) flags |= HUD_FLAG_NUM_LOCK;
-#    ifdef CAPS_WORD_ENABLE
-    if (is_caps_word_on()) flags |= HUD_FLAG_CAPS_WORD;
-#    endif
-    if (colemak_on) flags |= HUD_FLAG_COLEMAK;
-    if (layer_state_is(_DEBUG)) flags |= HUD_FLAG_DEBUG_LOCK; // ci si arriva solo con TG
-#    ifdef SPLIT_KEYBOARD
-    if (is_transport_connected()) flags |= HUD_FLAG_SLAVE_OK;
-#    endif
-    data[23] = flags;
-
-    data[24] = detected_host_os();
-    data[25] = os_mode;
-    data[26] = active_os();
-    data[27] = hud_toggle_count;
-    data[28] = keymap_version;
+uint8_t hud_active_os(void) {
+    return active_os();
 }
 
-// Keycode EFFETTIVI (gia' con il remap Colemak), ordine riga x colonne + colonna
-static void hud_get_keymap(uint8_t *data, const uint8_t *args) {
-    const uint8_t  layer  = args[0];
-    const uint16_t offset = args[1] | (args[2] << 8);
-    const uint8_t  count  = args[3];
-
-    memcpy(&data[4], args, 4); // eco della richiesta
-    if (layer >= dynamic_keymap_get_layer_count() || count == 0 || count > HUD_KEYMAP_MAX || offset + count > MATRIX_ROWS * MATRIX_COLS) {
-        data[2] = HUD_ERR_ARG;
-        return;
-    }
-    for (uint8_t i = 0; i < count; i++) {
-        uint16_t pos = offset + i;
-        uint16_t kc  = keymap_key_to_keycode(layer, (keypos_t){.row = pos / MATRIX_COLS, .col = pos % MATRIX_COLS});
-        put16(&data[8 + 2 * i], kc);
-    }
+// DEBUG si raggiunge solo con TG: per l'HUD e' "bloccato"
+bool hud_user_flag(void) {
+    return layer_state_is(_DEBUG);
 }
-
-// Chiamata da VIA per i comandi che non conosce. VIA rispedisce poi lo
-// stesso buffer: la risposta va scritta in "data" (niente raw_hid_send).
-void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
-    if (data[0] != HUD_CMD || length < 32) {
-        data[0] = id_unhandled; // come la versione originale
-        return;
-    }
-    // data[1] = sottocomando e data[3] = sequenza dell'HUD restano come sono
-    uint8_t args[4];
-    memcpy(args, &data[4], sizeof(args));
-    memset(&data[4], 0, length - 4);
-    data[2] = HUD_OK;
-
-    switch (data[1]) {
-        case HUD_GET_INFO:   hud_get_info(data); break;
-        case HUD_GET_STATE:  hud_get_state(data); break;
-        case HUD_GET_KEYMAP: hud_get_keymap(data, args); break;
-        default:             data[2] = HUD_ERR_CMD; break;
-    }
-}
-#endif // VIA_ENABLE
 
 /* ==================================================================
  * 10. GESTIONE DEI TASTI E CICLO PRINCIPALE
@@ -801,12 +636,12 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 eeconfig_update_user(colemak_on ? (cfg | 1) : (cfg & ~1UL));
                 local_state.anim       = true; // parte l'animazione
                 local_state.anim_start = sync_timer_read32();
-                keymap_version++; // le legende dell'HUD vanno rilette
+                hud_keymap_changed(); // le legende dell'HUD vanno rilette
             }
             return false;
 
         case HUD_TOG:
-            if (pressed) hud_toggle_count++; // l'HUD conta i tocchi
+            if (pressed) hud_toggle_pressed(); // l'HUD conta i tocchi
             return false;
     }
     return true;
@@ -846,7 +681,7 @@ void housekeeping_task_user(void) {
 
     manage_borrowed_leds();
     sync_to_slave();
-    keymap_watch_task();
+    hud_task();
 }
 
 /* ==================================================================
