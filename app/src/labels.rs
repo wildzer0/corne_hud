@@ -221,8 +221,8 @@ mod tests {
     }
 
     #[test]
-    fn example_config_labels_are_valid() {
-        let cfg = crate::config::Config::parse(include_str!("../../keyboard-hud.example.toml")).unwrap();
+    fn mock_config_labels_are_valid() {
+        let cfg = crate::config::Config::parse(include_str!("../data/mock/keyboard-hud.toml")).unwrap();
         let (labels, errors) = Labels::from_config(&cfg.labels);
         assert!(errors.is_empty(), "{errors:?}");
         assert!(!labels.is_empty());

@@ -612,7 +612,8 @@ impl HudApp {
         let style_name = s
             .window
             .style
-            .clone()
+            .as_deref()
+            .map(|n| style::current_name(n).to_string())
             .or_else(|| Some(a.style.clone()).filter(|n| !n.is_empty()))
             .unwrap_or_else(|| style::DEFAULT_STYLE.to_string());
         let (style_name, style, style_error) = match style::load(&style_name) {
@@ -2922,7 +2923,7 @@ mod tests {
             scale: 1.3,
             mode: ViewMode::Compact,
             theme: ThemeChoice::Dark,
-            style: "vetro".into(),
+            style: "glass".into(),
             key_opacity: Some(0.4),
             combos: true,
             keycast: true,

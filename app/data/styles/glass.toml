@@ -1,4 +1,4 @@
-# Vetro: finestra e tasti semitrasparenti; un tasto premuto torna pieno.
+# Glass: translucent window and keys; a pressed key turns solid.
 key_opacity = 0.5
 key_radius = 0.22
 border_width = 1.0

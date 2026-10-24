@@ -1,0 +1,108 @@
+# Test fixture: layer names, colors and labels for the simulated keyboard
+# (data/mock/corne.vil). Not an example: see keyboard-hud.example.toml.
+
+[[layers]]
+name = "BASE"
+color = ""
+
+[[layers]]
+name = "SYM"
+color = "#00B9D7"   # cyan
+
+[[layers]]
+name = "NAV"
+color = "#3CC85A"   # green
+
+[[layers]]
+name = "SYS"
+color = ""          # neutral
+
+[[layers]]
+name = "DEBUG"
+color = "#E63C3C"   # red
+
+[[layers]]
+name = "ACC"
+color = "#EBC828"   # yellow
+
+# Layer DEBUG (4): VS Code debugging, left hand.
+# top row
+[[labels]]
+layer = 4
+keycode = "C(S(KC_F5))"
+label = "Restart"
+description = "Restart debugging (Ctrl+Shift+F5)"
+
+[[labels]]
+layer = 4
+keycode = "QK_KB_15"      # SM_RUN
+label = "Run"
+description = "Run without debugging (Ctrl+F5)"
+
+[[labels]]
+layer = 4
+keycode = "KC_F9"
+label = "Breakpt"
+description = "Toggle breakpoint (F9)"
+
+[[labels]]
+layer = 4
+keycode = "KC_F12"
+label = "Go to def"
+description = "Go to definition (F12)"
+
+# home row
+[[labels]]
+layer = 4
+keycode = "S(KC_F5)"
+label = "Stop"
+description = "Stop debugging (Shift+F5)"
+
+[[labels]]
+layer = 4
+keycode = "KC_F5"
+label = "Continue"
+description = "Start/continue (F5)"
+
+[[labels]]
+layer = 4
+keycode = "KC_F10"
+label = "Step over"
+description = "Step over (F10)"
+
+[[labels]]
+layer = 4
+keycode = "KC_F11"
+label = "Step into"
+description = "Step into (F11)"
+
+[[labels]]
+layer = 4
+keycode = "S(KC_F11)"
+label = "Step out"
+description = "Step out (Shift+F11)"
+
+# bottom row
+[[labels]]
+layer = 4
+keycode = "S(KC_F12)"
+label = "Refs"
+description = "Find references (Shift+F12)"
+
+[[labels]]
+layer = 4
+keycode = "A(KC_F12)"
+label = "Peek def"
+description = "Peek definition (Alt+F12)"
+
+[[labels]]
+layer = 4
+keycode = "KC_F2"
+label = "Rename"
+description = "Rename symbol (F2)"
+
+[[labels]]
+layer = 4
+keycode = "C(KC_DOT)"
+label = "Quick fix"
+description = "Quick fix (Ctrl+.)"

@@ -1,7 +1,0 @@
-# Stile predefinito: i colori di sempre, tasti appena arrotondati.
-# Copialo in styles/ accanto alla configurazione per partire da qui.
-key_opacity = 1.0
-key_radius = 0.12
-border_width = 1.0
-legend_scale = 1.0
-window_radius = 12.0

@@ -1,253 +1,173 @@
-# Keyboard HUD: file di configurazione d'esempio.
+# Keyboard HUD: example configuration file.
 #
-# Copialo accanto all'eseguibile con il nome "keyboard-hud.toml" (modalità
-# portable) oppure nella cartella di configurazione dell'utente. Le modifiche
-# vengono applicate entro un secondo, senza riavviare l'app.
-# Tutte le voci sono facoltative: se mancano si usano i valori qui sotto.
-# Si modifica anche dalla finestra Impostazioni (menu, tray o Ctrl+, sull'HUD)
-# e dal menu: l'app riscrive solo le voci che cambi, i commenti restano.
+# Copy it next to the executable as "keyboard-hud.toml" (portable mode) or to
+# the user configuration folder. Changes apply within a second, without
+# restarting the app.
+# Every entry is optional: missing ones take the values below.
+# It can also be edited from the Settings window (menu, tray or Ctrl+, on the
+# HUD) and from the menu: the app rewrites only the entries you change, the
+# comments stay.
 
 [device]
-# Usa solo la tastiera con questi ID (esadecimali). Se li ometti, l'HUD usa il
-# primo dispositivo Raw HID (usage page 0xFF60) che risponde al protocollo HUD.
+# Only use the keyboard with these IDs (hexadecimal). Without them the HUD
+# uses the first Raw HID device (usage page 0xFF60) that answers the HUD
+# protocol.
 # vid = "0x4653"
-# pid = "0x0004"
+# pid = "0x0001"
 
 [appearance]
 opacity = 0.85      # 0.2 – 1.0
-scale = 1.0         # 0.5 – 2.0 (anche Ctrl + rotellina sull'HUD)
+scale = 1.0         # 0.5 – 2.0 (also Ctrl + mouse wheel on the HUD)
 theme = "system"    # "system", "dark", "light"
-# Lingua dell'interfaccia: "auto" (quella del sistema: italiano se è italiano,
-# altrimenti inglese), "it" oppure "en". Anche dal menu.
+# Interface language: "auto" (the system one: Italian if it is Italian,
+# English otherwise), "en" or "it". Also from the menu.
 language = "auto"
-mode = "full"       # "full" (tastiera completa) o "compact" (striscia piccola)
-# Posizione iniziale in pixel logici. Di solito non serve: l'HUD ricorda
-# l'ultima posizione in keyboard-hud-state.toml.
+mode = "full"       # "full" (whole keyboard) or "compact" (small strip)
+# Initial position in logical pixels. Usually not needed: the HUD remembers
+# the last position in keyboard-hud-state.toml.
 # x = 100
 # y = 800
-# Trascinando l'HUD vicino ai bordi o al centro dello schermo ci si aggancia
-# (solo Windows). Distanza di aggancio in pixel logici, 0 = disattivato.
+# Dragging the HUD near the edges or the center of the screen snaps it there
+# (Windows only). Snap distance in logical pixels, 0 = off.
 snap_distance = 16
-# Spazio tra l'HUD e i bordi, per l'aggancio e per menu → Posizione.
+# Space between the HUD and the screen edges, for snapping and menu → Position.
 screen_margin = 8
-# Icona nella tray (area di notifica / barra dei menu) con mostra/nascondi,
-# pausa, backup, statistiche, avvio con il sistema, esci. Su Linux usa D-Bus
-# (StatusNotifierItem): KDE e la maggior parte dei pannelli la mostrano, GNOME
-# richiede l'estensione "AppIndicator".
+# Tray icon (notification area / menu bar) with show/hide, pause, backup,
+# statistics, start with the system, quit. On Linux it uses D-Bus
+# (StatusNotifierItem): KDE and most panels show it, GNOME needs the
+# "AppIndicator" extension.
 tray = true
-# Stile: colori e forma di tasti e finestra. Inclusi: "predefinito",
-# "minimal", "vetro", "alto-contrasto"; altri come file .toml nella cartella
-# styles/ accanto a questa configurazione (vedi il README). Vuoto = predefinito.
+# Style: colors and shape of keys and window. Built in: "default", "minimal",
+# "glass", "high-contrast" and the themes listed in the README; more as .toml
+# files in the styles/ folder next to this configuration. Empty = default.
 style = ""
-# Opacità e arrotondamento dei tasti; se mancano decide lo stile.
-# key_opacity = 1.0   # 0.2 – 1.0: le legende restano piene
-# key_radius = 0.12   # 0 (spigoli vivi) – 0.5 della dimensione del tasto
-# Combo configurate in Vial disegnate sopra i tasti. Anche dal menu.
+# Opacity and corner radius of the keys; when missing the style decides.
+# key_opacity = 1.0   # 0.2 – 1.0: the legends stay solid
+# key_radius = 0.12   # 0 (sharp corners) – 0.5 of the key size
+# Combos configured in Vial drawn over the keys. Also from the menu.
 combos = false
-# Con una finestra a schermo intero in primo piano (gioco, video, presentazione)
-# HUD e mini indicatore si nascondono; il keycast resta. Windows e X11.
+# With a full screen window in the foreground (game, video, presentation)
+# the HUD and the mini indicator hide; the keycast stays. Windows and X11.
 hide_in_fullscreen = true
 
-# Nomi e colori dei layer, nell'ordine del firmware (0, 1, 2, ...).
-# color: "#RRGGBB", oppure "" per un layer neutro.
+# Names and colors of the layers, in firmware order (0, 1, 2, ...). Layers
+# without an entry are called L4, L5...
+# color: "#RRGGBB", or "" for a neutral layer.
 [[layers]]
 name = "BASE"
 color = ""
 
 [[layers]]
-name = "SYM"
-color = "#00B9D7"   # azzurro
+name = "LOWER"
+color = "#00B9D7"   # cyan
 
 [[layers]]
-name = "NAV"
-color = "#3CC85A"   # verde
+name = "RAISE"
+color = "#3CC85A"   # green
 
 [[layers]]
-name = "SYS"
-color = ""          # neutro, come i LED
-
-[[layers]]
-name = "DEBUG"
-color = "#E63C3C"   # rosso
-
-[[layers]]
-name = "ACC"
-color = "#EBC828"   # giallo
+name = "ADJUST"
+color = "#EBC828"   # yellow
 
 [headsup]
-# L'HUD resta nascosto e compare da solo quando: è attivo un layer diverso da
-# BASE (anche solo tenendo Fn1/Fn2), è in attesa un one-shot, oppure un
-# modificatore resta premuto a lungo. Con DEBUG bloccato resta visibile.
+# The HUD stays hidden and shows up on its own when: a layer other than the
+# base one is on (even just holding Lower/Raise), a one-shot is waiting, or
+# a modifier is held for a while. With a locked layer it stays visible.
 enabled = true
-layer_delay_ms = 250      # layer (Fn1, Fn2...) attivo almeno così a lungo:
-                          # le combinazioni rapide non fanno comparire l'HUD
-modifier_delay_ms = 400   # Ctrl/Shift/Alt/Gui tenuto almeno così a lungo
-hide_delay_ms = 800       # scompare dopo questo tempo dal ritorno a BASE
-hidden_opacity = 0.0      # 0 = invisibile, 0.15 = appena visibile
-# Con l'HUD nascosto resta, dove compare, una piccola tastiera con Fn1 e Fn2
-# colorati. Chiara o scura secondo lo sfondo (Windows e X11). Sta sul lato
-# dell'HUD più vicino ai bordi dello schermo. Anche dal menu.
+layer_delay_ms = 250      # a layer must stay on at least this long:
+                          # quick combinations do not bring the HUD up
+modifier_delay_ms = 400   # Ctrl/Shift/Alt/Gui held at least this long
+hide_delay_ms = 800       # hides this long after going back to the base layer
+hidden_opacity = 0.0      # 0 = invisible, 0.15 = barely visible
+# With the HUD hidden, a small keyboard stays where it shows up, with the
+# keys of layers 1 and 2 in their colors. Light or dark depending on the
+# background (Windows and X11). It sits on the side of the HUD nearest to the
+# screen edges. Also from the menu.
 marker = true
 marker_opacity = 0.85     # 0.1 – 1.0
-# Un layer bloccato (TG, Layer Lock) tiene su l'HUD intero ("hud") oppure solo
-# il mini indicatore ("indicator").
+# A locked layer (TG, Layer Lock) keeps up the whole HUD ("hud") or only the
+# mini indicator ("indicator").
 locked_layer = "hud"
-# Lo stesso per un one-shot in attesa (OSL, one-shot mods): con "indicator"
-# l'HUD resta nascosto e il badge mostra il layer o il modificatore in attesa.
+# The same for a waiting one-shot (OSL, one-shot mods): with "indicator" the
+# HUD stays hidden and the badge shows the waiting layer or modifier.
 oneshot = "hud"
-# E per un modificatore tenuto oltre modifier_delay_ms: con "indicator" il
-# badge mostra solo "Ctrl", "Shift"... invece dell'HUD intero.
+# And for a modifier held longer than modifier_delay_ms: with "indicator" the
+# badge only shows "Ctrl", "Shift"... instead of the whole HUD.
 modifiers = "hud"
 
 [indicator]
-# Mini indicatore: con l'HUD nascosto mostra in un angolo dello schermo solo
-# gli stati che restano dopo aver rilasciato i tasti: layer bloccati, one-shot
-# in attesa, modificatori bloccati, Caps Lock e Caps Word. Dice anche perché
-# manca la tastiera (non trovata, in pausa per Vial) e, per due secondi, cosa è
-# appena cambiato: QWERTY/Colemak-DH, OS, HUD nascosto da HUD_TOG.
+# Mini indicator: with the HUD hidden, a corner of the screen shows only the
+# states that last after the keys are released: locked layers, waiting
+# one-shots, locked modifiers, Caps Lock and Caps Word. It also tells why the
+# keyboard is missing (not found, paused for Vial) and, for two seconds, what
+# just changed: QWERTY/Colemak-DH, OS, HUD hidden by HUD_TOG.
 enabled = true
 # top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right
 position = "top-right"
 
 [keycast]
-# Per video e presentazioni: mostra sullo schermo le scorciatoie premute
-# (Ctrl+C, Alt+Tab, F5...). Mai il testo, niente viene salvato. Anche dal menu.
+# For videos and presentations: shows the shortcuts you press on screen
+# (Ctrl+C, Alt+Tab, F5...). Never the text, nothing is saved. Also from the menu.
 enabled = false
-position = "bottom"   # stessi valori di [indicator]
+position = "bottom"   # same values as [indicator]
 
 [stats]
-# Solo contatori aggregati per tasto, layer e giorno: mai testo, sequenze o tempi.
+# Only aggregated counters per key, layer and day: never text, sequences or timings.
 enabled = true
-file = ""                 # vuoto = keyboard-hud-stats.json accanto alla configurazione
-unused_days = 30          # report: tasti mai usati negli ultimi N giorni
+file = ""                 # empty = keyboard-hud-stats.json next to the configuration
+unused_days = 30          # report: keys never used in the last N days
 
 [backup]
-# Backup automatico della configurazione della tastiera (keymap, macro, combo,
-# tap dance, key override, impostazioni QMK) come file .vil, ricaricabile in
-# Vial con File → Load saved layout. Si salva solo quando qualcosa è cambiato.
+# Automatic backup of the keyboard configuration (keymap, macros, combos,
+# tap dances, key overrides, QMK settings) as a .vil file, which Vial loads
+# with File → Load saved layout. Saved only when something changed.
 enabled = true
-dir = ""                  # vuoto = cartella "backups" accanto alla configurazione
-keep = 30                 # backup da tenere per tastiera; i più vecchi vengono cancellati
+dir = ""                  # empty = "backups" folder next to the configuration
+keep = 30                 # backups to keep per keyboard; older ones are deleted
 
 [update]
-# Una volta al giorno guarda su GitHub se c'è una versione nuova e lo dice
-# (nel footer e nel mini indicatore). Con false solo da menu → Generale o
-# dalla tray. L'installazione parte sempre e solo da un tuo clic: scarica il
-# file del tuo sistema, controlla il checksum, sostituisce l'eseguibile dove si
-# trova e riavvia. Si collega solo a github.com, con il curl del sistema.
+# Once a day, checks GitHub for a new version and tells you (in the footer
+# and in the mini indicator). With false, only from menu → General or from
+# the tray. Installing always starts from your click only: it downloads the
+# file for your system, verifies the checksum, replaces the executable where
+# it is and restarts. It only connects to github.com, with the system curl.
 auto_check = true
 
-# Etichette personalizzate. Ogni voce vale per un keycode (eventualmente solo
-# su un layer) oppure per una posizione precisa (layer + row + col, come
-# nella matrice del firmware). La posizione vince sul keycode.
-# Keycode: nomi QMK (KC_F10), forme brevi (S(KC_F5), C(KC_DOT), C(S(KC_F5))),
-# tasti personalizzati (QK_KB_15 o USER15).
+# Custom labels. Each entry applies to a keycode (optionally on one layer
+# only) or to an exact position (layer + row + col, as in the firmware
+# matrix). The position wins over the keycode.
+# Keycodes: QMK names (KC_F10), short forms (S(KC_F5), C(KC_DOT), C(S(KC_F5))),
+# custom keys (QK_KB_15 or USER15).
 
-# Layer DEBUG (4): comandi di debug di VS Code, mano sinistra.
-# riga alta
-[[labels]]
-layer = 4
-keycode = "C(S(KC_F5))"
-label = "Restart"
-description = "Riavvia il debug (Ctrl+Shift+F5)"
+# Example by keycode: F10 on layer 2.
+# [[labels]]
+# layer = 2
+# keycode = "KC_F10"
+# label = "Step over"
+# description = "Step over (F10)"
 
-[[labels]]
-layer = 4
-keycode = "QK_KB_15"      # SM_RUN
-label = "Run"
-description = "Esegui senza debug (Ctrl+F5)"
-
-[[labels]]
-layer = 4
-keycode = "KC_F9"
-label = "Breakpt"
-description = "Attiva/disattiva breakpoint (F9)"
-
-[[labels]]
-layer = 4
-keycode = "KC_F12"
-label = "Go to def"
-description = "Vai alla definizione (F12)"
-
-# home row
-[[labels]]
-layer = 4
-keycode = "S(KC_F5)"
-label = "Stop"
-description = "Ferma il debug (Shift+F5)"
-
-[[labels]]
-layer = 4
-keycode = "KC_F5"
-label = "Continue"
-description = "Avvia/continua (F5)"
-
-[[labels]]
-layer = 4
-keycode = "KC_F10"
-label = "Step over"
-description = "Esegui la riga (F10)"
-
-[[labels]]
-layer = 4
-keycode = "KC_F11"
-label = "Step into"
-description = "Entra nella funzione (F11)"
-
-[[labels]]
-layer = 4
-keycode = "S(KC_F11)"
-label = "Step out"
-description = "Esci dalla funzione (Shift+F11)"
-
-# riga bassa
-[[labels]]
-layer = 4
-keycode = "S(KC_F12)"
-label = "Refs"
-description = "Trova i riferimenti (Shift+F12)"
-
-[[labels]]
-layer = 4
-keycode = "A(KC_F12)"
-label = "Peek def"
-description = "Anteprima della definizione (Alt+F12)"
-
-[[labels]]
-layer = 4
-keycode = "KC_F2"
-label = "Rename"
-description = "Rinomina il simbolo (F2)"
-
-[[labels]]
-layer = 4
-keycode = "C(KC_DOT)"
-label = "Quick fix"
-description = "Correzione rapida (Ctrl+.)"
-
-# Esempio per posizione: il tasto in alto a sinistra del layer BASE.
+# Example by position: the top left key of the base layer.
 # [[labels]]
 # layer = 0
 # row = 0
 # col = 0
-# label = "Debug"
+# label = "Esc"
 
-# Etichette per applicazione: valgono solo con quel programma in primo piano
-# e, a parità di tasto, vincono su quelle generiche. Il nome è quello del
-# processo, senza ".exe" e senza distinguere maiuscole: "code" vale per
-# Code.exe (Windows) e code (Linux); su macOS è il nome dell'app ("Code").
-# Anche una lista: app = ["idea64", "pycharm64"]. Su Wayland l'applicazione in
-# primo piano non si può sapere: valgono solo le etichette generiche.
+# Per-application labels: they apply only with that program in the
+# foreground and, for the same key, win over the generic ones. The name is
+# the process name, without ".exe" and case-insensitive: "code" matches
+# Code.exe (Windows) and code (Linux); on macOS it is the app name ("Code").
+# A list works too: app = ["idea64", "pycharm64"]. On Wayland the foreground
+# application cannot be known: only the generic labels apply.
 # [[labels]]
 # app = "code"
-# layer = 4
-# keycode = "KC_F10"
-# label = "Step over"
+# keycode = "KC_F5"
+# label = "Continue"
 
 [polling]
-visible_hz = 60     # stato letto 60 volte al secondo con l'HUD visibile
-hidden_hz = 10      # e 10 volte al secondo quando è nascosto
-timeout_ms = 50     # attesa massima di ogni risposta
+visible_hz = 60     # state read 60 times a second with the HUD visible
+hidden_hz = 10      # and 10 times a second when hidden
+timeout_ms = 50     # maximum wait for each answer
 
 [log]
-level = "info"      # "error", "warn", "info", "debug" (oppure --verbose)
+level = "info"      # "error", "warn", "info", "debug" (or --verbose)

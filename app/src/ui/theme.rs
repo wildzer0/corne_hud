@@ -4,15 +4,13 @@ use crate::config::{parse_color, LayerConfig};
 use crate::style::{Look, StyleColors};
 use egui::Color32;
 
-/// Default layer names and colors, matching the firmware palette
-/// (SYM cyan, NAV green, SYS neutral, DEBUG red, ACC yellow).
-pub const DEFAULT_LAYERS: [(&str, Option<Color32>); 6] = [
+/// Default layer names and colors: the QMK tri-layer (Lower, Raise and
+/// Adjust on layers 1-3). Further layers are called L4, L5...
+pub const DEFAULT_LAYERS: [(&str, Option<Color32>); 4] = [
     ("BASE", None),
-    ("SYM", Some(Color32::from_rgb(0, 185, 215))),
-    ("NAV", Some(Color32::from_rgb(60, 200, 90))),
-    ("SYS", None),
-    ("DEBUG", Some(Color32::from_rgb(230, 60, 60))),
-    ("ACC", Some(Color32::from_rgb(235, 200, 40))),
+    ("LOWER", Some(Color32::from_rgb(0, 185, 215))),
+    ("RAISE", Some(Color32::from_rgb(60, 200, 90))),
+    ("ADJUST", Some(Color32::from_rgb(235, 200, 40))),
 ];
 
 /// Layer names and colors: the config wins, defaults fill the gaps.
@@ -180,12 +178,12 @@ mod tests {
             LayerConfig { name: "".into(), color: "#FF0000".into() },
         ];
         let (names, colors) = layer_table(&cfg);
-        assert_eq!(names.len(), 6);
+        assert_eq!(names.len(), 4);
         assert_eq!(names[0], "Lettere");
-        assert_eq!(names[1], "SYM");
+        assert_eq!(names[1], "LOWER");
         assert_eq!(colors[1], Some(Color32::from_rgb(255, 0, 0)));
-        assert_eq!(names[4], "DEBUG");
-        assert_eq!(colors[4], DEFAULT_LAYERS[4].1);
+        assert_eq!(names[3], "ADJUST");
+        assert_eq!(colors[3], DEFAULT_LAYERS[3].1);
         assert_eq!(colors[0], None);
     }
 

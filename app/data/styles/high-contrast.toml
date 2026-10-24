@@ -1,4 +1,4 @@
-# Alto contrasto: bianco e nero, bordi spessi, legende più grandi.
+# High contrast: black and white, thick borders, larger legends.
 key_opacity = 1.0
 key_radius = 0.08
 border_width = 2.0

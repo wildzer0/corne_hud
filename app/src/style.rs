@@ -12,13 +12,13 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
-pub const DEFAULT_STYLE: &str = "predefinito";
+pub const DEFAULT_STYLE: &str = "default";
 
 const BUILT_IN: [(&str, &str); 12] = [
-    ("predefinito", include_str!("../data/styles/predefinito.toml")),
+    ("default", include_str!("../data/styles/default.toml")),
     ("minimal", include_str!("../data/styles/minimal.toml")),
-    ("vetro", include_str!("../data/styles/vetro.toml")),
-    ("alto-contrasto", include_str!("../data/styles/alto-contrasto.toml")),
+    ("glass", include_str!("../data/styles/glass.toml")),
+    ("high-contrast", include_str!("../data/styles/high-contrast.toml")),
     ("monokai", include_str!("../data/styles/monokai.toml")),
     ("dracula", include_str!("../data/styles/dracula.toml")),
     ("nord", include_str!("../data/styles/nord.toml")),
@@ -186,7 +186,16 @@ fn file(name: &str) -> PathBuf {
     dir().join(format!("{name}.toml"))
 }
 
+/// Names of the built-in styles before 1.4, still accepted in the configuration.
+const RENAMED: &[(&str, &str)] = &[("predefinito", "default"), ("vetro", "glass"), ("alto-contrasto", "high-contrast")];
+
+/// `name`, or its new name if it is a built-in style renamed in 1.4.
+pub fn current_name(name: &str) -> &str {
+    RENAMED.iter().find(|(old, _)| *old == name).map_or(name, |(_, new)| *new)
+}
+
 fn built_in(name: &str) -> Option<&'static str> {
+    let name = current_name(name);
     BUILT_IN.iter().find(|(n, _)| *n == name).map(|(_, t)| *t)
 }
 
@@ -278,7 +287,7 @@ mod tests {
             let s = Style::parse(text).unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(s.key_radius.is_some(), "{name}");
         }
-        assert_eq!(Style::parse(built_in("vetro").unwrap()).unwrap().look().key_opacity, 0.5);
+        assert_eq!(Style::parse(built_in("glass").unwrap()).unwrap().look().key_opacity, 0.5);
     }
 
     #[test]
@@ -291,14 +300,14 @@ mod tests {
         // missing values: defaults
         assert_eq!(Style::default().look(), Look::default());
         // menu or config values win over the style
-        let vetro = Style::parse(built_in("vetro").unwrap()).unwrap();
+        let vetro = Style::parse(built_in("glass").unwrap()).unwrap();
         let look = vetro.look_with(Some(0.9), None);
         assert_eq!((look.key_opacity, look.key_radius), (0.9, 0.22));
     }
 
     #[test]
     fn round_trip() {
-        let mut s = Style::parse(built_in("alto-contrasto").unwrap()).unwrap();
+        let mut s = Style::parse(built_in("high-contrast").unwrap()).unwrap();
         s.window_opacity = Some(0.7);
         assert_eq!(Style::parse(&s.to_toml()).unwrap(), s);
     }

@@ -309,7 +309,7 @@ mod tests {
                 _ => None,
             })
             .collect();
-        let cfg = crate::config::Config::parse(include_str!("../../keyboard-hud.example.toml")).unwrap();
+        let cfg = crate::config::Config::parse(include_str!("../data/mock/keyboard-hud.toml")).unwrap();
         let (labels, _) = Labels::from_config(&cfg.labels);
         let names = ["BASE", "SYM", "NAV", "SYS", "DEBUG", "ACC"].map(String::from).to_vec();
         let dynamic = crate::hid::mock::mock_dynamic();

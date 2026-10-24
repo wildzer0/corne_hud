@@ -403,7 +403,7 @@ impl Config {
         a.screen_margin = clamp_f32(a.screen_margin, &SCREEN_DISTANCE, 8.0);
         a.key_opacity = a.key_opacity.map(crate::style::clamp_key_opacity);
         a.key_radius = a.key_radius.map(crate::style::clamp_key_radius);
-        a.style = a.style.trim().to_string();
+        a.style = crate::style::current_name(a.style.trim()).to_string();
         let p = &mut self.polling;
         p.visible_hz = clamp(p.visible_hz, &POLL_HZ);
         p.hidden_hz = clamp(p.hidden_hz, &POLL_HZ);
@@ -576,8 +576,8 @@ mod tests {
     #[test]
     fn example_config_parses() {
         let c = Config::parse(EXAMPLE).unwrap();
-        assert_eq!(c.layers.len(), 6);
-        assert_eq!(c.layers[1].name, "SYM");
+        assert_eq!(c.layers.len(), 4);
+        assert_eq!(c.layers[1].name, "LOWER");
         assert_eq!(parse_color(&c.layers[1].color), Some((0x00, 0xB9, 0xD7)));
         assert_eq!(c.polling.visible_hz, 60);
         assert!(c.headsup.enabled);
@@ -589,11 +589,24 @@ mod tests {
         assert_eq!(c.appearance.language, LanguageChoice::Auto);
         assert_eq!(c.keycast.position, ScreenPlace::Bottom);
         assert_eq!(c.headsup.modifier_delay_ms, 400);
-        assert!(c.labels.iter().any(|l| l.label == "Step over" && l.keycode.as_deref() == Some("KC_F10")));
-        assert!(c
-            .labels
-            .iter()
-            .all(|l| crate::vial::names::parse_keycode(l.keycode.as_deref().unwrap_or("KC_NO")).is_some()));
+        // the label examples are commented out
+        assert!(c.labels.is_empty());
+    }
+
+    #[test]
+    fn commented_label_examples_are_valid() {
+        // uncomment the `# [[labels]]` blocks and the `# key = value` lines below them
+        let mut text = String::new();
+        let mut inside = false;
+        for line in EXAMPLE.lines() {
+            inside = line == "# [[labels]]" || (inside && line.starts_with("# ") && line.contains(" = "));
+            text.push_str(if inside { &line[2..] } else { line });
+            text.push('\n');
+        }
+        let c = Config::parse(&text).unwrap();
+        assert_eq!(c.labels.len(), 3);
+        let (_, errors) = crate::labels::Labels::from_config(&c.labels);
+        assert!(errors.is_empty(), "{errors:?}");
     }
 
     #[test]
@@ -604,7 +617,7 @@ mod tests {
         assert_eq!((c.appearance.opacity, c.appearance.scale, c.polling.visible_hz), (1.0, 0.5, 1));
         let c = Config::parse("[appearance]\nkey_opacity = 0.0\nkey_radius = 2.0\nstyle = \" vetro \"").unwrap();
         assert_eq!((c.appearance.key_opacity, c.appearance.key_radius), (Some(0.2), Some(0.5)));
-        assert_eq!(c.appearance.style, "vetro");
+        assert_eq!(c.appearance.style, "glass");
     }
 
     #[test]

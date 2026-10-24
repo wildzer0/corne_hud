@@ -1,4 +1,4 @@
-# Minimal: niente bordi, tasti morbidi, colori un po' più tenui.
+# Minimal: no borders, soft keys, slightly muted colors.
 key_opacity = 0.9
 key_radius = 0.3
 border_width = 0.0
