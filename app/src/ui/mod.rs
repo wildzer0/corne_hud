@@ -1422,7 +1422,7 @@ impl HudApp {
             dark: colors(true),
             light: colors(false),
         };
-        match style::save_new("personale", &st) {
+        match style::save_new("personal", &st) {
             Ok(name) => {
                 self.set_style(&name, true);
                 self.notify(format!(
@@ -2612,7 +2612,8 @@ impl eframe::App for HudApp {
             }
             (None, Some(l)) => {
                 let layer = self.browse_layer.min(l.keymap.layers().saturating_sub(1));
-                (layer, (1 << layer) | 1, self.live.is_none())
+                // offline, or a firmware without the HUD protocol: no live state to follow
+                (layer, (1 << layer) | 1, self.live.is_none() || self.info.is_none())
             }
             (None, None) => (0, 1, false),
         };
